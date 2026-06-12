@@ -139,6 +139,12 @@ input.finput:focus,select.fsel:focus,textarea.ftarea:focus{border-color:#4f8ef7}
 
 /* ── 인쇄 */
 @media print{#header,#tabs,.filter-bar,.btn-row,#header-btns{display:none!important}#main{padding:0}table{font-size:11px}}
+
+/* ── 확장 행 */
+.expand-row td{background:#f0f4ff;padding:0}
+.client-row.expanded{background:#e8f0fe!important}
+.client-row.expanded:hover{background:#dce8fd!important}
+.expand-inner{display:flex;flex-wrap:wrap;gap:14px 24px;padding:14px 16px;align-items:flex-start;border-top:1px solid #c5cae9}
 </style>
 </head>
 <body>
@@ -165,7 +171,7 @@ input.finput:focus,select.fsel:focus,textarea.ftarea:focus{border-color:#4f8ef7}
   <button class="tab" onclick="switchTab('schedule')" id="tab-schedule">📅 신고 일정</button>
   <button class="tab" onclick="switchTab('fees')" id="tab-fees">💰 수수료</button>
   <button class="tab" onclick="switchTab('closure')" id="tab-closure">📁 해지·폐업</button>
-  <button class="tab" onclick="switchTab('julgae')" id="tab-julgae">✅ 결재 현황</button>
+  <button class="tab" onclick="switchTab('julgae')" id="tab-julgae">✅ 신고 및 결재</button>
   <button class="tab" onclick="switchTab('aitools')" id="tab-aitools">✦ AI 도구</button>
 </div>
 
@@ -253,14 +259,40 @@ let G = {
 };
 
 const PERIOD_TEMPLATES = [
-  { tpl:'vat_hak_1',  label:'부가세 확정신고 1기',   type:'부가세',   targetType:'전체', deadline:'7월 25일',  hint:'(1월~6월분)' },
-  { tpl:'vat_hak_2',  label:'부가세 확정신고 2기',   type:'부가세',   targetType:'전체', deadline:'1월 25일',  hint:'(7월~12월분)' },
-  { tpl:'vat_yej_1',  label:'부가세 예정신고 1기',   type:'부가세',   targetType:'전체', deadline:'4월 25일',  hint:'(1월~3월분)' },
-  { tpl:'vat_yej_2',  label:'부가세 예정신고 2기',   type:'부가세',   targetType:'전체', deadline:'10월 25일', hint:'(7월~9월분)' },
-  { tpl:'corp',       label:'법인세 신고',            type:'법인세',   targetType:'법인', deadline:'3월 31일',  hint:'(12월 결산법인)' },
-  { tpl:'income',     label:'종합소득세 신고',        type:'소득세',   targetType:'개인', deadline:'5월 31일',  hint:'(개인사업자)' },
-  { tpl:'seongsi',    label:'성실신고사업자 신고',    type:'소득세',   targetType:'개인', deadline:'6월 30일',  hint:'(성실신고확인)' },
+  { tpl:'vat_hak_1', label:'부가세 확정신고 1기',  type:'부가세', targetType:'전체', reportType:'vat',     deadline:'7월 25일',  hint:'(1~6월분, 일반·간이)' },
+  { tpl:'vat_hak_2', label:'부가세 확정신고 2기',  type:'부가세', targetType:'전체', reportType:'vat',     deadline:'1월 25일',  hint:'(7~12월분, 일반·간이)' },
+  { tpl:'vat_yej_1', label:'부가세 예정신고 1기',  type:'부가세', targetType:'전체', reportType:'vat',     deadline:'4월 25일',  hint:'(1~3월분, 일반·간이)' },
+  { tpl:'vat_yej_2', label:'부가세 예정신고 2기',  type:'부가세', targetType:'전체', reportType:'vat',     deadline:'10월 25일', hint:'(7~9월분, 일반·간이)' },
+  { tpl:'corp',      label:'법인세 신고',           type:'법인세', targetType:'법인', reportType:'corp',    deadline:'3월 31일',  hint:'(12월 결산 법인)' },
+  { tpl:'income',    label:'종합소득세 신고',       type:'소득세', targetType:'개인', reportType:'income',  deadline:'5월 31일',  hint:'(개인사업자 일반·간이)' },
+  { tpl:'seongsi',   label:'성실신고사업자 신고',   type:'소득세', targetType:'개인', reportType:'seongsi', deadline:'6월 30일',  hint:'(성실신고확인 대상)' },
+  { tpl:'sajup',     label:'사업장현황신고',        type:'소득세', targetType:'개인', reportType:'sajup',   deadline:'2월 10일',  hint:'(면세사업자)' },
 ];
+
+const REPORT_TYPE_FILTERS = {
+  vat:     c => c.vatType === '일반' || c.vatType === '간이',
+  corp:    c => c.taxType === '법인',
+  income:  c => c.taxType === '개인' && c.vatType !== '면세',
+  seongsi: c => c.taxType === '개인' && !!c.seongsi,
+  sajup:   c => c.vatType === '면세',
+};
+
+function applyReportFilter(clients, period) {
+  if (!period) return clients;
+  if (period.reportType && REPORT_TYPE_FILTERS[period.reportType]) {
+    return clients.filter(REPORT_TYPE_FILTERS[period.reportType]);
+  }
+  if (period.targetType === '법인') return clients.filter(c => c.taxType === '법인');
+  if (period.targetType === '개인') return clients.filter(c => c.taxType === '개인');
+  return clients;
+}
+
+function julgaeVal(pKey, clientId) {
+  const v = G.julgae[pKey]?.[clientId];
+  if (!v) return {d:false, b:false, a:false};
+  if (typeof v === 'boolean') return {d:false, b:false, a:v};
+  return v;
+}
 
 const DEFAULT_PERIODS = PERIOD_TEMPLATES.map(t => ({
   id: t.tpl + '_' + new Date().getFullYear(),
@@ -348,7 +380,8 @@ function filteredClients() {
       const q = G.searchText;
       if (!c.name.includes(q) && !c.rep.includes(q) && !c.phone.includes(q) && !c.bizType.includes(q)) return false;
     }
-    if (G.filterManager !== '전체' && c.manager !== G.filterManager) return false;
+    if (G.filterManager === '(없음)') { if (c.manager) return false; }
+    else if (G.filterManager !== '전체' && c.manager !== G.filterManager) return false;
     if (G.filterTaxType !== '전체' && c.taxType !== G.filterTaxType) return false;
     if (G.filterVatType !== '전체' && c.vatType !== G.filterVatType) return false;
     if (G.filterFeeStatus !== '전체' && c.feeStatus !== G.filterFeeStatus) return false;
@@ -454,28 +487,6 @@ function renderDashboard() {
     <div style="font-size:12px;color:#888;margin-top:4px">수금률 ${pct}%</div>
   </div>
 
-  ${alertClients.length>0?`<div class="card">
-    <div class="card-title" style="color:#e53935">⚠ 조치 필요 거래처</div>
-    ${alertClients.map(c=>`
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#fafafa;border-radius:10px;margin-bottom:6px;cursor:pointer" onclick="openDetail(${c.id})">
-      <div><div style="font-weight:600">${esc(c.name)}</div><div style="font-size:12px;color:#888">담당: ${esc(c.manager)}</div></div>
-      <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">
-        ${!c.dataReceived?badge('자료미수령','red'):''}
-        ${c.feeStatus==='미수금'?badge('미수금','purple'):''}
-        ${c.status==='주의'?badge('주의','orange'):''}
-      </div>
-    </div>`).join('')}
-  </div>`:''}
-
-  ${closurePending.length>0?`<div class="card" style="border:2px solid #ffcc02">
-    <div class="card-title" style="color:#e65100">📁 폐업 신고 미완료 (${closurePending.length}건)</div>
-    ${closurePending.map(c=>`
-    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f5f5f5">
-      <div><div style="font-weight:600">${esc(c.name)}</div>
-      <div style="font-size:12px;color:#888">폐업 ${esc(c.closureYear)}년 · ${esc(c.manager)}</div></div>
-      <div>${badge(!c.closureTaxFiled?'접수전':'접수완료', !c.closureTaxFiled?'orange':'blue')}</div>
-    </div>`).join('')}
-  </div>`:''}
   `;
 }
 
@@ -499,7 +510,10 @@ function renderClients() {
       <span>🔍</span>
       <input id="search-input" placeholder="거래처명, 대표자, 연락처, 업종 검색" value="${esc(G.searchText)}" oninput="onSearch(this.value)">
     </div>
-    ${['filterManager:MANAGERS','filterTaxType:TAX_TYPES','filterVatType:VAT_TYPES','filterDealType:DEAL_TYPES','filterFeeStatus:FEE_STATUSES'].map(x=>{
+    <select onchange="onFilter('filterManager',this.value)">
+      ${['전체',...MANAGERS.slice(1),'(없음)'].map(v=>`<option${G.filterManager===v?' selected':''}>${v}</option>`).join('')}
+    </select>
+    ${['filterTaxType:TAX_TYPES','filterVatType:VAT_TYPES','filterDealType:DEAL_TYPES','filterFeeStatus:FEE_STATUSES'].map(x=>{
       const [field,arr] = x.split(':');
       return `<select onchange="onFilter('${field}',this.value)">${window[arr].map(v=>`<option${G[field]===v?' selected':''}>${v}</option>`).join('')}</select>`;
     }).join('')}
@@ -510,24 +524,41 @@ function renderClients() {
   <div class="tbl-wrap">
   <table>
     <thead><tr>
-      <th>거래처명</th><th>거래유형</th><th>과세</th><th>부가세</th><th>담당자</th><th>수수료</th><th>상태</th><th>자료</th><th>기장</th><th>결재</th><th>수금</th><th></th>
+      <th>거래처명</th><th>거래유형</th><th>과세</th><th>부가세</th><th>담당자</th><th>수수료</th><th>상태</th><th>수금</th><th style="width:28px"></th>
     </tr></thead>
     <tbody>
-    ${list.map(c=>`<tr onclick="openDetail(${c.id})">
-      <td><div class="td-name">${esc(c.name)}</div><div class="td-sub">${esc(c.rep)}${c.bizType?' · '+esc(c.bizType):''}</div></td>
-      <td>${dealBadge(c.dealType)}</td>
-      <td>${badge(c.taxType,c.taxType==='법인'?'blue':'gray')}</td>
-      <td>${badge(c.vatType,c.vatType==='일반'?'blue':c.vatType==='간이'?'orange':'gray')}</td>
-      <td style="color:#555">${esc(c.manager)}</td>
-      <td style="font-weight:600">${c.status==='정상'||c.status==='주의'?c.fee.toLocaleString()+'원':'-'}</td>
-      <td>${badge(c.status,c.status==='정상'?'green':c.status==='주의'?'orange':'gray')}</td>
-      <td onclick="event.stopPropagation();toggleField(${c.id},'dataReceived')">${chk(c.dataReceived)}</td>
-      <td onclick="event.stopPropagation();toggleField(${c.id},'bookkeeping')">${chk(c.bookkeeping)}</td>
-      <td onclick="event.stopPropagation();toggleField(${c.id},'approved')">${chk(c.approved)}</td>
-      <td>${badge(c.feeStatus,c.feeStatus==='수금완료'?'green':c.feeStatus==='청구완료'?'blue':'red')}</td>
-      <td onclick="event.stopPropagation();openForm(${c.id})"><button class="btn-sm" style="background:#f0f4ff;color:#4f8ef7">✏</button></td>
-    </tr>`).join('')}
-    ${list.length===0?'<tr><td colspan="12" style="text-align:center;padding:40px;color:#aaa">검색 결과가 없습니다</td></tr>':''}
+    ${list.map(c=>{
+      const contracts = (c.contracts||[]).map(k=>contractLabel(k)).join(', ');
+      return `<tr class="client-row" onclick="toggleExpand(${c.id})">
+        <td><div class="td-name">${esc(c.name)}</div><div class="td-sub">${esc(c.rep)}${c.bizType?' · '+esc(c.bizType):''}</div></td>
+        <td>${dealBadge(c.dealType)}</td>
+        <td>${badge(c.taxType,c.taxType==='법인'?'blue':'gray')}</td>
+        <td>${badge(c.vatType,c.vatType==='일반'?'blue':c.vatType==='간이'?'orange':'gray')}</td>
+        <td style="color:#555">${esc(c.manager||'-')}</td>
+        <td style="font-weight:600">${c.status==='정상'||c.status==='주의'?c.fee.toLocaleString()+'원':'-'}</td>
+        <td>${badge(c.status,c.status==='정상'?'green':c.status==='주의'?'orange':'gray')}</td>
+        <td>${badge(c.feeStatus,c.feeStatus==='수금완료'?'green':c.feeStatus==='청구완료'?'blue':'red')}</td>
+        <td style="text-align:center;color:#aaa;font-size:11px" id="expand-arrow-${c.id}">▼</td>
+      </tr>
+      <tr class="expand-row" id="expand-${c.id}" style="display:none">
+        <td colspan="9">
+          <div class="expand-inner">
+            <div><div style="font-size:11px;color:#888;margin-bottom:3px">연락처</div><div style="font-weight:600">${esc(c.phone||'-')}</div></div>
+            <div><div style="font-size:11px;color:#888;margin-bottom:3px">관할세무서</div><div style="font-weight:600">${esc(c.taxOffice||'-')}</div></div>
+            <div><div style="font-size:11px;color:#888;margin-bottom:3px">수임일자</div><div style="font-weight:600">${esc(c.contractDate||'-')}</div></div>
+            ${c.status==='해지'||c.status==='폐업'?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">해지/폐업일</div><div style="font-weight:600;color:#c62828">${esc(c.terminationDate||'-')}</div></div>`:''}
+            ${contracts?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">수임항목</div><div style="font-size:12px;color:#555">${esc(contracts)}</div></div>`:''}
+            ${c.memo?`<div style="max-width:240px"><div style="font-size:11px;color:#888;margin-bottom:3px">메모</div><div style="font-size:12px;color:#555">${esc(c.memo)}</div></div>`:''}
+            ${c.seongsi?`<div>${badge('성실신고','purple')}</div>`:''}
+            <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+              <button class="btn-sm" style="background:#f0f4ff;color:#4f8ef7" onclick="event.stopPropagation();openForm(${c.id})">✏ 수정</button>
+              <button class="btn-sm" style="background:#fdecea;color:#c62828;border:1px solid #ef9a9a" onclick="event.stopPropagation();deleteClient(${c.id})">🗑 삭제</button>
+            </div>
+          </div>
+        </td>
+      </tr>`;
+    }).join('')}
+    ${list.length===0?'<tr><td colspan="9" style="text-align:center;padding:40px;color:#aaa">검색 결과가 없습니다</td></tr>':''}
     </tbody>
   </table>
   </div>`;
@@ -536,6 +567,29 @@ function renderClients() {
 function toggleTerminated() { G.showTerminated=!G.showTerminated; renderClients(); }
 function onSearch(v) { G.searchText=v; renderClients(); }
 function onFilter(field,v) { G[field]=v; renderClients(); }
+
+function toggleExpand(id) {
+  const row = document.getElementById('expand-'+id);
+  if (!row) return;
+  const isOpen = row.style.display !== 'none';
+  document.querySelectorAll('.expand-row').forEach(r => { r.style.display = 'none'; });
+  document.querySelectorAll('[id^="expand-arrow-"]').forEach(r => { r.textContent = '▼'; r.closest('tr')?.classList.remove('expanded'); });
+  if (!isOpen) {
+    row.style.display = '';
+    const arrow = document.getElementById('expand-arrow-'+id);
+    if (arrow) { arrow.textContent = '▲'; arrow.closest('tr')?.classList.add('expanded'); }
+  }
+}
+
+function deleteClient(id) {
+  const c = G.clients.find(x=>x.id===id);
+  if (!c) return;
+  if (!confirm(`"${c.name}" 거래처를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
+  G.clients = G.clients.filter(x=>x.id!==id);
+  for (const pKey of Object.keys(G.julgae)) { delete G.julgae[pKey][id]; }
+  saveToLS();
+  renderClients();
+}
 
 // ══════════════════════════════════════════════════════
 // 거래처 상세 모달
@@ -715,6 +769,12 @@ function openForm(id) {
     <div id="termination-area">${terminationHTML()}</div>
 
     <div><label class="flabel">메모</label><textarea class="ftarea" rows="3" oninput="window._formData.memo=this.value">${esc(c.memo||'')}</textarea></div>
+
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 0">
+      <input type="checkbox" id="f-seongsi" ${c.seongsi?'checked':''} onchange="window._formData.seongsi=this.checked" style="width:16px;height:16px;cursor:pointer">
+      <span style="font-size:13px;font-weight:600">성실신고확인 대상</span>
+      <span style="font-size:11px;color:#aaa">(체크 시 성실사업자 신고 리스트에 포함)</span>
+    </label>
 
     <div class="btn-row">
       <button class="btn-secondary" onclick="closeModal()">취소</button>
@@ -1029,7 +1089,7 @@ function renderClosure() {
 }
 
 // ══════════════════════════════════════════════════════
-// 결재 현황
+// 신고 및 결재
 // ══════════════════════════════════════════════════════
 function renderJulgae() {
   const periods = G.periods;
@@ -1039,39 +1099,46 @@ function renderJulgae() {
   const mf = G.julgaeManager;
   const pKey = period ? period.id : null;
 
-  // 전체 활성 업체에서 enrolled 필터 적용
+  // 신고유형 기반 자동 필터 → enrolled 수동 선택 우선
   let baseClients = G.clients.filter(c => c.status !== '해지' && c.status !== '폐업');
   const hasEnroll = period && period.enrolled && period.enrolled.length > 0;
   if (hasEnroll) {
     baseClients = baseClients.filter(c => period.enrolled.includes(c.id));
-  } else if (period) {
-    if (period.targetType === '법인') baseClients = baseClients.filter(c => c.taxType === '법인');
-    else if (period.targetType === '개인') baseClients = baseClients.filter(c => c.taxType === '개인');
+  } else {
+    baseClients = applyReportFilter(baseClients, period);
   }
 
-  // 검색·담당자 필터 (표시용만)
+  // 담당자 필터
   let clients = baseClients;
-  if (mf !== '전체') clients = clients.filter(c => c.manager === mf);
+  if (mf === '(없음)') clients = clients.filter(c => !c.manager);
+  else if (mf !== '전체') clients = clients.filter(c => c.manager === mf);
   if (q) clients = clients.filter(c => c.name.toLowerCase().includes(q) || c.rep.toLowerCase().includes(q));
 
-  const pData = (pKey && G.julgae[pKey]) ? G.julgae[pKey] : {};
-  const done = clients.filter(c => pData[c.id]).length;
+  const pKey2 = pKey || '';
+  const dataCount   = clients.filter(c => julgaeVal(pKey2, c.id).d).length;
+  const bookCount   = clients.filter(c => julgaeVal(pKey2, c.id).b).length;
+  const doneCount   = clients.filter(c => julgaeVal(pKey2, c.id).a).length;
   const total = clients.length;
-  const pct = total ? Math.round(done / total * 100) : 0;
-  const managers = ['전체', ...new Set(G.clients.map(c => c.manager).filter(Boolean))];
+  const pct = total ? Math.round(doneCount / total * 100) : 0;
+
+  const managerSet = ['전체', ...new Set(baseClients.map(c=>c.manager).filter(Boolean))];
+  if (baseClients.some(c=>!c.manager)) managerSet.push('(없음)');
+
+  const reportLabel = {vat:'부가세(일반·간이)',corp:'법인세(법인)',income:'종소세(개인)',seongsi:'성실신고(개인)',sajup:'사업장현황(면세)',undefined:'전체'};
 
   document.getElementById('page-julgae').innerHTML = `
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
-    <h2 style="font-size:20px;font-weight:800">결재 현황</h2>
-    <button class="btn-primary btn-sm" onclick="openAddPeriod()" style="padding:8px 14px">+ 신고기간 추가</button>
+    <h2 style="font-size:20px;font-weight:800">신고 및 결재</h2>
+    <button class="btn-primary btn-sm" onclick="openAddPeriod()" style="padding:8px 14px">+ 신고리스트 추가</button>
   </div>
 
   ${periods.length === 0 ? `<div class="card" style="text-align:center;padding:40px;color:#aaa">
-    신고기간이 없습니다. <b>+ 신고기간 추가</b> 버튼을 눌러 시작하세요.</div>` : `
+    신고리스트가 없습니다. <b>+ 신고리스트 추가</b> 버튼을 눌러 시작하세요.</div>` : `
 
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center">
     ${periods.map((p, i) => {
       const pEnroll = p.enrolled && p.enrolled.length > 0;
+      const rtLabel = reportLabel[p.reportType] || '';
       return `<div style="display:flex;align-items:center;gap:3px">
         <button onclick="G.julgaePeriodIdx=${i};G.julgaeSearch='';renderJulgae()"
           style="padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;border:2px solid ${i===idx?'#4f8ef7':'#e0e0e0'};background:${i===idx?'#e8f0fe':'#fff'};color:${i===idx?'#4f8ef7':'#555'}">
@@ -1086,15 +1153,23 @@ function renderJulgae() {
   <div class="stat-grid" style="margin-bottom:14px">
     <div class="stat-card" style="border-left:4px solid #4f8ef7">
       <div class="stat-label">대상 업체</div>
-      <div class="stat-value" style="color:#4f8ef7">${baseClients.length}</div>
-      <div class="stat-sub">${hasEnroll?'선택된 업체':'자동 분류'}</div>
+      <div class="stat-value" style="color:#4f8ef7">${total}</div>
+      <div class="stat-sub">${(reportLabel[period.reportType]||'전체')} · ${hasEnroll?'수동 선택':'자동 분류'}</div>
     </div>
-    <div class="stat-card" style="border-left:4px solid #2e7d32"><div class="stat-label">결재완료</div><div class="stat-value" style="color:#2e7d32">${done}</div></div>
-    <div class="stat-card" style="border-left:4px solid #e53935"><div class="stat-label">미결재</div><div class="stat-value" style="color:#e53935">${total - done}</div></div>
-    <div class="stat-card" style="border-left:4px solid #f57c00;display:flex;flex-direction:column;justify-content:center">
-      <div class="stat-label">진행률</div>
-      <div style="font-size:18px;font-weight:800;color:#f57c00">${pct}%</div>
-      <div class="progress-bar" style="margin-top:4px"><div class="progress-fill" style="width:${pct}%"></div></div>
+    <div class="stat-card" style="border-left:4px solid #1976d2">
+      <div class="stat-label">자료수령</div>
+      <div class="stat-value" style="color:#1976d2">${dataCount}<span style="font-size:13px;color:#aaa;font-weight:400"> / ${total}</span></div>
+      <div class="progress-bar" style="margin-top:6px"><div class="progress-fill" style="width:${total?Math.round(dataCount/total*100):0}%"></div></div>
+    </div>
+    <div class="stat-card" style="border-left:4px solid #f57c00">
+      <div class="stat-label">기장완료</div>
+      <div class="stat-value" style="color:#f57c00">${bookCount}<span style="font-size:13px;color:#aaa;font-weight:400"> / ${total}</span></div>
+      <div class="progress-bar" style="margin-top:6px"><div class="progress-fill" style="width:${total?Math.round(bookCount/total*100):0}%"></div></div>
+    </div>
+    <div class="stat-card" style="border-left:4px solid #2e7d32">
+      <div class="stat-label">결재완료 ${pct}%</div>
+      <div class="stat-value" style="color:#2e7d32">${doneCount}<span style="font-size:13px;color:#aaa;font-weight:400"> / ${total}</span></div>
+      <div class="progress-bar" style="margin-top:6px"><div class="progress-fill" style="width:${pct}%"></div></div>
     </div>
   </div>
 
@@ -1104,44 +1179,57 @@ function renderJulgae() {
       <input placeholder="거래처명·대표자 검색" value="${esc(G.julgaeSearch)}" oninput="G.julgaeSearch=this.value;renderJulgae()">
     </div>
     <select onchange="G.julgaeManager=this.value;renderJulgae()">
-      ${managers.map(m => `<option${G.julgaeManager===m?' selected':''}>${m}</option>`).join('')}
+      ${managerSet.map(m => `<option${G.julgaeManager===m?' selected':''}>${m}</option>`).join('')}
     </select>
     <button class="btn-sm" style="background:#e3f2fd;color:#1565c0;border:1.5px solid #90caf9" onclick="openEnrollModal('${pKey}')">
-      ☑ 업체 선택${hasEnroll?` (${period.enrolled.length})`:' (전체)'}
+      ☑ 업체 선택${hasEnroll?` (${period.enrolled.length})`:' (자동)'}
     </button>
-    <button class="btn-sm" style="background:#e8f5e9;color:#2e7d32;border:1.5px solid #a5d6a7" onclick="bulkJulgae('${pKey}',true)">전체 결재</button>
+    <button class="btn-sm" style="background:#e8f5e9;color:#2e7d32;border:1.5px solid #a5d6a7" onclick="bulkJulgae('${pKey}',true)">전체 완료</button>
     <button class="btn-sm" style="background:#fdecea;color:#c62828;border:1.5px solid #ef9a9a" onclick="bulkJulgae('${pKey}',false)">전체 해제</button>
   </div>
 
   <div class="tbl-wrap">
   <table>
     <thead><tr>
-      <th style="width:40px">번호</th><th>거래처명</th><th>대표자</th>
-      <th>담당자</th><th>과세</th><th>거래유형</th>
-      <th style="width:80px;text-align:center">결재</th>
+      <th style="width:36px">번호</th>
+      <th>거래처명</th>
+      <th>담당자</th>
+      <th>과세</th>
+      <th style="width:70px;text-align:center">자료수령</th>
+      <th style="width:70px;text-align:center">기장완료</th>
+      <th style="width:70px;text-align:center">결재완료</th>
     </tr></thead>
     <tbody>
     ${clients.map((c, i) => {
-      const on = !!pData[c.id];
-      return `<tr style="background:${on?'#f1f8e9':'#fff'}" onclick="toggleJulgae('${pKey}',${c.id})">
+      const v = julgaeVal(pKey2, c.id);
+      return `<tr id="jr-${pKey2}-${c.id}" style="background:${v.a?'#f1f8e9':'#fff'}">
         <td style="color:#aaa;font-size:12px">${i+1}</td>
-        <td><div class="td-name">${esc(c.name)}</div><div class="td-sub">${esc(c.bizType||'')}</div></td>
-        <td>${esc(c.rep)}</td>
-        <td style="color:#555">${esc(c.manager)}</td>
+        <td><div class="td-name">${esc(c.name)}</div><div class="td-sub">${esc(c.rep)} ${c.bizType?'· '+esc(c.bizType):''}</div></td>
+        <td style="color:#555">${esc(c.manager||'-')}</td>
         <td>${badge(c.taxType, c.taxType==='법인'?'blue':'gray')}</td>
-        <td>${dealBadge(c.dealType)}</td>
-        <td style="text-align:center">${chk(on, '')}</td>
+        <td style="text-align:center" onclick="toggleJulgaeField('${pKey2}',${c.id},'d')">
+          <div class="chk ${v.d?'on':''}" style="margin:0 auto">${v.d?'✓':''}</div>
+        </td>
+        <td style="text-align:center" onclick="toggleJulgaeField('${pKey2}',${c.id},'b')">
+          <div class="chk ${v.b?'on':''}" style="margin:0 auto">${v.b?'✓':''}</div>
+        </td>
+        <td style="text-align:center" onclick="toggleJulgaeField('${pKey2}',${c.id},'a')">
+          <div class="chk ${v.a?'on':''}" style="margin:0 auto">${v.a?'✓':''}</div>
+        </td>
       </tr>`;
     }).join('')}
-    ${clients.length===0?'<tr><td colspan="7" style="text-align:center;padding:40px;color:#aaa">검색 결과가 없습니다</td></tr>':''}
+    ${clients.length===0?'<tr><td colspan="7" style="text-align:center;padding:40px;color:#aaa">해당 조건의 거래처가 없습니다</td></tr>':''}
     </tbody>
   </table></div>` : ''}
   `}`;
 }
 
-function toggleJulgae(pKey, clientId) {
+function toggleJulgaeField(pKey, clientId, field) {
+  if (!pKey) return;
   if (!G.julgae[pKey]) G.julgae[pKey] = {};
-  G.julgae[pKey][clientId] = !G.julgae[pKey][clientId];
+  const cur = julgaeVal(pKey, clientId);
+  cur[field] = !cur[field];
+  G.julgae[pKey][clientId] = cur;
   saveToLS();
   renderJulgae();
 }
@@ -1150,8 +1238,11 @@ function bulkJulgae(pKey, val) {
   if (!G.julgae[pKey]) G.julgae[pKey] = {};
   const mf = G.julgaeManager;
   let clients = G.clients.filter(c => c.status !== '해지' && c.status !== '폐업');
-  if (mf !== '전체') clients = clients.filter(c => c.manager === mf);
-  clients.forEach(c => G.julgae[pKey][c.id] = val);
+  if (mf === '(없음)') clients = clients.filter(c => !c.manager);
+  else if (mf !== '전체') clients = clients.filter(c => c.manager === mf);
+  clients.forEach(c => {
+    G.julgae[pKey][c.id] = {d:val, b:val, a:val};
+  });
   saveToLS();
   renderJulgae();
 }
@@ -1304,16 +1395,21 @@ function openAddPeriod() {
 
     <div style="border-top:1.5px solid #f0f0f0;padding-top:14px">
       <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:10px">직접 입력</div>
-      <div><label class="flabel">기간 이름 *</label><input class="finput" id="p-label" placeholder="예: 26년 부가세 예정신고 1기"></div>
+      <div><label class="flabel">리스트 이름 *</label><input class="finput" id="p-label" placeholder="예: 26년 부가세 예정신고 1기"></div>
       <div class="form-grid" style="margin-top:10px">
-        <div><label class="flabel">신고 유형</label>
-          <select class="fsel" id="p-type">
-            <option>부가세</option><option>소득세</option><option>법인세</option><option>원천세</option><option>연말정산</option><option>기타</option>
+        <div><label class="flabel">신고 유형 (자동 필터)</label>
+          <select class="fsel" id="p-reporttype">
+            <option value="">전체</option>
+            <option value="vat">부가세 (일반·간이)</option>
+            <option value="corp">법인세 (법인)</option>
+            <option value="income">종합소득세 (개인 일반·간이)</option>
+            <option value="seongsi">성실신고 (성실신고확인 대상)</option>
+            <option value="sajup">사업장현황신고 (면세)</option>
           </select>
         </div>
-        <div><label class="flabel">대상 업체</label>
-          <select class="fsel" id="p-target">
-            <option value="전체">전체</option><option value="법인">법인만</option><option value="개인">개인만</option>
+        <div><label class="flabel">세목 분류</label>
+          <select class="fsel" id="p-type">
+            <option>부가세</option><option>소득세</option><option>법인세</option><option>원천세</option><option>연말정산</option><option>기타</option>
           </select>
         </div>
       </div>
@@ -1331,7 +1427,7 @@ function applyPeriodTemplate(tplKey) {
   const yr = new Date().getFullYear();
   const label = String(yr).slice(2) + '년 ' + t.label;
   const id = tplKey + '_' + yr + '_' + Date.now();
-  G.periods.push({ id, label, type: t.type, targetType: t.targetType });
+  G.periods.push({ id, label, type: t.type, targetType: t.targetType, reportType: t.reportType });
   G.julgaePeriodIdx = G.periods.length - 1;
   saveToLS();
   closeModal();
@@ -1340,11 +1436,13 @@ function applyPeriodTemplate(tplKey) {
 
 function savePeriod() {
   const label = document.getElementById('p-label').value.trim();
-  if (!label) return alert('기간 이름을 입력해주세요');
+  if (!label) return alert('리스트 이름을 입력해주세요');
   const type = document.getElementById('p-type').value;
-  const target = document.getElementById('p-target').value;
+  const reportType = document.getElementById('p-reporttype').value || undefined;
+  const targetMap = {vat:'전체',corp:'법인',income:'개인',seongsi:'개인',sajup:'개인'};
+  const targetType = reportType ? (targetMap[reportType]||'전체') : '전체';
   const id = 'p_' + Date.now();
-  G.periods.push({ id, label, type, targetType: target });
+  G.periods.push({ id, label, type, targetType, reportType });
   G.julgaePeriodIdx = G.periods.length - 1;
   saveToLS();
   closeModal();
@@ -1873,6 +1971,14 @@ async function init() {
     G.periods = savedPeriods ? JSON.parse(savedPeriods) : JSON.parse(JSON.stringify(DEFAULT_PERIODS));
     const savedJulgae = localStorage.getItem('tm_julgae');
     G.julgae = savedJulgae ? JSON.parse(savedJulgae) : {};
+    // 구형 boolean 데이터 → {d,b,a} 형식으로 마이그레이션
+    for (const pKey of Object.keys(G.julgae)) {
+      for (const cId of Object.keys(G.julgae[pKey])) {
+        if (typeof G.julgae[pKey][cId] === 'boolean') {
+          G.julgae[pKey][cId] = {d:false, b:false, a:G.julgae[pKey][cId]};
+        }
+      }
+    }
     const savedSettings = localStorage.getItem('tm_settings');
     if (savedSettings) G.settings = JSON.parse(savedSettings);
     updateBadge();
