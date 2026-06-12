@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>TaxManager — 세무사무소 거래처 관리</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;background:#f0f2f5;color:#1a1a2e;font-size:14px}
@@ -149,6 +152,20 @@ input.finput:focus,select.fsel:focus,textarea.ftarea:focus{border-color:#4f8ef7}
 </head>
 <body>
 
+<!-- 로그인 화면 -->
+<div id="login-screen" style="display:none;position:fixed;inset:0;background:#1a1a2e;z-index:9999;align-items:center;justify-content:center">
+  <div style="background:#242440;border-radius:20px;padding:40px;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.4);max-width:360px;width:90%">
+    <div style="width:56px;height:56px;background:linear-gradient(135deg,#4f8ef7,#a259ff);border-radius:14px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px;margin:0 auto 20px;color:#fff">T</div>
+    <div style="font-size:22px;font-weight:800;color:#fff;margin-bottom:6px">TaxManager</div>
+    <div style="font-size:14px;color:#888;margin-bottom:32px">세무사무소 거래처 관리</div>
+    <button onclick="signInWithGoogle()" style="width:100%;padding:14px;border-radius:12px;border:none;background:#fff;color:#1a1a2e;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;font-family:inherit">
+      <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+      Google 계정으로 로그인
+    </button>
+    <div id="login-error" style="margin-top:12px;font-size:13px;color:#ef5350;display:none"></div>
+  </div>
+</div>
+
 <!-- 헤더 -->
 <div id="header">
   <div id="logo">
@@ -161,6 +178,8 @@ input.finput:focus,select.fsel:focus,textarea.ftarea:focus{border-color:#4f8ef7}
     <button class="hbtn blue" onclick="openExcel()">↓ 엑셀</button>
     <button class="hbtn" id="save-btn" onclick="manualSave()" style="background:rgba(46,125,50,.3);color:#81c784">💾 저장</button>
     <span id="save-toast" style="display:none;font-size:12px;color:#81c784;font-weight:700">✔ 저장됨</span>
+    <span id="user-name" style="display:none;font-size:12px;color:#aaa;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+    <button class="hbtn" id="logout-btn" onclick="signOutUser()" style="display:none;background:rgba(255,255,255,.08);color:#aaa">로그아웃</button>
   </div>
 </div>
 
@@ -191,6 +210,23 @@ input.finput:focus,select.fsel:focus,textarea.ftarea:focus{border-color:#4f8ef7}
 <div id="modal-container"></div>
 
 <script>
+// ══════════════════════════════════════════════════════
+// Firebase 설정 — Firebase 콘솔에서 복사한 값으로 교체하세요
+// https://console.firebase.google.com → 프로젝트 설정 → 웹 앱 → SDK 설정
+// ══════════════════════════════════════════════════════
+const FIREBASE_CONFIG = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+  databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+firebase.initializeApp(FIREBASE_CONFIG);
+const fbAuth = firebase.auth();
+const fbDb = firebase.database();
+
 // ══════════════════════════════════════════════════════
 // 데이터 압축 해제
 // ══════════════════════════════════════════════════════
@@ -234,6 +270,7 @@ function expandClients(mini) {
 // 전역 상태
 // ══════════════════════════════════════════════════════
 let G = {
+  user: null,
   clients: [],
   currentTab: 'dashboard',
   searchText: '',
@@ -308,6 +345,14 @@ function saveToLS() {
     localStorage.setItem('tm_julgae', JSON.stringify(G.julgae));
     localStorage.setItem('tm_settings', JSON.stringify(G.settings));
   } catch(e) {}
+  if (G.user) {
+    fbDb.ref('taxmanager/' + G.user.uid).set({
+      clients:  JSON.stringify(G.clients),
+      periods:  JSON.stringify(G.periods),
+      julgae:   JSON.stringify(G.julgae),
+      settings: JSON.stringify(G.settings),
+    }).catch(e => console.error('Firebase 저장 실패:', e));
+  }
 }
 
 const MANAGERS = ['전체','이슬빈','이현주','정여주','최수이'];
@@ -1955,39 +2000,101 @@ function closeModal() {
 }
 
 // ══════════════════════════════════════════════════════
-// 앱 시작
+// Firebase 인증 / 데이터 로드
 // ══════════════════════════════════════════════════════
-async function init() {
-  try {
-    const saved = localStorage.getItem('tm_clients');
-    if (saved) {
-      G.clients = JSON.parse(saved);
-    } else {
-      const json = await decompressB64(CLIENTS_B64);
-      const mini = JSON.parse(json);
-      G.clients = expandClients(mini);
-    }
-    const savedPeriods = localStorage.getItem('tm_periods');
-    G.periods = savedPeriods ? JSON.parse(savedPeriods) : JSON.parse(JSON.stringify(DEFAULT_PERIODS));
-    const savedJulgae = localStorage.getItem('tm_julgae');
-    G.julgae = savedJulgae ? JSON.parse(savedJulgae) : {};
-    // 구형 boolean 데이터 → {d,b,a} 형식으로 마이그레이션
-    for (const pKey of Object.keys(G.julgae)) {
-      for (const cId of Object.keys(G.julgae[pKey])) {
-        if (typeof G.julgae[pKey][cId] === 'boolean') {
-          G.julgae[pKey][cId] = {d:false, b:false, a:G.julgae[pKey][cId]};
-        }
+function signInWithGoogle() {
+  const err = document.getElementById('login-error');
+  err.style.display = 'none';
+  fbAuth.signInWithPopup(new firebase.auth.GoogleAuthProvider())
+    .catch(e => { err.textContent = '로그인 실패: ' + e.message; err.style.display = 'block'; });
+}
+
+function signOutUser() {
+  if (!confirm('로그아웃 하시겠습니까?')) return;
+  fbAuth.signOut();
+}
+
+function migrateJulgae() {
+  for (const pKey of Object.keys(G.julgae)) {
+    for (const cId of Object.keys(G.julgae[pKey])) {
+      if (typeof G.julgae[pKey][cId] === 'boolean') {
+        G.julgae[pKey][cId] = {d:false, b:false, a:G.julgae[pKey][cId]};
       }
     }
-    const savedSettings = localStorage.getItem('tm_settings');
-    if (savedSettings) G.settings = JSON.parse(savedSettings);
-    updateBadge();
-  } catch(e) {
-    console.error('데이터 로드 실패:', e);
   }
+}
+
+async function loadFromFirebase() {
+  try {
+    const snap = await fbDb.ref('taxmanager/' + G.user.uid).once('value');
+    const data = snap.val();
+    if (data) {
+      G.clients  = data.clients  ? JSON.parse(data.clients)  : [];
+      G.periods  = data.periods  ? JSON.parse(data.periods)  : JSON.parse(JSON.stringify(DEFAULT_PERIODS));
+      G.julgae   = data.julgae   ? JSON.parse(data.julgae)   : {};
+      G.settings = data.settings ? JSON.parse(data.settings) : G.settings;
+    } else {
+      // 신규 계정: 로컬스토리지 데이터 마이그레이션 시도
+      const saved = localStorage.getItem('tm_clients');
+      if (saved) {
+        G.clients = JSON.parse(saved);
+        const sp = localStorage.getItem('tm_periods');
+        G.periods = sp ? JSON.parse(sp) : JSON.parse(JSON.stringify(DEFAULT_PERIODS));
+        const sj = localStorage.getItem('tm_julgae');
+        G.julgae = sj ? JSON.parse(sj) : {};
+        const ss = localStorage.getItem('tm_settings');
+        if (ss) G.settings = JSON.parse(ss);
+        saveToLS(); // Firebase에 업로드
+      } else {
+        const json = await decompressB64(CLIENTS_B64);
+        G.clients = expandClients(JSON.parse(json));
+        G.periods = JSON.parse(JSON.stringify(DEFAULT_PERIODS));
+      }
+    }
+  } catch(e) {
+    console.error('Firebase 로드 실패, 로컬 데이터 사용:', e);
+    const saved = localStorage.getItem('tm_clients');
+    if (saved) G.clients = JSON.parse(saved);
+    const sp = localStorage.getItem('tm_periods');
+    G.periods = sp ? JSON.parse(sp) : JSON.parse(JSON.stringify(DEFAULT_PERIODS));
+    const sj = localStorage.getItem('tm_julgae');
+    G.julgae = sj ? JSON.parse(sj) : {};
+    const ss = localStorage.getItem('tm_settings');
+    if (ss) G.settings = JSON.parse(ss);
+  }
+  migrateJulgae();
+  updateBadge();
   document.getElementById('loading').style.display = 'none';
   document.getElementById('page-dashboard').style.display = 'block';
   renderDashboard();
+}
+
+// ══════════════════════════════════════════════════════
+// 앱 시작
+// ══════════════════════════════════════════════════════
+function init() {
+  document.getElementById('login-screen').style.display = 'flex';
+  fbAuth.onAuthStateChanged(async user => {
+    if (user) {
+      G.user = user;
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('loading').style.display = 'block';
+      const nameEl = document.getElementById('user-name');
+      const logoutBtn = document.getElementById('logout-btn');
+      nameEl.textContent = user.displayName || user.email;
+      nameEl.style.display = 'inline';
+      logoutBtn.style.display = 'inline';
+      await loadFromFirebase();
+    } else {
+      G.user = null;
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('login-screen').style.display = 'flex';
+      document.getElementById('user-name').style.display = 'none';
+      document.getElementById('logout-btn').style.display = 'none';
+      ['dashboard','clients','schedule','fees','closure','julgae','aitools']
+        .forEach(p => { const el = document.getElementById('page-'+p); if(el) el.style.display='none'; });
+    }
+  });
 }
 
 init();
