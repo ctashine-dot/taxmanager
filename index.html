@@ -153,6 +153,8 @@ input.finput:focus,select.fsel:focus,textarea.ftarea:focus{border-color:#4f8ef7}
     <span id="badge-no-data" class="badge-alert" style="display:none"></span>
     <button class="hbtn" onclick="openSettings()">⚙ 설정</button>
     <button class="hbtn blue" onclick="openExcel()">↓ 엑셀</button>
+    <button class="hbtn" id="save-btn" onclick="manualSave()" style="background:rgba(46,125,50,.3);color:#81c784">💾 저장</button>
+    <span id="save-toast" style="display:none;font-size:12px;color:#81c784;font-weight:700">✔ 저장됨</span>
   </div>
 </div>
 
@@ -1830,6 +1832,13 @@ function toggleField(id, field) {
   if (c) c[field]=!c[field];
   saveToLS();
   updateBadge();
+}
+
+function manualSave() {
+  saveToLS();
+  const toast = document.getElementById('save-toast');
+  toast.style.display = 'inline';
+  setTimeout(() => { toast.style.display = 'none'; }, 2000);
 }
 
 function updateBadge() {
