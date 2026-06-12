@@ -513,10 +513,10 @@ function renderClients() {
     <select onchange="onFilter('filterManager',this.value)">
       ${['전체',...MANAGERS.slice(1),'(없음)'].map(v=>`<option${G.filterManager===v?' selected':''}>${v}</option>`).join('')}
     </select>
-    ${['filterTaxType:TAX_TYPES','filterVatType:VAT_TYPES','filterDealType:DEAL_TYPES','filterFeeStatus:FEE_STATUSES'].map(x=>{
-      const [field,arr] = x.split(':');
-      return `<select onchange="onFilter('${field}',this.value)">${window[arr].map(v=>`<option${G[field]===v?' selected':''}>${v}</option>`).join('')}</select>`;
-    }).join('')}
+    <select onchange="onFilter('filterTaxType',this.value)">${TAX_TYPES.map(v=>`<option${G.filterTaxType===v?' selected':''}>${v}</option>`).join('')}</select>
+    <select onchange="onFilter('filterVatType',this.value)">${VAT_TYPES.map(v=>`<option${G.filterVatType===v?' selected':''}>${v}</option>`).join('')}</select>
+    <select onchange="onFilter('filterDealType',this.value)">${DEAL_TYPES.map(v=>`<option${G.filterDealType===v?' selected':''}>${v}</option>`).join('')}</select>
+    <select onchange="onFilter('filterFeeStatus',this.value)">${FEE_STATUSES.map(v=>`<option${G.filterFeeStatus===v?' selected':''}>${v}</option>`).join('')}</select>
   </div>
 
   <div style="font-size:12px;color:#888;margin-bottom:10px">총 ${list.length}개 거래처</div>
