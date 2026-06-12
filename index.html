@@ -1,0 +1,1881 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TaxManager — 세무사무소 거래처 관리</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;background:#f0f2f5;color:#1a1a2e;font-size:14px}
+:root{--blue:#4f8ef7;--purple:#a259ff;--green:#2e7d32;--red:#c62828;--orange:#e65100}
+
+/* ── 헤더 */
+#header{background:#1a1a2e;color:#fff;height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+#logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px}
+#logo-icon{width:32px;height:32px;background:linear-gradient(135deg,#4f8ef7,#a259ff);border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px}
+#header-btns{display:flex;gap:8px;align-items:center}
+.hbtn{background:rgba(255,255,255,.1);border:none;color:rgba(255,255,255,.85);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit}
+.hbtn.blue{background:rgba(79,142,247,.25);color:#4f8ef7}
+.badge-alert{background:#e53935;border-radius:12px;padding:2px 8px;font-size:12px;font-weight:700}
+
+/* ── 탭 */
+#tabs{background:#242440;display:flex;gap:4px;padding:8px 12px;flex-wrap:wrap}
+.tab{background:transparent;border:none;color:rgba(255,255,255,.7);border-radius:8px;padding:7px 14px;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;display:flex;align-items:center;gap:6px}
+.tab.active{background:rgba(79,142,247,.28);color:#4f8ef7}
+
+/* ── 컨테이너 */
+#main{max-width:1200px;margin:0 auto;padding:20px 16px}
+
+/* ── 카드 */
+.card{background:#fff;border-radius:14px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.07);margin-bottom:14px}
+.card-title{font-weight:700;font-size:15px;margin-bottom:12px}
+
+/* ── 통계 그리드 */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px}
+.stat-card{background:#fff;border-radius:14px;padding:14px 16px;box-shadow:0 1px 4px rgba(0,0,0,.07)}
+.stat-label{font-size:12px;color:#888;margin-bottom:4px}
+.stat-value{font-size:24px;font-weight:800}
+.stat-sub{font-size:11px;color:#aaa;margin-top:2px}
+
+/* ── 배지 */
+.badge{padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;white-space:nowrap;display:inline-block}
+.badge-blue{background:#e3f2fd;color:#1565c0}
+.badge-green{background:#e6f4ea;color:#1e7e34}
+.badge-red{background:#fdecea;color:#c62828}
+.badge-orange{background:#fff3e0;color:#e65100}
+.badge-purple{background:#f3e5f5;color:#6a1b9a}
+.badge-gray{background:#f5f5f5;color:#555}
+
+/* ── 필터바 */
+.filter-bar{background:#fff;border-radius:12px;padding:12px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.search-box{display:flex;align-items:center;gap:6px;flex:1 1 200px;background:#f5f5f5;border-radius:8px;padding:7px 12px}
+.search-box input{border:none;background:transparent;font-size:13px;outline:none;width:100%;color:#333;font-family:inherit}
+.filter-bar select{padding:7px 10px;border:1px solid #e0e0e0;border-radius:8px;font-size:12px;background:#fff;cursor:pointer;font-family:inherit;color:#333}
+
+/* ── 테이블 */
+.tbl-wrap{overflow-x:auto;border-radius:14px;box-shadow:0 1px 4px rgba(0,0,0,.07)}
+table{width:100%;border-collapse:collapse;font-size:13px;background:#fff}
+thead tr{background:#f8f9ff;border-bottom:2px solid #e8eaf6}
+th{padding:10px 12px;text-align:left;font-weight:700;color:#555;white-space:nowrap;font-size:12px}
+tbody tr{border-bottom:1px solid #f0f0f0;cursor:pointer;transition:background .1s}
+tbody tr:nth-child(even){background:#fafbff}
+tbody tr:hover{background:#e8f0fe}
+td{padding:10px 12px;vertical-align:middle}
+.td-name{font-weight:700;font-size:13px}
+.td-sub{font-size:11px;color:#999}
+
+/* ── 체크박스 */
+.chk{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;border:2px solid #e0e0e0;background:#fafafa}
+.chk.on{background:#e8f5e9;border-color:#43a047;color:#43a047}
+
+/* ── 모달 */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:flex;align-items:center;justify-content:center;padding:16px}
+.modal{background:#fff;border-radius:16px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.22)}
+.modal-header{padding:18px 20px 14px;border-bottom:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:#fff;z-index:1}
+.modal-header h3{font-size:17px;font-weight:800}
+.modal-body{padding:20px;display:flex;flex-direction:column;gap:14px}
+.close-btn{background:transparent;border:none;cursor:pointer;color:#888;font-size:20px;font-family:inherit;line-height:1}
+
+/* ── 폼 */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-grid.full{grid-template-columns:1fr}
+label.flabel{font-size:12px;font-weight:600;color:#555;display:block;margin-bottom:5px}
+input.finput,select.fsel,textarea.ftarea{width:100%;padding:9px 12px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:13px;outline:none;font-family:inherit;box-sizing:border-box}
+select.fsel{background:#fff;cursor:pointer}
+textarea.ftarea{resize:vertical}
+input.finput:focus,select.fsel:focus,textarea.ftarea:focus{border-color:#4f8ef7}
+
+/* ── 버튼 */
+.btn-primary{background:linear-gradient(135deg,#4f8ef7,#a259ff);color:#fff;border:none;border-radius:10px;padding:10px 18px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit}
+.btn-secondary{background:#f5f5f5;color:#555;border:1.5px solid #e0e0e0;border-radius:10px;padding:10px 18px;font-weight:600;font-size:14px;cursor:pointer;font-family:inherit}
+.btn-green{background:linear-gradient(135deg,#2e7d32,#43a047);color:#fff;border:none;border-radius:10px;padding:10px 18px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit}
+.btn-sm{padding:5px 12px;border-radius:8px;border:none;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+.btn-row{display:flex;gap:10px;margin-top:4px}
+.btn-row .btn-primary{flex:2}.btn-row .btn-secondary{flex:1}
+
+/* ── 상세 섹션 */
+.detail-section{margin-bottom:14px}
+.detail-section-title{font-size:11px;font-weight:700;color:#4f8ef7;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
+.detail-section-body{background:#fafbff;border-radius:10px;padding:2px 14px}
+.detail-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #f0f0f0;font-size:14px}
+.detail-row:last-child{border-bottom:none}
+.detail-row .lbl{color:#888}
+
+/* ── 진행 바 */
+.progress-bar{height:6px;background:#f0f0f0;border-radius:3px;overflow:hidden;margin-top:8px}
+.progress-fill{height:100%;background:linear-gradient(90deg,#4f8ef7,#2e7d32);border-radius:3px}
+
+/* ── AI 도구 카드 */
+.tool-card{background:#fff;border-radius:16px;padding:22px;cursor:pointer;text-align:left;box-shadow:0 2px 8px rgba(0,0,0,.07);border:2px solid transparent;transition:box-shadow .15s,border-color .15s;width:100%}
+.tool-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.12)}
+.tool-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:14px;font-size:20px}
+.tools-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+
+/* ── AI 결과 */
+.ai-result{background:#fafbff;border-radius:8px;padding:12px 14px;font-size:14px;line-height:1.9;white-space:pre-wrap;border-left:3px solid #4f8ef7}
+.sms-bubble{background:#e3f2fd;border-radius:0 14px 14px 14px;padding:12px 14px;font-size:14px;line-height:1.8;white-space:pre-wrap;display:inline-block;max-width:100%}
+
+/* ── 로딩 */
+#loading{text-align:center;padding:60px 20px;color:#888}
+#loading .spin{font-size:40px;display:block;margin-bottom:12px;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── 반응형 */
+@media(max-width:600px){
+  .form-grid{grid-template-columns:1fr}
+  #header-btns .hbtn span{display:none}
+  th:nth-child(n+7){display:none}
+  td:nth-child(n+7){display:none}
+}
+
+/* ── 수임항목 그룹 */
+.contract-group{margin-bottom:10px}
+.contract-group-title{font-size:11px;font-weight:700;color:#4f8ef7;margin-bottom:6px;text-transform:uppercase}
+.contract-chips{display:flex;flex-wrap:wrap;gap:6px}
+.contract-chip{padding:6px 13px;border-radius:20px;border:2px solid #e0e0e0;background:#fff;color:#888;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;font-family:inherit}
+.contract-chip.on{border-color:#4f8ef7;background:#e8f0fe;color:#4f8ef7}
+.contract-chip.disabled{opacity:.3;cursor:not-allowed}
+
+/* ── 인쇄 */
+@media print{#header,#tabs,.filter-bar,.btn-row,#header-btns{display:none!important}#main{padding:0}table{font-size:11px}}
+</style>
+</head>
+<body>
+
+<!-- 헤더 -->
+<div id="header">
+  <div id="logo">
+    <div id="logo-icon">T</div>
+    TaxManager
+  </div>
+  <div id="header-btns">
+    <span id="badge-no-data" class="badge-alert" style="display:none"></span>
+    <button class="hbtn" onclick="openSettings()">⚙ 설정</button>
+    <button class="hbtn blue" onclick="openExcel()">↓ 엑셀</button>
+  </div>
+</div>
+
+<!-- 탭 -->
+<div id="tabs">
+  <button class="tab active" onclick="switchTab('dashboard')" id="tab-dashboard">🏠 대시보드</button>
+  <button class="tab" onclick="switchTab('clients')" id="tab-clients">👥 거래처 목록</button>
+  <button class="tab" onclick="switchTab('schedule')" id="tab-schedule">📅 신고 일정</button>
+  <button class="tab" onclick="switchTab('fees')" id="tab-fees">💰 수수료</button>
+  <button class="tab" onclick="switchTab('closure')" id="tab-closure">📁 해지·폐업</button>
+  <button class="tab" onclick="switchTab('julgae')" id="tab-julgae">✅ 결재 현황</button>
+  <button class="tab" onclick="switchTab('aitools')" id="tab-aitools">✦ AI 도구</button>
+</div>
+
+<!-- 메인 -->
+<div id="main">
+  <div id="loading"><span class="spin">⏳</span><div style="font-weight:700;font-size:16px">거래처 데이터 로딩 중...</div><div style="font-size:13px;margin-top:6px">552개 거래처 데이터를 불러오고 있습니다</div></div>
+  <div id="page-dashboard" style="display:none"></div>
+  <div id="page-clients" style="display:none"></div>
+  <div id="page-schedule" style="display:none"></div>
+  <div id="page-fees" style="display:none"></div>
+  <div id="page-closure" style="display:none"></div>
+  <div id="page-julgae" style="display:none"></div>
+  <div id="page-aitools" style="display:none"></div>
+</div>
+
+<!-- 모달 컨테이너 -->
+<div id="modal-container"></div>
+
+<script>
+// ══════════════════════════════════════════════════════
+// 데이터 압축 해제
+// ══════════════════════════════════════════════════════
+const CLIENTS_B64 = "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";
+
+async function decompressB64(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const ds = new DecompressionStream('gzip');
+  const writer = ds.writable.getWriter();
+  writer.write(bytes); writer.close();
+  const reader = ds.readable.getReader();
+  const out = []; let total = 0;
+  while (true) {
+    const {done, value} = await reader.read();
+    if (done) break;
+    out.push(value); total += value.length;
+  }
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const c of out) { merged.set(c, offset); offset += c.length; }
+  return new TextDecoder().decode(merged);
+}
+
+function expandClients(mini) {
+  return mini.map(m => ({
+    id: m.i, name: m.n, rep: m.r, bizNo: '', phone: m.p || '', email: '',
+    taxType: m.t, vatType: m.v, bizType: m.b || '', taxOffice: m.o || '',
+    manager: m.m || '', fee: m.f || 0,
+    feeStatus: '청구완료', contracts: m.c || [],
+    status: '정상', dealType: m.d || '기장',
+    dataReceived: false, bookkeeping: false, approved: false,
+    memo: m.memo || '', contractDate: m.cd || '',
+    terminationDate: '', terminationReason: '',
+    closureYear: '', closureTaxFiled: false, closureTaxApproved: false
+  }));
+}
+
+// ══════════════════════════════════════════════════════
+// 전역 상태
+// ══════════════════════════════════════════════════════
+let G = {
+  clients: [],
+  currentTab: 'dashboard',
+  searchText: '',
+  filterManager: '전체',
+  filterTaxType: '전체',
+  filterVatType: '전체',
+  filterFeeStatus: '전체',
+  filterDealType: '전체',
+  showTerminated: false,
+  closureSearch: '',
+  julgaeSearch: '',
+  julgaeManager: '전체',
+  julgaePeriodIdx: 0,
+  periods: [],
+  julgae: {},
+  settings: {
+    name: '○○세무회계사무소', rep: '홍세무',
+    phone: '02-1234-5678', fax: '02-1234-5679',
+    email: 'office@taxoffice.kr', address: '부산시 ○○구 ○○로 123',
+    bank: '국민은행', account: '123-456-789012', accountHolder: '홍세무',
+    regNo: '123-45-67890'
+  }
+};
+
+const PERIOD_TEMPLATES = [
+  { tpl:'vat_hak_1',  label:'부가세 확정신고 1기',   type:'부가세',   targetType:'전체', deadline:'7월 25일',  hint:'(1월~6월분)' },
+  { tpl:'vat_hak_2',  label:'부가세 확정신고 2기',   type:'부가세',   targetType:'전체', deadline:'1월 25일',  hint:'(7월~12월분)' },
+  { tpl:'vat_yej_1',  label:'부가세 예정신고 1기',   type:'부가세',   targetType:'전체', deadline:'4월 25일',  hint:'(1월~3월분)' },
+  { tpl:'vat_yej_2',  label:'부가세 예정신고 2기',   type:'부가세',   targetType:'전체', deadline:'10월 25일', hint:'(7월~9월분)' },
+  { tpl:'corp',       label:'법인세 신고',            type:'법인세',   targetType:'법인', deadline:'3월 31일',  hint:'(12월 결산법인)' },
+  { tpl:'income',     label:'종합소득세 신고',        type:'소득세',   targetType:'개인', deadline:'5월 31일',  hint:'(개인사업자)' },
+  { tpl:'seongsi',    label:'성실신고사업자 신고',    type:'소득세',   targetType:'개인', deadline:'6월 30일',  hint:'(성실신고확인)' },
+];
+
+const DEFAULT_PERIODS = PERIOD_TEMPLATES.map(t => ({
+  id: t.tpl + '_' + new Date().getFullYear(),
+  label: String(new Date().getFullYear()).slice(2) + '년 ' + t.label,
+  type: t.type,
+  targetType: t.targetType
+}));
+
+function saveToLS() {
+  try {
+    localStorage.setItem('tm_clients', JSON.stringify(G.clients));
+    localStorage.setItem('tm_periods', JSON.stringify(G.periods));
+    localStorage.setItem('tm_julgae', JSON.stringify(G.julgae));
+    localStorage.setItem('tm_settings', JSON.stringify(G.settings));
+  } catch(e) {}
+}
+
+const MANAGERS = ['전체','이슬빈','이현주','정여주','최수이'];
+const TAX_TYPES = ['전체','법인','개인'];
+const VAT_TYPES = ['전체','일반','간이','면세'];
+const FEE_STATUSES = ['전체','수금완료','청구완료','미수금'];
+const DEAL_TYPES = ['전체','기장','신고대리','종소세대리','고문'];
+const STATUS_LIST = ['정상','주의','해지','폐업'];
+
+const CONTRACT_GROUPS = [
+  { key:'장', label:'기장', items:[
+    {key:'기장_일반', label:'기장 (일반)', vat:['일반'], tax:['법인','개인']},
+    {key:'기장_간이', label:'기장 (간이)', vat:['간이'], tax:['개인']},
+    {key:'기장_면세', label:'기장 (면세)', vat:['면세'], tax:['개인']},
+  ]},
+  { key:'신고', label:'신고대리', items:[
+    {key:'신고대리_부가세', label:'부가세 신고대리', vat:['일반','간이'], tax:['법인','개인']},
+    {key:'신고대리_면세', label:'사업장현황 신고대리', vat:['면세'], tax:['개인']},
+    {key:'종소세신고대리', label:'종합소득세 신고대리', vat:['일반','간이','면세'], tax:['개인']},
+  ]},
+  { key:'법인', label:'법인 신고', items:[
+    {key:'법인세', label:'법인세 신고', vat:['일반','간이','면세'], tax:['법인']},
+    {key:'세무조정', label:'세무조정', vat:['일반','간이','면세'], tax:['법인','개인']},
+  ]},
+  { key:'공통', label:'공통', items:[
+    {key:'연말정산', label:'연말정산', vat:['일반','간이','면세'], tax:['법인','개인']},
+    {key:'원천세', label:'원천세 신고', vat:['일반','간이','면세'], tax:['법인','개인']},
+  ]},
+];
+
+function contractLabel(key) {
+  for (const g of CONTRACT_GROUPS)
+    for (const i of g.items) if (i.key === key) return i.label;
+  return key;
+}
+
+function availableContracts(vatType, taxType) {
+  return CONTRACT_GROUPS.map(g => ({
+    ...g,
+    items: g.items.filter(i => i.vat.includes(vatType) && i.tax.includes(taxType))
+  })).filter(g => g.items.length > 0);
+}
+
+// ══════════════════════════════════════════════════════
+// 통계 계산
+// ══════════════════════════════════════════════════════
+function getStats() {
+  const active = G.clients.filter(c => c.status !== '해지' && c.status !== '폐업');
+  return {
+    total: G.clients.length,
+    active: active.length,
+    noData: active.filter(c => !c.dataReceived).length,
+    pending: active.filter(c => c.dataReceived && !c.bookkeeping).length,
+    unpaid: active.filter(c => c.feeStatus === '미수금').length,
+    totalFee: active.reduce((s,c) => s+c.fee, 0),
+    collected: active.filter(c => c.feeStatus==='수금완료').reduce((s,c)=>s+c.fee,0),
+    terminated: G.clients.filter(c=>c.status==='해지').length,
+    closure: G.clients.filter(c=>c.status==='폐업').length,
+    closurePending: G.clients.filter(c=>c.status==='폐업'&&!c.closureTaxApproved).length,
+  };
+}
+
+// ══════════════════════════════════════════════════════
+// 필터링
+// ══════════════════════════════════════════════════════
+function filteredClients() {
+  return G.clients.filter(c => {
+    if (!G.showTerminated && (c.status==='해지'||c.status==='폐업')) return false;
+    if (G.searchText) {
+      const q = G.searchText;
+      if (!c.name.includes(q) && !c.rep.includes(q) && !c.phone.includes(q) && !c.bizType.includes(q)) return false;
+    }
+    if (G.filterManager !== '전체' && c.manager !== G.filterManager) return false;
+    if (G.filterTaxType !== '전체' && c.taxType !== G.filterTaxType) return false;
+    if (G.filterVatType !== '전체' && c.vatType !== G.filterVatType) return false;
+    if (G.filterFeeStatus !== '전체' && c.feeStatus !== G.filterFeeStatus) return false;
+    if (G.filterDealType !== '전체' && c.dealType !== G.filterDealType) return false;
+    return true;
+  });
+}
+
+// ══════════════════════════════════════════════════════
+// HTML 헬퍼
+// ══════════════════════════════════════════════════════
+function badge(label, color='gray') {
+  return `<span class="badge badge-${color}">${esc(label)}</span>`;
+}
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function chk(val, onclick='') {
+  return `<div class="chk ${val?'on':''}" onclick="${onclick}">${val?'✓':''}</div>`;
+}
+function dealBadge(d) {
+  const map={기장:'blue',신고대리:'purple',종소세대리:'orange',고문:'gray',신고:'purple'};
+  return badge(d||'기장', map[d]||'blue');
+}
+
+// ══════════════════════════════════════════════════════
+// 탭 전환
+// ══════════════════════════════════════════════════════
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('tab-'+tab)?.classList.add('active');
+  document.querySelectorAll('[id^="page-"]').forEach(p=>p.style.display='none');
+  const page = document.getElementById('page-'+tab);
+  page.style.display = 'block';
+  G.currentTab = tab;
+  const renders = {dashboard:renderDashboard,clients:renderClients,schedule:renderSchedule,fees:renderFees,closure:renderClosure,julgae:renderJulgae,aitools:renderAITools};
+  renders[tab]?.();
+}
+
+// ══════════════════════════════════════════════════════
+// 대시보드
+// ══════════════════════════════════════════════════════
+function renderDashboard() {
+  const s = getStats();
+  const alertClients = G.clients.filter(c=>
+    c.status!=='해지'&&c.status!=='폐업'&&(!c.dataReceived||c.feeStatus==='미수금'||c.status==='주의')
+  );
+  const closurePending = G.clients.filter(c=>c.status==='폐업'&&!c.closureTaxApproved);
+  const pct = s.totalFee>0?Math.round(s.collected/s.totalFee*100):0;
+
+  const managerCards = ['이슬빈','이현주','정여주','최수이'].map(m=>{
+    const mc = G.clients.filter(c=>c.manager===m&&c.status!=='해지'&&c.status!=='폐업');
+    const g = mc.filter(c=>c.dealType==='기장'||c.dealType==='고문').length;
+    const s2 = mc.filter(c=>c.dealType?.includes('신고')||c.dealType==='종소세대리').length;
+    return `<div class="stat-card" style="border-top:3px solid #4f8ef7">
+      <div class="stat-label">${m}</div>
+      <div class="stat-value" style="color:#1a1a2e;font-size:22px">${mc.length}<span style="font-size:11px;color:#aaa;font-weight:400">개</span></div>
+      <div class="stat-sub">기장 ${g} · 신고 ${s2}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('page-dashboard').innerHTML = `
+  <div style="margin-bottom:20px"><h2 style="font-size:22px;font-weight:800">대시보드</h2>
+  <p style="color:#888;font-size:13px;margin-top:4px">${new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric'})} 기준</p></div>
+
+  <div class="stat-grid">
+    <div class="stat-card" style="border-left:4px solid #4f8ef7">
+      <div class="stat-label">활성 거래처</div>
+      <div class="stat-value" style="color:#4f8ef7">${s.active}</div>
+      <div class="stat-sub">전체 ${s.total}개</div>
+    </div>
+    <div class="stat-card" style="border-left:4px solid #e53935">
+      <div class="stat-label">자료 미수령</div>
+      <div class="stat-value" style="color:#e53935">${s.noData}</div>
+      <div class="stat-sub">확인 필요</div>
+    </div>
+    <div class="stat-card" style="border-left:4px solid #f57c00">
+      <div class="stat-label">기장 대기</div>
+      <div class="stat-value" style="color:#f57c00">${s.pending}</div>
+      <div class="stat-sub">처리 필요</div>
+    </div>
+    <div class="stat-card" style="border-left:4px solid #7b1fa2">
+      <div class="stat-label">미수금</div>
+      <div class="stat-value" style="color:#7b1fa2">${s.unpaid}</div>
+      <div class="stat-sub">수금 필요</div>
+    </div>
+    <div class="stat-card" style="border-left:4px solid #546e7a">
+      <div class="stat-label">폐업 신고 미완료</div>
+      <div class="stat-value" style="color:#546e7a">${s.closurePending}</div>
+      <div class="stat-sub">처리 필요</div>
+    </div>
+  </div>
+
+  <div class="stat-grid">${managerCards}</div>
+
+  <div class="card">
+    <div class="card-title">이달 수수료 현황</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div><div style="font-size:12px;color:#888">총 청구액</div><div style="font-size:20px;font-weight:800">${s.totalFee.toLocaleString()}원</div></div>
+      <div><div style="font-size:12px;color:#888">수금 완료</div><div style="font-size:20px;font-weight:800;color:#2e7d32">${s.collected.toLocaleString()}원</div></div>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+    <div style="font-size:12px;color:#888;margin-top:4px">수금률 ${pct}%</div>
+  </div>
+
+  ${alertClients.length>0?`<div class="card">
+    <div class="card-title" style="color:#e53935">⚠ 조치 필요 거래처</div>
+    ${alertClients.map(c=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#fafafa;border-radius:10px;margin-bottom:6px;cursor:pointer" onclick="openDetail(${c.id})">
+      <div><div style="font-weight:600">${esc(c.name)}</div><div style="font-size:12px;color:#888">담당: ${esc(c.manager)}</div></div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">
+        ${!c.dataReceived?badge('자료미수령','red'):''}
+        ${c.feeStatus==='미수금'?badge('미수금','purple'):''}
+        ${c.status==='주의'?badge('주의','orange'):''}
+      </div>
+    </div>`).join('')}
+  </div>`:''}
+
+  ${closurePending.length>0?`<div class="card" style="border:2px solid #ffcc02">
+    <div class="card-title" style="color:#e65100">📁 폐업 신고 미완료 (${closurePending.length}건)</div>
+    ${closurePending.map(c=>`
+    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f5f5f5">
+      <div><div style="font-weight:600">${esc(c.name)}</div>
+      <div style="font-size:12px;color:#888">폐업 ${esc(c.closureYear)}년 · ${esc(c.manager)}</div></div>
+      <div>${badge(!c.closureTaxFiled?'접수전':'접수완료', !c.closureTaxFiled?'orange':'blue')}</div>
+    </div>`).join('')}
+  </div>`:''}
+  `;
+}
+
+// ══════════════════════════════════════════════════════
+// 거래처 목록
+// ══════════════════════════════════════════════════════
+function renderClients() {
+  const list = filteredClients();
+  const terminated = G.clients.filter(c=>c.status==='해지'||c.status==='폐업').length;
+  document.getElementById('page-clients').innerHTML = `
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <h2 style="font-size:20px;font-weight:800">거래처 목록</h2>
+    <div style="display:flex;gap:8px">
+      <button class="btn-sm" style="background:${G.showTerminated?'#fff3e0':'#f5f5f5'};color:${G.showTerminated?'#e65100':'#888'};border:2px solid ${G.showTerminated?'#ffcc02':'#e0e0e0'}" onclick="toggleTerminated()">${G.showTerminated?'▲ 해지·폐업 숨기기':'해지·폐업 보기 ('+terminated+')'}</button>
+      <button class="btn-primary btn-sm" onclick="openForm(null)" style="padding:8px 14px">+ 거래처 추가</button>
+    </div>
+  </div>
+
+  <div class="filter-bar">
+    <div class="search-box">
+      <span>🔍</span>
+      <input id="search-input" placeholder="거래처명, 대표자, 연락처, 업종 검색" value="${esc(G.searchText)}" oninput="onSearch(this.value)">
+    </div>
+    ${['filterManager:MANAGERS','filterTaxType:TAX_TYPES','filterVatType:VAT_TYPES','filterDealType:DEAL_TYPES','filterFeeStatus:FEE_STATUSES'].map(x=>{
+      const [field,arr] = x.split(':');
+      return `<select onchange="onFilter('${field}',this.value)">${window[arr].map(v=>`<option${G[field]===v?' selected':''}>${v}</option>`).join('')}</select>`;
+    }).join('')}
+  </div>
+
+  <div style="font-size:12px;color:#888;margin-bottom:10px">총 ${list.length}개 거래처</div>
+
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr>
+      <th>거래처명</th><th>거래유형</th><th>과세</th><th>부가세</th><th>담당자</th><th>수수료</th><th>상태</th><th>자료</th><th>기장</th><th>결재</th><th>수금</th><th></th>
+    </tr></thead>
+    <tbody>
+    ${list.map(c=>`<tr onclick="openDetail(${c.id})">
+      <td><div class="td-name">${esc(c.name)}</div><div class="td-sub">${esc(c.rep)}${c.bizType?' · '+esc(c.bizType):''}</div></td>
+      <td>${dealBadge(c.dealType)}</td>
+      <td>${badge(c.taxType,c.taxType==='법인'?'blue':'gray')}</td>
+      <td>${badge(c.vatType,c.vatType==='일반'?'blue':c.vatType==='간이'?'orange':'gray')}</td>
+      <td style="color:#555">${esc(c.manager)}</td>
+      <td style="font-weight:600">${c.status==='정상'||c.status==='주의'?c.fee.toLocaleString()+'원':'-'}</td>
+      <td>${badge(c.status,c.status==='정상'?'green':c.status==='주의'?'orange':'gray')}</td>
+      <td onclick="event.stopPropagation();toggleField(${c.id},'dataReceived')">${chk(c.dataReceived)}</td>
+      <td onclick="event.stopPropagation();toggleField(${c.id},'bookkeeping')">${chk(c.bookkeeping)}</td>
+      <td onclick="event.stopPropagation();toggleField(${c.id},'approved')">${chk(c.approved)}</td>
+      <td>${badge(c.feeStatus,c.feeStatus==='수금완료'?'green':c.feeStatus==='청구완료'?'blue':'red')}</td>
+      <td onclick="event.stopPropagation();openForm(${c.id})"><button class="btn-sm" style="background:#f0f4ff;color:#4f8ef7">✏</button></td>
+    </tr>`).join('')}
+    ${list.length===0?'<tr><td colspan="12" style="text-align:center;padding:40px;color:#aaa">검색 결과가 없습니다</td></tr>':''}
+    </tbody>
+  </table>
+  </div>`;
+}
+
+function toggleTerminated() { G.showTerminated=!G.showTerminated; renderClients(); }
+function onSearch(v) { G.searchText=v; renderClients(); }
+function onFilter(field,v) { G[field]=v; renderClients(); }
+
+// ══════════════════════════════════════════════════════
+// 거래처 상세 모달
+// ══════════════════════════════════════════════════════
+function openDetail(id) {
+  const c = G.clients.find(x=>x.id===id);
+  if (!c) return;
+  const isTerminated = c.status==='해지'||c.status==='폐업';
+  const banner = isTerminated?`<div style="background:${c.status==='폐업'?'#fdecea':'#f5f5f5'};border-radius:10px;padding:10px 14px;display:flex;align-items:center;gap:8px;margin-bottom:4px">
+    ${badge(c.status,c.status==='폐업'?'red':'gray')}
+    <span style="font-size:13px;color:#666">${esc(c.terminationDate)} 해지 · ${esc(c.terminationReason==='폐업'?'폐업':c.terminationReason==='타회계사무소이전'?'타 사무소 이전':c.terminationReason||'')}</span>
+  </div>`:'';
+
+  const contractRows = CONTRACT_GROUPS.map(g=>{
+    const items = (c.contracts||[]).filter(k=>g.items.find(i=>i.key===k));
+    if(!items.length) return '';
+    return `<div style="padding:6px 0;border-bottom:1px solid #f0f0f0">
+      <div style="font-size:11px;color:#aaa;margin-bottom:4px">${g.label}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">${items.map(k=>badge(contractLabel(k),'blue')).join('')}</div>
+    </div>`;
+  }).join('');
+
+  const progressSection = !isTerminated?`
+  <div class="detail-section">
+    <div class="detail-section-title">이달 업무 진행</div>
+    <div class="detail-section-body">
+      ${[['dataReceived','자료 수령'],['bookkeeping','기장 완료'],['approved','결재 완료']].map(([f,l])=>`
+      <div class="detail-row">
+        <span class="lbl">${l}</span>
+        <button onclick="toggleField(${c.id},'${f}');closeModal();openDetail(${c.id})" style="background:${c[f]?'#e8f5e9':'#fafafa'};border:2px solid ${c[f]?'#43a047':'#e0e0e0'};border-radius:20px;padding:4px 16px;font-size:12px;font-weight:600;color:${c[f]?'#2e7d32':'#aaa'};cursor:pointer;font-family:inherit">
+          ${c[f]?'완료':'미완료'}
+        </button>
+      </div>`).join('')}
+    </div>
+  </div>`:'';
+
+  const closureSection = c.status==='폐업'&&c.closureYear?`
+  <div class="detail-section">
+    <div class="detail-section-title">폐업 신고 관리 (${c.closureYear}년)</div>
+    <div class="detail-section-body">
+      ${[['closureTaxFiled','신고서 접수'],['closureTaxApproved','신고 완료']].map(([f,l])=>`
+      <div class="detail-row">
+        <span class="lbl">${l}</span>
+        <button onclick="toggleField(${c.id},'${f}');closeModal();openDetail(${c.id})" style="background:${c[f]?'#e8f5e9':'#fafafa'};border:2px solid ${c[f]?'#43a047':'#e0e0e0'};border-radius:20px;padding:4px 16px;font-size:12px;font-weight:600;color:${c[f]?'#2e7d32':'#aaa'};cursor:pointer;font-family:inherit">
+          ${c[f]?'완료':'미완료'}
+        </button>
+      </div>`).join('')}
+    </div>
+  </div>`:'';
+
+  showModal(`<div style="max-width:520px">
+  <div class="modal-header">
+    <div><h3>${esc(c.name)}</h3><div style="color:#888;font-size:13px;margin-top:2px">${esc(c.rep)}</div></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn-sm" style="background:#f0f4ff;color:#4f8ef7" onclick="closeModal();openForm(${c.id})">✏ 편집</button>
+      <button class="close-btn" onclick="closeModal()">✕</button>
+    </div>
+  </div>
+  <div class="modal-body">
+    ${banner}
+    <div class="detail-section">
+      <div class="detail-section-title">기본 정보</div>
+      <div class="detail-section-body">
+        <div class="detail-row"><span class="lbl">연락처</span><span>${esc(c.phone||'-')}</span></div>
+        <div class="detail-row"><span class="lbl">업종</span><span>${esc(c.bizType||'-')}</span></div>
+        <div class="detail-row"><span class="lbl">관할세무서</span><span>${esc(c.taxOffice||'-')}</span></div>
+        <div class="detail-row"><span class="lbl">담당자</span><span>${esc(c.manager||'-')}</span></div>
+        <div class="detail-row"><span class="lbl">거래유형</span>${dealBadge(c.dealType)}</div>
+        <div class="detail-row"><span class="lbl">과세유형</span><span>${badge(c.taxType,c.taxType==='법인'?'blue':'gray')} ${badge(c.vatType,'gray')}</span></div>
+      </div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-section-title">수임 계약</div>
+      <div class="detail-section-body" style="padding:10px 14px">
+        <div class="detail-row" style="padding:6px 0"><span class="lbl">수임일자</span><span>${esc(c.contractDate||'-')}</span></div>
+        ${c.terminationDate?`<div class="detail-row" style="padding:6px 0"><span class="lbl">해지일자</span><span>${esc(c.terminationDate)}</span></div>`:''}
+        ${contractRows}
+      </div>
+    </div>
+    ${progressSection}
+    ${closureSection}
+    ${!isTerminated?`<div class="detail-section">
+      <div class="detail-section-title">수수료</div>
+      <div class="detail-section-body">
+        <div class="detail-row"><span class="lbl">월 수수료</span><strong>${c.fee.toLocaleString()}원</strong></div>
+        <div class="detail-row"><span class="lbl">수금 상태</span>${badge(c.feeStatus,c.feeStatus==='수금완료'?'green':c.feeStatus==='청구완료'?'blue':'red')}</div>
+      </div>
+    </div>`:''}
+    ${c.memo?`<div class="detail-section"><div class="detail-section-title">메모</div><div style="font-size:14px;color:#555;line-height:1.6;background:#fafbff;border-radius:8px;padding:10px 14px">${esc(c.memo)}</div></div>`:''}
+  </div>
+  </div>`);
+}
+
+// ══════════════════════════════════════════════════════
+// 거래처 추가/편집 폼
+// ══════════════════════════════════════════════════════
+function openForm(id) {
+  const isEdit = id !== null;
+  const c = isEdit ? G.clients.find(x=>x.id===id) : {
+    name:'',rep:'',bizNo:'',phone:'',email:'',
+    taxType:'개인',vatType:'일반',bizType:'',taxOffice:'',
+    manager:'이슬빈',fee:0,feeStatus:'청구완료',dealType:'기장',
+    contracts:[],status:'정상',dataReceived:false,bookkeeping:false,approved:false,
+    memo:'',contractDate:'',terminationDate:'',terminationReason:'',
+    closureYear:'',closureTaxFiled:false,closureTaxApproved:false
+  };
+
+  window._formData = {...c};
+
+  function contractsHTML() {
+    const avail = availableContracts(window._formData.vatType, window._formData.taxType);
+    return avail.map(g=>`
+    <div class="contract-group">
+      <div class="contract-group-title">${g.label}</div>
+      <div class="contract-chips">
+        ${g.items.map(item=>`<button type="button" class="contract-chip ${(window._formData.contracts||[]).includes(item.key)?'on':''}" onclick="toggleContract('${item.key}')">${item.label}</button>`).join('')}
+      </div>
+    </div>`).join('');
+  }
+
+  function terminationHTML() {
+    const s = window._formData.status;
+    if (s!=='해지'&&s!=='폐업') return '';
+    return `<div style="background:#fafafa;border-radius:10px;padding:14px;border:1.5px solid #e0e0e0;display:flex;flex-direction:column;gap:12px">
+      <div style="font-size:12px;font-weight:700;color:#e65100">해지 / 폐업 정보</div>
+      <div class="form-grid">
+        <div><label class="flabel">해지일자</label><input type="date" class="finput" id="f-terminationDate" value="${esc(c.terminationDate||'')}" oninput="window._formData.terminationDate=this.value"></div>
+        <div><label class="flabel">해지 사유</label><select class="fsel" id="f-terminationReason" onchange="window._formData.terminationReason=this.value">
+          <option value="">선택</option>
+          ${['폐업','타회계사무소이전','기타'].map(v=>`<option value="${v}"${c.terminationReason===v?' selected':''}>${v==='타회계사무소이전'?'타 회계사무소 이전':v}</option>`).join('')}
+        </select></div>
+      </div>
+      ${s==='폐업'?`<div><label class="flabel">폐업연도</label><input type="number" class="finput" placeholder="예: 2024" id="f-closureYear" value="${esc(c.closureYear||'')}" oninput="window._formData.closureYear=this.value"></div>`:''}
+    </div>`;
+  }
+
+  showModal(`<div style="max-width:520px">
+  <div class="modal-header">
+    <h3>${isEdit?'거래처 편집':'거래처 추가'}</h3>
+    <button class="close-btn" onclick="closeModal()">✕</button>
+  </div>
+  <div class="modal-body" id="form-body">
+    ${['name:거래처명 *','rep:대표자명 *','phone:연락처','email:이메일'].map(x=>{
+      const [k,l]=x.split(':');
+      return `<div><label class="flabel">${l}</label><input class="finput" id="f-${k}" value="${esc(c[k]||'')}" oninput="window._formData['${k}']=this.value"></div>`;
+    }).join('')}
+
+    <div class="form-grid">
+      ${[['taxType','과세유형',TAX_TYPES.slice(1)],['vatType','부가세유형',VAT_TYPES.slice(1)],['manager','담당자',MANAGERS.slice(1)],['dealType','거래유형',DEAL_TYPES.slice(1)],['feeStatus','수금상태',FEE_STATUSES.slice(1)]].map(([k,l,opts])=>`
+      <div><label class="flabel">${l}</label><select class="fsel" onchange="onFormSelect('${k}',this.value)">
+        ${opts.map(v=>`<option value="${v}"${c[k]===v?' selected':''}>${v}</option>`).join('')}
+      </select></div>`).join('')}
+    </div>
+
+    <div class="form-grid">
+      <div><label class="flabel">업종</label><input class="finput" id="f-bizType" value="${esc(c.bizType||'')}" oninput="window._formData.bizType=this.value"></div>
+      <div><label class="flabel">관할세무서</label><input class="finput" id="f-taxOffice" value="${esc(c.taxOffice||'')}" oninput="window._formData.taxOffice=this.value"></div>
+    </div>
+
+    <div><label class="flabel">월 수수료 (원)</label><input type="number" class="finput" id="f-fee" value="${c.fee||0}" oninput="window._formData.fee=Number(this.value)"></div>
+
+    <div style="border:1.5px solid #e0e0e0;border-radius:10px;overflow:hidden">
+      <div style="background:#f8f9ff;padding:9px 14px;font-size:12px;font-weight:700;color:#555;border-bottom:1px solid #e8eaf6">
+        수임 계약 항목
+        <span style="font-weight:400;color:#aaa;margin-left:6px">(${c.vatType} · ${c.taxType} 기준)</span>
+      </div>
+      <div style="padding:12px" id="contract-area">${contractsHTML()}</div>
+    </div>
+
+    <div class="form-grid">
+      <div><label class="flabel">수임일자</label><input type="date" class="finput" id="f-contractDate" value="${esc(c.contractDate||'')}" oninput="window._formData.contractDate=this.value"></div>
+      <div><label class="flabel">거래처 상태</label><select class="fsel" onchange="onFormSelect('status',this.value)">
+        ${STATUS_LIST.map(v=>`<option${c.status===v?' selected':''}>${v}</option>`).join('')}
+      </select></div>
+    </div>
+
+    <div id="termination-area">${terminationHTML()}</div>
+
+    <div><label class="flabel">메모</label><textarea class="ftarea" rows="3" oninput="window._formData.memo=this.value">${esc(c.memo||'')}</textarea></div>
+
+    <div class="btn-row">
+      <button class="btn-secondary" onclick="closeModal()">취소</button>
+      <button class="btn-primary" onclick="saveForm(${isEdit?id:'null'})">  ${isEdit?'저장':'추가'}</button>
+    </div>
+  </div>
+  </div>`);
+}
+
+window.onFormSelect = function(field, val) {
+  window._formData[field] = val;
+  if (field==='taxType'||field==='vatType') {
+    // remove incompatible contracts
+    const avail = CONTRACT_GROUPS.flatMap(g=>g.items).filter(i=>{
+      const vat = field==='vatType'?val:window._formData.vatType;
+      const tax = field==='taxType'?val:window._formData.taxType;
+      return i.vat.includes(vat)&&i.tax.includes(tax);
+    }).map(i=>i.key);
+    window._formData.contracts = (window._formData.contracts||[]).filter(k=>avail.includes(k));
+    document.getElementById('contract-area').innerHTML = (()=>{
+      const avail2 = availableContracts(window._formData.vatType,window._formData.taxType);
+      return avail2.map(g=>`<div class="contract-group"><div class="contract-group-title">${g.label}</div><div class="contract-chips">${g.items.map(item=>`<button type="button" class="contract-chip ${(window._formData.contracts||[]).includes(item.key)?'on':''}" onclick="toggleContract('${item.key}')">${item.label}</button>`).join('')}</div></div>`).join('');
+    })();
+  }
+  if (field==='status') {
+    document.getElementById('termination-area').innerHTML = (()=>{
+      const s = val;
+      if (s!=='해지'&&s!=='폐업') return '';
+      return `<div style="background:#fafafa;border-radius:10px;padding:14px;border:1.5px solid #e0e0e0;display:flex;flex-direction:column;gap:12px">
+        <div style="font-size:12px;font-weight:700;color:#e65100">해지 / 폐업 정보</div>
+        <div class="form-grid">
+          <div><label class="flabel">해지일자</label><input type="date" class="finput" oninput="window._formData.terminationDate=this.value"></div>
+          <div><label class="flabel">해지 사유</label><select class="fsel" onchange="window._formData.terminationReason=this.value">
+            <option value="">선택</option>
+            <option value="폐업">폐업</option><option value="타회계사무소이전">타 회계사무소 이전</option><option value="기타">기타</option>
+          </select></div>
+        </div>
+        ${s==='폐업'?'<div><label class="flabel">폐업연도</label><input type="number" class="finput" placeholder="예: 2024" oninput="window._formData.closureYear=this.value"></div>':''}
+      </div>`;
+    })();
+  }
+};
+
+window.toggleContract = function(key) {
+  const c = window._formData.contracts||[];
+  window._formData.contracts = c.includes(key)?c.filter(x=>x!==key):[...c,key];
+  document.querySelectorAll('.contract-chip').forEach(el=>{
+    el.classList.toggle('on', window._formData.contracts.includes(el.textContent.trim()===contractLabel(key)?key:
+      CONTRACT_GROUPS.flatMap(g=>g.items).find(i=>i.label===el.textContent.trim())?.key||''));
+  });
+  // redraw chips
+  const area = document.getElementById('contract-area');
+  if (area) {
+    const avail = availableContracts(window._formData.vatType, window._formData.taxType);
+    area.innerHTML = avail.map(g=>`<div class="contract-group"><div class="contract-group-title">${g.label}</div><div class="contract-chips">${g.items.map(item=>`<button type="button" class="contract-chip ${(window._formData.contracts||[]).includes(item.key)?'on':''}" onclick="toggleContract('${item.key}')">${item.label}</button>`).join('')}</div></div>`).join('');
+  }
+};
+
+window.saveForm = function(id) {
+  const d = window._formData;
+  if (!d.name?.trim()) return alert('거래처명은 필수입니다');
+  if (!d.rep?.trim()) return alert('대표자명은 필수입니다');
+  if (id === null) {
+    G.clients.push({...d, id: Date.now()});
+  } else {
+    const idx = G.clients.findIndex(c=>c.id===id);
+    if (idx>=0) G.clients[idx] = {...G.clients[idx],...d};
+  }
+  saveToLS();
+  closeModal();
+  if (G.currentTab==='clients') renderClients();
+  else if (G.currentTab==='dashboard') renderDashboard();
+  else if (G.currentTab==='closure') renderClosure();
+};
+
+// ══════════════════════════════════════════════════════
+// 신고 일정
+// ══════════════════════════════════════════════════════
+function renderSchedule() {
+  const active = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업');
+  const today = new Date();
+  const nowM = today.getMonth()+1;
+  const nowD = today.getDate();
+  const yr = today.getFullYear();
+
+  const vatAll  = active.filter(c=>c.vatType==='일반'||c.vatType==='간이').length;
+  const vatG    = active.filter(c=>c.vatType==='일반').length;
+  const vatS    = active.filter(c=>c.vatType==='간이').length;
+  const exempt  = active.filter(c=>c.vatType==='면세').length;
+  const income  = active.filter(c=>c.taxType==='개인').length;
+  const seongsi = active.filter(c=>(c.contracts||[]).includes('세무조정')||c.dealType==='고문').length;
+  const corp    = active.filter(c=>c.taxType==='법인').length;
+  const yearend = active.filter(c=>(c.contracts||[]).includes('연말정산')).length;
+  const withhold= active.filter(c=>(c.contracts||[]).includes('원천세')).length;
+
+  // deadline: [month, day]
+  function dday(m, d) {
+    const dl = new Date(yr, m-1, d);
+    const diff = Math.ceil((dl - today) / 86400000);
+    if (diff < 0) return null;
+    if (diff === 0) return {label:'오늘 마감', color:'#c62828'};
+    if (diff <= 7)  return {label:`D-${diff}`, color:'#e65100'};
+    if (diff <= 14) return {label:`D-${diff}`, color:'#f57c00'};
+    return {label:`D-${diff}`, color:'#888'};
+  }
+
+  const sched = {
+    1:[
+      {l:'부가세 확정신고 (2기)',    t:'부가세', n:vatAll, c:'blue',   d:'1월 25일',  dd:dday(1,25),  hint:'7월~12월분'},
+      yearend>0&&{l:'연말정산',      t:'공통',   n:yearend,c:'purple', d:'2월말',     dd:null,        hint:'근로소득'},
+      withhold>0&&{l:'원천세 (12월분)',t:'공통', n:withhold,c:'gray',  d:'1월 10일',  dd:dday(1,10),  hint:''},
+    ],
+    2:[
+      exempt>0&&{l:'사업장현황 신고', t:'면세', n:exempt, c:'gray', d:'2월 10일', dd:dday(2,10), hint:'면세사업자'},
+    ],
+    3:[
+      corp>0&&{l:'법인세 신고',        t:'법인세', n:corp,   c:'blue',  d:'3월 31일', dd:dday(3,31), hint:'12월 결산법인'},
+      withhold>0&&{l:'원천세 반기납부',t:'공통',  n:withhold,c:'gray',  d:'3월 10일', dd:dday(3,10), hint:'반기납부 선택'},
+    ],
+    4:[
+      vatG>0&&{l:'부가세 예정신고 (1기)', t:'부가세', n:vatG, c:'blue', d:'4월 25일', dd:dday(4,25), hint:'1월~3월분'},
+      withhold>0&&{l:'원천세 (3월분)',    t:'공통',   n:withhold, c:'gray', d:'4월 10일', dd:dday(4,10), hint:''},
+    ],
+    5:[
+      income>0&&{l:'종합소득세 신고',     t:'소득세', n:income,  c:'green',  d:'5월 31일', dd:dday(5,31), hint:'개인사업자'},
+      withhold>0&&{l:'원천세 (4월분)',    t:'공통',   n:withhold, c:'gray',  d:'5월 10일', dd:dday(5,10), hint:''},
+    ],
+    6:[
+      seongsi>0&&{l:'성실신고사업자 신고', t:'소득세', n:seongsi, c:'green', d:'6월 30일', dd:dday(6,30), hint:'성실신고확인'},
+      withhold>0&&{l:'원천세 (5월분)',     t:'공통',   n:withhold, c:'gray', d:'6월 10일', dd:dday(6,10), hint:''},
+    ],
+    7:[
+      vatAll>0&&{l:'부가세 확정신고 (1기)', t:'부가세', n:vatAll, c:'blue',   d:'7월 25일', dd:dday(7,25), hint:'1월~6월분'},
+      vatS>0&&{l:'간이과세자 납부',         t:'부가세', n:vatS,   c:'orange', d:'7월 25일', dd:dday(7,25), hint:'간이'},
+      withhold>0&&{l:'원천세 반기납부',     t:'공통',   n:withhold,c:'gray',  d:'7월 10일', dd:dday(7,10), hint:'반기납부'},
+    ],
+    8:[withhold>0&&{l:'원천세 (7월분)', t:'공통', n:withhold, c:'gray', d:'8월 10일', dd:dday(8,10), hint:''}],
+    9:[withhold>0&&{l:'원천세 (8월분)', t:'공통', n:withhold, c:'gray', d:'9월 10일', dd:dday(9,10), hint:''}],
+    10:[
+      vatG>0&&{l:'부가세 예정신고 (2기)', t:'부가세', n:vatG, c:'blue', d:'10월 25일', dd:dday(10,25), hint:'7월~9월분'},
+      withhold>0&&{l:'원천세 (9월분)',    t:'공통', n:withhold, c:'gray', d:'10월 10일', dd:dday(10,10), hint:''},
+    ],
+    11:[
+      vatS>0&&{l:'간이과세자 부가세 확정', t:'부가세', n:vatS, c:'orange', d:'11월 25일', dd:dday(11,25), hint:'간이'},
+      withhold>0&&{l:'원천세 (10월분)', t:'공통', n:withhold, c:'gray', d:'11월 10일', dd:dday(11,10), hint:''},
+    ],
+    12:[
+      corp>0&&{l:'법인세 중간예납',       t:'법인세', n:corp,    c:'blue', d:'12월 31일', dd:dday(12,31), hint:''},
+      withhold>0&&{l:'원천세 (11월분)',   t:'공통',   n:withhold,c:'gray', d:'12월 10일', dd:dday(12,10), hint:''},
+    ],
+  };
+
+  // 핵심 신고 항목 (상단 카드)
+  const KEY_ITEMS = [
+    {m:1,  d:25, l:'부가세 확정 2기', n:vatAll, c:'blue'},
+    {m:3,  d:31, l:'법인세',          n:corp,   c:'blue'},
+    {m:4,  d:25, l:'부가세 예정 1기', n:vatG,   c:'blue'},
+    {m:5,  d:31, l:'종합소득세',      n:income, c:'green'},
+    {m:6,  d:30, l:'성실신고',        n:seongsi,c:'green'},
+    {m:7,  d:25, l:'부가세 확정 1기', n:vatAll, c:'blue'},
+    {m:10, d:25, l:'부가세 예정 2기', n:vatG,   c:'blue'},
+  ].map(item => {
+    const dd = dday(item.m, item.d);
+    return {...item, dd};
+  }).filter(item => item.dd !== null).slice(0, 4);
+
+  const keyCards = KEY_ITEMS.map(item => `
+    <div class="stat-card" style="border-left:4px solid ${item.dd.color}">
+      <div class="stat-label" style="color:${item.dd.color};font-weight:700">${item.dd.label}</div>
+      <div style="font-weight:800;font-size:14px;margin:2px 0">${item.l}</div>
+      <div style="font-size:12px;color:#888">${item.m}월 ${item.d}일 · ${item.n}개</div>
+    </div>`).join('');
+
+  const months = Array.from({length:12},(_,i)=>i+1);
+  const cards = months.map(m=>{
+    const items = (sched[m]||[]).filter(Boolean);
+    const isCurrent = m===nowM;
+    return `<div style="background:#fff;border-radius:14px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.07);border:2px solid ${isCurrent?'#4f8ef7':'transparent'}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <span style="font-weight:800;font-size:16px;color:${isCurrent?'#4f8ef7':'#1a1a2e'}">${m}월</span>
+        ${isCurrent?badge('이번 달','blue'):''}
+      </div>
+      ${items.length>0?items.map((d,i)=>{
+        const isKey = ['부가세 확정신고','부가세 예정신고','법인세 신고','종합소득세 신고','성실신고사업자 신고'].some(k=>d.l.includes(k.split(' ')[0]));
+        return `<div style="display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-bottom:${i<items.length-1?'1px solid #f5f5f5':'none'};${isKey?'border-left:3px solid #4f8ef7;padding-left:8px;margin-left:-8px':''}">
+          ${badge(d.t,d.c)}
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:${isKey?700:500}">${d.l}</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px">
+              <span style="font-size:11px;color:#aaa">${d.hint?d.hint+' · ':''} ${d.n}개</span>
+              <span style="font-size:11px;font-weight:700;background:#f5f5f5;padding:1px 7px;border-radius:8px;color:#555">${d.d}</span>
+            </div>
+            ${d.dd?`<div style="font-size:11px;font-weight:700;color:${d.dd.color};margin-top:2px">${d.dd.label}</div>`:''}
+          </div>
+        </div>`;
+      }).join(''):
+        '<div style="font-size:13px;color:#ccc">신고 없음</div>'
+      }
+    </div>`;
+  }).join('');
+
+  document.getElementById('page-schedule').innerHTML = `
+  <h2 style="font-size:20px;font-weight:800;margin-bottom:${KEY_ITEMS.length?'12px':'16px'}">신고 일정</h2>
+  ${KEY_ITEMS.length?`<div class="stat-grid" style="margin-bottom:16px">${keyCards}</div>`:''}
+  <div style="font-size:12px;color:#888;margin-bottom:12px">★ 표시 항목은 주요 신고 · 마감일 기준 D-day 표시</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px">${cards}</div>`;
+}
+
+// ══════════════════════════════════════════════════════
+// 수수료
+// ══════════════════════════════════════════════════════
+function renderFees() {
+  const active = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업');
+  const total = active.reduce((s,c)=>s+c.fee,0);
+  const collected = active.filter(c=>c.feeStatus==='수금완료').reduce((s,c)=>s+c.fee,0);
+  const unpaid = G.clients.filter(c=>c.feeStatus==='미수금');
+  const pct = total>0?Math.round(collected/total*100):0;
+
+  const byManager = ['이슬빈','이현주','정여주','최수이'].map(m=>{
+    const mc = active.filter(c=>c.manager===m);
+    const t = mc.reduce((s,c)=>s+c.fee,0);
+    const col = mc.filter(c=>c.feeStatus==='수금완료').reduce((s,c)=>s+c.fee,0);
+    const p = t>0?Math.round(col/t*100):0;
+    return `<div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid #f0f0f0">
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+        <span style="font-weight:600">${m}</span>
+        <span style="font-size:13px;color:#555">${mc.length}개 · ${t.toLocaleString()}원</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${p}%"></div></div>
+      <div style="font-size:11px;color:#aaa;margin-top:3px">수금 ${p}% (${col.toLocaleString()}원)</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('page-fees').innerHTML = `
+  <h2 style="font-size:20px;font-weight:800;margin-bottom:16px">수수료 관리</h2>
+  <div class="stat-grid" style="margin-bottom:16px">
+    <div class="stat-card" style="border-top:4px solid #4f8ef7"><div class="stat-label">총 청구액</div><div class="stat-value" style="font-size:18px;color:#4f8ef7">${total.toLocaleString()}원</div></div>
+    <div class="stat-card" style="border-top:4px solid #2e7d32"><div class="stat-label">수금 완료</div><div class="stat-value" style="font-size:18px;color:#2e7d32">${collected.toLocaleString()}원</div></div>
+    <div class="stat-card" style="border-top:4px solid #e53935"><div class="stat-label">미수금</div><div class="stat-value" style="font-size:18px;color:#e53935">${(total-collected).toLocaleString()}원</div></div>
+  </div>
+  <div class="card"><div class="card-title">담당자별 현황</div>${byManager}</div>
+  <div class="card" style="border-top:3px solid #e53935">
+    <div class="card-title" style="color:#e53935">미수금 거래처</div>
+    ${unpaid.length>0?unpaid.map(c=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f5f5f5">
+      <div><div style="font-weight:600">${esc(c.name)}</div><div style="font-size:12px;color:#888">${esc(c.manager)}</div></div>
+      <div style="font-weight:700;color:#e53935">${c.fee.toLocaleString()}원</div>
+    </div>`).join(''):
+    '<div style="color:#aaa;font-size:14px">미수금 없음</div>'}
+  </div>`;
+}
+
+// ══════════════════════════════════════════════════════
+// 해지·폐업
+// ══════════════════════════════════════════════════════
+function renderClosure() {
+  const q = G.closureSearch.toLowerCase();
+  const all = G.clients.filter(c=>c.status==='해지'||c.status==='폐업');
+  const terminated = q ? all.filter(c=>c.name.toLowerCase().includes(q)||c.rep.toLowerCase().includes(q)||(c.manager||'').toLowerCase().includes(q)) : all;
+  const closurePending = terminated.filter(c=>c.status==='폐업'&&!c.closureTaxApproved);
+  const rLabel = r=>r==='폐업'?'폐업':r==='타회계사무소이전'?'타 사무소 이전':r||'-';
+
+  document.getElementById('page-closure').innerHTML = `
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+    <h2 style="font-size:20px;font-weight:800;margin:0">해지·폐업 관리</h2>
+    <div class="search-box" style="max-width:260px">
+      <span>🔍</span>
+      <input placeholder="거래처명·대표자·담당자 검색" value="${esc(G.closureSearch)}" oninput="G.closureSearch=this.value;renderClosure()">
+    </div>
+  </div>
+  <div class="stat-grid" style="margin-bottom:16px">
+    <div class="stat-card" style="border-left:4px solid #757575"><div class="stat-label">해지 거래처</div><div class="stat-value" style="color:#757575">${G.clients.filter(c=>c.status==='해지').length}<span style="font-size:12px">개</span></div></div>
+    <div class="stat-card" style="border-left:4px solid #c62828"><div class="stat-label">폐업 거래처</div><div class="stat-value" style="color:#c62828">${G.clients.filter(c=>c.status==='폐업').length}<span style="font-size:12px">개</span></div></div>
+    <div class="stat-card" style="border-left:4px solid #e65100"><div class="stat-label">폐업 신고 미완료</div><div class="stat-value" style="color:#e65100">${closurePending.length}<span style="font-size:12px">건</span></div></div>
+  </div>
+
+  ${closurePending.length>0?`<div class="card" style="border:2px solid #ffcc02;margin-bottom:16px">
+    <div class="card-title" style="color:#e65100">⚠ 폐업 신고 처리 필요 (${closurePending.length}건)</div>
+    ${closurePending.map(c=>`<div style="background:#fffde7;border-radius:10px;padding:12px 14px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:10px">
+        <div><div style="font-weight:700">${esc(c.name)}</div>
+        <div style="font-size:12px;color:#888">${esc(c.rep)} · ${esc(c.taxType)} · 폐업 <b>${esc(c.closureYear||'미입력')}년</b> · ${esc(c.manager)}</div></div>
+        ${badge('신고 미완료','orange')}
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${[['closureTaxFiled','신고서 접수'],['closureTaxApproved','신고 완료']].map(([f,l])=>`
+        <button onclick="toggleField(${c.id},'${f}');renderClosure()" style="padding:5px 14px;border-radius:20px;border:2px solid ${c[f]?'#43a047':'#e0e0e0'};background:${c[f]?'#e8f5e9':'#fff'};color:${c[f]?'#2e7d32':'#888'};font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">${c[f]?'✓ ':''} ${l}</button>`).join('')}
+      </div>
+    </div>`).join('')}
+  </div>`:''}
+
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>거래처명</th><th>유형</th><th>상태</th><th>수임일</th><th>해지일</th><th>사유</th><th>폐업연도</th><th>신고접수</th><th>신고완료</th><th>담당</th></tr></thead>
+    <tbody>
+    ${terminated.length>0?terminated.map(c=>`<tr onclick="openDetail(${c.id})">
+      <td><div class="td-name">${esc(c.name)}</div><div class="td-sub">${esc(c.rep)}</div></td>
+      <td>${badge(c.taxType,c.taxType==='법인'?'blue':'gray')}</td>
+      <td>${badge(c.status,c.status==='폐업'?'red':'gray')}</td>
+      <td style="font-size:12px;color:#666">${esc(c.contractDate||'-')}</td>
+      <td style="font-size:12px;color:#666">${esc(c.terminationDate||'-')}</td>
+      <td style="font-size:12px">${rLabel(c.terminationReason)}</td>
+      <td style="font-size:12px">${c.status==='폐업'?(c.closureYear?c.closureYear+'년':'-'):'-'}</td>
+      <td onclick="event.stopPropagation();c.status==='폐업'&&toggleField(${c.id},'closureTaxFiled')&&renderClosure()">${c.status==='폐업'?chk(c.closureTaxFiled):'<span style="color:#ccc;font-size:12px">해당없음</span>'}</td>
+      <td onclick="event.stopPropagation();c.status==='폐업'&&toggleField(${c.id},'closureTaxApproved')&&renderClosure()">${c.status==='폐업'?chk(c.closureTaxApproved):'<span style="color:#ccc;font-size:12px">해당없음</span>'}</td>
+      <td style="color:#555">${esc(c.manager)}</td>
+    </tr>`).join(''):
+    '<tr><td colspan="10" style="text-align:center;padding:40px;color:#aaa">해지·폐업 거래처가 없습니다</td></tr>'}
+    </tbody>
+  </table>
+  </div>`;
+}
+
+// ══════════════════════════════════════════════════════
+// 결재 현황
+// ══════════════════════════════════════════════════════
+function renderJulgae() {
+  const periods = G.periods;
+  const idx = Math.min(G.julgaePeriodIdx, Math.max(0, periods.length - 1));
+  const period = periods[idx];
+  const q = G.julgaeSearch.toLowerCase();
+  const mf = G.julgaeManager;
+  const pKey = period ? period.id : null;
+
+  // 전체 활성 업체에서 enrolled 필터 적용
+  let baseClients = G.clients.filter(c => c.status !== '해지' && c.status !== '폐업');
+  const hasEnroll = period && period.enrolled && period.enrolled.length > 0;
+  if (hasEnroll) {
+    baseClients = baseClients.filter(c => period.enrolled.includes(c.id));
+  } else if (period) {
+    if (period.targetType === '법인') baseClients = baseClients.filter(c => c.taxType === '법인');
+    else if (period.targetType === '개인') baseClients = baseClients.filter(c => c.taxType === '개인');
+  }
+
+  // 검색·담당자 필터 (표시용만)
+  let clients = baseClients;
+  if (mf !== '전체') clients = clients.filter(c => c.manager === mf);
+  if (q) clients = clients.filter(c => c.name.toLowerCase().includes(q) || c.rep.toLowerCase().includes(q));
+
+  const pData = (pKey && G.julgae[pKey]) ? G.julgae[pKey] : {};
+  const done = clients.filter(c => pData[c.id]).length;
+  const total = clients.length;
+  const pct = total ? Math.round(done / total * 100) : 0;
+  const managers = ['전체', ...new Set(G.clients.map(c => c.manager).filter(Boolean))];
+
+  document.getElementById('page-julgae').innerHTML = `
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+    <h2 style="font-size:20px;font-weight:800">결재 현황</h2>
+    <button class="btn-primary btn-sm" onclick="openAddPeriod()" style="padding:8px 14px">+ 신고기간 추가</button>
+  </div>
+
+  ${periods.length === 0 ? `<div class="card" style="text-align:center;padding:40px;color:#aaa">
+    신고기간이 없습니다. <b>+ 신고기간 추가</b> 버튼을 눌러 시작하세요.</div>` : `
+
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center">
+    ${periods.map((p, i) => {
+      const pEnroll = p.enrolled && p.enrolled.length > 0;
+      return `<div style="display:flex;align-items:center;gap:3px">
+        <button onclick="G.julgaePeriodIdx=${i};G.julgaeSearch='';renderJulgae()"
+          style="padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;border:2px solid ${i===idx?'#4f8ef7':'#e0e0e0'};background:${i===idx?'#e8f0fe':'#fff'};color:${i===idx?'#4f8ef7':'#555'}">
+          ${esc(p.label)}${pEnroll?` <span style="font-size:10px;background:#4f8ef7;color:#fff;border-radius:10px;padding:1px 6px;margin-left:4px">${p.enrolled.length}</span>`:''}
+        </button>
+        <button onclick="deletePeriod('${p.id}')" style="padding:4px 7px;border-radius:6px;font-size:11px;border:1px solid #e0e0e0;background:#fff;color:#e53935;cursor:pointer;font-family:inherit" title="삭제">✕</button>
+      </div>`;
+    }).join('')}
+  </div>
+
+  ${period ? `
+  <div class="stat-grid" style="margin-bottom:14px">
+    <div class="stat-card" style="border-left:4px solid #4f8ef7">
+      <div class="stat-label">대상 업체</div>
+      <div class="stat-value" style="color:#4f8ef7">${baseClients.length}</div>
+      <div class="stat-sub">${hasEnroll?'선택된 업체':'자동 분류'}</div>
+    </div>
+    <div class="stat-card" style="border-left:4px solid #2e7d32"><div class="stat-label">결재완료</div><div class="stat-value" style="color:#2e7d32">${done}</div></div>
+    <div class="stat-card" style="border-left:4px solid #e53935"><div class="stat-label">미결재</div><div class="stat-value" style="color:#e53935">${total - done}</div></div>
+    <div class="stat-card" style="border-left:4px solid #f57c00;display:flex;flex-direction:column;justify-content:center">
+      <div class="stat-label">진행률</div>
+      <div style="font-size:18px;font-weight:800;color:#f57c00">${pct}%</div>
+      <div class="progress-bar" style="margin-top:4px"><div class="progress-fill" style="width:${pct}%"></div></div>
+    </div>
+  </div>
+
+  <div class="filter-bar">
+    <div class="search-box">
+      <span>🔍</span>
+      <input placeholder="거래처명·대표자 검색" value="${esc(G.julgaeSearch)}" oninput="G.julgaeSearch=this.value;renderJulgae()">
+    </div>
+    <select onchange="G.julgaeManager=this.value;renderJulgae()">
+      ${managers.map(m => `<option${G.julgaeManager===m?' selected':''}>${m}</option>`).join('')}
+    </select>
+    <button class="btn-sm" style="background:#e3f2fd;color:#1565c0;border:1.5px solid #90caf9" onclick="openEnrollModal('${pKey}')">
+      ☑ 업체 선택${hasEnroll?` (${period.enrolled.length})`:' (전체)'}
+    </button>
+    <button class="btn-sm" style="background:#e8f5e9;color:#2e7d32;border:1.5px solid #a5d6a7" onclick="bulkJulgae('${pKey}',true)">전체 결재</button>
+    <button class="btn-sm" style="background:#fdecea;color:#c62828;border:1.5px solid #ef9a9a" onclick="bulkJulgae('${pKey}',false)">전체 해제</button>
+  </div>
+
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr>
+      <th style="width:40px">번호</th><th>거래처명</th><th>대표자</th>
+      <th>담당자</th><th>과세</th><th>거래유형</th>
+      <th style="width:80px;text-align:center">결재</th>
+    </tr></thead>
+    <tbody>
+    ${clients.map((c, i) => {
+      const on = !!pData[c.id];
+      return `<tr style="background:${on?'#f1f8e9':'#fff'}" onclick="toggleJulgae('${pKey}',${c.id})">
+        <td style="color:#aaa;font-size:12px">${i+1}</td>
+        <td><div class="td-name">${esc(c.name)}</div><div class="td-sub">${esc(c.bizType||'')}</div></td>
+        <td>${esc(c.rep)}</td>
+        <td style="color:#555">${esc(c.manager)}</td>
+        <td>${badge(c.taxType, c.taxType==='법인'?'blue':'gray')}</td>
+        <td>${dealBadge(c.dealType)}</td>
+        <td style="text-align:center">${chk(on, '')}</td>
+      </tr>`;
+    }).join('')}
+    ${clients.length===0?'<tr><td colspan="7" style="text-align:center;padding:40px;color:#aaa">검색 결과가 없습니다</td></tr>':''}
+    </tbody>
+  </table></div>` : ''}
+  `}`;
+}
+
+function toggleJulgae(pKey, clientId) {
+  if (!G.julgae[pKey]) G.julgae[pKey] = {};
+  G.julgae[pKey][clientId] = !G.julgae[pKey][clientId];
+  saveToLS();
+  renderJulgae();
+}
+
+function bulkJulgae(pKey, val) {
+  if (!G.julgae[pKey]) G.julgae[pKey] = {};
+  const mf = G.julgaeManager;
+  let clients = G.clients.filter(c => c.status !== '해지' && c.status !== '폐업');
+  if (mf !== '전체') clients = clients.filter(c => c.manager === mf);
+  clients.forEach(c => G.julgae[pKey][c.id] = val);
+  saveToLS();
+  renderJulgae();
+}
+
+function openEnrollModal(pKey) {
+  const idx = G.periods.findIndex(p => p.id === pKey);
+  if (idx < 0) return;
+  const period = G.periods[idx];
+
+  // 선택 가능한 기본 풀: targetType 기반
+  let pool = G.clients.filter(c => c.status !== '해지' && c.status !== '폐업');
+  if (period.targetType === '법인') pool = pool.filter(c => c.taxType === '법인');
+  else if (period.targetType === '개인') pool = pool.filter(c => c.taxType === '개인');
+
+  const enrolled = new Set(period.enrolled || []);
+  const managers = [...new Set(pool.map(c => c.manager).filter(Boolean))].sort();
+
+  // 담당자별 그룹
+  const groups = {};
+  pool.forEach(c => {
+    const m = c.manager || '미지정';
+    if (!groups[m]) groups[m] = [];
+    groups[m].push(c);
+  });
+
+  const rows = managers.map(m => {
+    const list = (groups[m] || []).map(c => `
+      <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;transition:background .1s"
+        onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background=''">
+        <input type="checkbox" class="enroll-chk" data-id="${c.id}" ${enrolled.has(c.id)?'checked':''} style="width:15px;height:15px;cursor:pointer">
+        <span style="font-size:13px;font-weight:600">${esc(c.name)}</span>
+        <span style="font-size:11px;color:#aaa">${esc(c.rep)}</span>
+        <span style="margin-left:auto;font-size:11px;color:#888">${esc(c.taxType)}</span>
+      </label>`).join('');
+    return `<div style="margin-bottom:12px">
+      <div style="font-size:12px;font-weight:700;color:#4f8ef7;padding:4px 8px;background:#e8f0fe;border-radius:6px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center">
+        <span>${esc(m)} (${(groups[m]||[]).length})</span>
+        <span style="display:flex;gap:6px">
+          <button type="button" onclick="enrollGroup(this,'${m}',true)" style="font-size:10px;padding:2px 7px;border-radius:4px;border:1px solid #90caf9;background:#fff;color:#1565c0;cursor:pointer">전체선택</button>
+          <button type="button" onclick="enrollGroup(this,'${m}',false)" style="font-size:10px;padding:2px 7px;border-radius:4px;border:1px solid #ccc;background:#fff;color:#666;cursor:pointer">해제</button>
+        </span>
+      </div>
+      ${list}
+    </div>`;
+  }).join('');
+
+  showModal(`
+  <div style="background:#fff;border-radius:18px;padding:28px 24px;width:520px;max-width:95vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div>
+        <div style="font-size:18px;font-weight:800">업체 선택</div>
+        <div style="font-size:12px;color:#aaa;margin-top:2px">${esc(period.label)} — 대상 ${pool.length}개 업체</div>
+      </div>
+      <button onclick="closeModal()" style="font-size:22px;border:none;background:none;cursor:pointer;color:#aaa">✕</button>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
+      <div class="search-box" style="flex:1">
+        <span>🔍</span>
+        <input id="enroll_search" placeholder="거래처명 검색" oninput="filterEnrollList(this.value)" style="font-size:13px">
+      </div>
+      <button type="button" onclick="enrollAll(true)" style="padding:6px 12px;border-radius:8px;border:1.5px solid #90caf9;background:#e3f2fd;color:#1565c0;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">전체 선택</button>
+      <button type="button" onclick="enrollAll(false)" style="padding:6px 12px;border-radius:8px;border:1.5px solid #ccc;background:#f5f5f5;color:#666;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">전체 해제</button>
+    </div>
+
+    <div id="enroll_list" style="overflow-y:auto;flex:1;padding-right:4px">
+      ${rows}
+    </div>
+
+    <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end;border-top:1px solid #f0f0f0;padding-top:16px">
+      <span id="enroll_count" style="font-size:13px;color:#666;align-self:center">
+        ${enrolled.size > 0 ? enrolled.size + '개 선택됨' : '(전체 포함)'}
+      </span>
+      <button onclick="closeModal()" style="padding:9px 20px;border-radius:10px;border:1.5px solid #e0e0e0;background:#f5f5f5;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">취소</button>
+      <button onclick="saveEnrollment('${pKey}')" class="btn-primary" style="padding:9px 20px">저장</button>
+    </div>
+  </div>`);
+
+  // 체크 변경 시 카운트 업데이트
+  document.getElementById('enroll_list').addEventListener('change', updateEnrollCount);
+}
+
+function filterEnrollList(q) {
+  q = q.toLowerCase();
+  document.querySelectorAll('#enroll_list label').forEach(el => {
+    const txt = el.textContent.toLowerCase();
+    el.style.display = (!q || txt.includes(q)) ? '' : 'none';
+  });
+}
+
+function enrollAll(val) {
+  document.querySelectorAll('#enroll_list .enroll-chk').forEach(chk => {
+    const label = chk.closest('label');
+    if (!label || label.style.display === 'none') return;
+    chk.checked = val;
+  });
+  updateEnrollCount();
+}
+
+function enrollGroup(btn, manager, val) {
+  const group = btn.closest('div[style*="margin-bottom:12px"]');
+  if (!group) return;
+  group.querySelectorAll('.enroll-chk').forEach(chk => chk.checked = val);
+  updateEnrollCount();
+}
+
+function updateEnrollCount() {
+  const checked = document.querySelectorAll('#enroll_list .enroll-chk:checked').length;
+  const total = document.querySelectorAll('#enroll_list .enroll-chk').length;
+  const el = document.getElementById('enroll_count');
+  if (el) el.textContent = checked === total ? '(전체 포함)' : checked + '개 선택됨';
+}
+
+function saveEnrollment(pKey) {
+  const idx = G.periods.findIndex(p => p.id === pKey);
+  if (idx < 0) return;
+  const all = document.querySelectorAll('#enroll_list .enroll-chk');
+  const total = all.length;
+  const checked = [...all].filter(c => c.checked).map(c => Number(c.dataset.id));
+  // 전체 선택 시 enrolled를 비워서 "자동 분류" 상태로 복귀
+  G.periods[idx].enrolled = checked.length === total ? [] : checked;
+  saveToLS();
+  closeModal();
+  renderJulgae();
+}
+
+function openAddPeriod() {
+  const yr = new Date().getFullYear();
+  const tplButtons = PERIOD_TEMPLATES.map(t=>`
+    <button type="button" onclick="applyPeriodTemplate('${t.tpl}')"
+      style="text-align:left;padding:10px 14px;border-radius:10px;border:1.5px solid #e0e0e0;background:#fff;cursor:pointer;font-family:inherit;width:100%;transition:border-color .15s"
+      onmouseover="this.style.borderColor='#4f8ef7'" onmouseout="this.style.borderColor='#e0e0e0'">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <span style="font-weight:700;font-size:13px">${t.label}</span>
+          <span style="font-size:11px;color:#aaa;margin-left:6px">${t.hint}</span>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span style="font-size:11px;background:#f5f5f5;padding:2px 8px;border-radius:8px;color:#555">${t.deadline}까지</span>
+          <span style="font-size:11px;color:#888">${t.targetType==='전체'?'전체':t.targetType+'만'}</span>
+        </div>
+      </div>
+    </button>`).join('');
+
+  showModal(`<div style="max-width:460px">
+  <div class="modal-header"><h3>신고기간 추가</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+  <div class="modal-body">
+    <div style="font-size:12px;font-weight:700;color:#4f8ef7;margin-bottom:8px">⚡ 빠른 추가 (${yr}년 기준)</div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px">${tplButtons}</div>
+
+    <div style="border-top:1.5px solid #f0f0f0;padding-top:14px">
+      <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:10px">직접 입력</div>
+      <div><label class="flabel">기간 이름 *</label><input class="finput" id="p-label" placeholder="예: 26년 부가세 예정신고 1기"></div>
+      <div class="form-grid" style="margin-top:10px">
+        <div><label class="flabel">신고 유형</label>
+          <select class="fsel" id="p-type">
+            <option>부가세</option><option>소득세</option><option>법인세</option><option>원천세</option><option>연말정산</option><option>기타</option>
+          </select>
+        </div>
+        <div><label class="flabel">대상 업체</label>
+          <select class="fsel" id="p-target">
+            <option value="전체">전체</option><option value="법인">법인만</option><option value="개인">개인만</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="btn-row" style="margin-top:14px">
+      <button class="btn-secondary" onclick="closeModal()">취소</button>
+      <button class="btn-primary" onclick="savePeriod()">추가</button>
+    </div>
+  </div></div>`);
+}
+
+function applyPeriodTemplate(tplKey) {
+  const t = PERIOD_TEMPLATES.find(x=>x.tpl===tplKey);
+  if (!t) return;
+  const yr = new Date().getFullYear();
+  const label = String(yr).slice(2) + '년 ' + t.label;
+  const id = tplKey + '_' + yr + '_' + Date.now();
+  G.periods.push({ id, label, type: t.type, targetType: t.targetType });
+  G.julgaePeriodIdx = G.periods.length - 1;
+  saveToLS();
+  closeModal();
+  renderJulgae();
+}
+
+function savePeriod() {
+  const label = document.getElementById('p-label').value.trim();
+  if (!label) return alert('기간 이름을 입력해주세요');
+  const type = document.getElementById('p-type').value;
+  const target = document.getElementById('p-target').value;
+  const id = 'p_' + Date.now();
+  G.periods.push({ id, label, type, targetType: target });
+  G.julgaePeriodIdx = G.periods.length - 1;
+  saveToLS();
+  closeModal();
+  renderJulgae();
+}
+
+function deletePeriod(id) {
+  if (!confirm('이 신고기간과 결재 데이터를 삭제하시겠습니까?')) return;
+  G.periods = G.periods.filter(p => p.id !== id);
+  delete G.julgae[id];
+  G.julgaePeriodIdx = Math.max(0, Math.min(G.julgaePeriodIdx, G.periods.length - 1));
+  saveToLS();
+  renderJulgae();
+}
+
+// ══════════════════════════════════════════════════════
+// AI 도구
+// ══════════════════════════════════════════════════════
+function renderAITools() {
+  document.getElementById('page-aitools').innerHTML = `
+  <div style="margin-bottom:20px"><h2 style="font-size:20px;font-weight:800;margin:0">AI 도구</h2>
+  <p style="color:#888;font-size:13px;margin-top:4px">Claude AI가 업무 문서를 자동으로 생성합니다</p></div>
+  <div class="tools-grid">
+    <button class="tool-card" onclick="openAINotice()">
+      <div class="tool-icon" style="background:#e8f0fe;color:#4f8ef7">✉</div>
+      <div style="font-weight:800;font-size:16px;margin-bottom:6px">신고 안내문 생성</div>
+      <div style="font-size:13px;color:#777;line-height:1.6">거래처별 맞춤 신고 안내문을 AI가 자동 작성합니다</div>
+      <div style="margin-top:14px;color:#4f8ef7;font-weight:700;font-size:13px">시작하기 →</div>
+    </button>
+    <button class="tool-card" onclick="openAIInvoice()">
+      <div class="tool-icon" style="background:#e8f5e9;color:#2e7d32">🖨</div>
+      <div style="font-weight:800;font-size:16px;margin-bottom:6px">청구서 PDF 생성</div>
+      <div style="font-size:13px;color:#777;line-height:1.6">수수료 청구서를 인쇄·PDF로 저장합니다</div>
+      <div style="margin-top:14px;color:#2e7d32;font-weight:700;font-size:13px">시작하기 →</div>
+    </button>
+    <button class="tool-card" onclick="openAIReminder()">
+      <div class="tool-icon" style="background:#fff3e0;color:#e65100">📱</div>
+      <div style="font-weight:800;font-size:16px;margin-bottom:6px">자료 미제출 알림 문자</div>
+      <div style="font-size:13px;color:#777;line-height:1.6">미제출 거래처에 보낼 문자를 AI가 작성합니다</div>
+      <div style="margin-top:14px;color:#e65100;font-weight:700;font-size:13px">시작하기 →</div>
+    </button>
+  </div>`;
+}
+
+// ══════════════════════════════════════════════════════
+// AI - 신고 안내문
+// ══════════════════════════════════════════════════════
+function openAINotice() {
+  const active = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업');
+  let selected = [];
+  const reportTypes = ['부가가치세','종합소득세','법인세','원천세','연말정산'];
+
+  showModal(`<div style="max-width:560px">
+  <div class="modal-header"><h3>✉ 신고 안내문 생성</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+  <div class="modal-body">
+    <div class="form-grid">
+      <div><label class="flabel">신고 유형</label><select class="fsel" id="notice-type">${reportTypes.map(r=>`<option>${r}</option>`).join('')}</select></div>
+      <div><label class="flabel">문체</label><select class="fsel" id="notice-tone"><option>정중</option><option>친근</option><option>간결</option></select></div>
+      <div class="form-grid full"><label class="flabel">마감일 (선택)</label><input type="date" class="finput" id="notice-deadline"></div>
+    </div>
+    <div><label class="flabel">거래처 선택</label>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:6px">
+        <button class="btn-sm" style="background:#e3f2fd;color:#1565c0" onclick="document.querySelectorAll('.nc-chip').forEach(el=>el.classList.add('on'))">전체 선택</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;max-height:150px;overflow-y:auto;padding:2px">
+        ${active.slice(0,80).map(c=>`<button class="contract-chip nc-chip" data-id="${c.id}" onclick="this.classList.toggle('on')">${esc(c.name)}</button>`).join('')}
+      </div>
+    </div>
+    <button class="btn-primary" style="width:100%" onclick="runAINotice()">✦ AI 안내문 생성</button>
+    <div id="notice-results"></div>
+  </div></div>`);
+}
+
+async function runAINotice() {
+  const chips = document.querySelectorAll('.nc-chip.on');
+  if (!chips.length) return alert('거래처를 선택해 주세요');
+  const type = document.getElementById('notice-type').value;
+  const tone = document.getElementById('notice-tone').value;
+  const deadline = document.getElementById('notice-deadline').value;
+  const results = document.getElementById('notice-results');
+  results.innerHTML = '<div style="text-align:center;padding:20px;color:#888">AI 생성 중...</div>';
+
+  for (const chip of chips) {
+    const c = G.clients.find(x=>x.id===Number(chip.dataset.id));
+    if (!c) continue;
+    const prompt = `세무사 사무소 직원으로서 아래 거래처에 보낼 ${type} 신고 안내문을 작성해주세요.
+거래처명: ${c.name}, 대표자: ${c.rep}님, 과세유형: ${c.taxType}/${c.vatType}, 수임항목: ${(c.contracts||[]).map(contractLabel).join(', ')}${deadline?', 마감일: '+deadline:''}
+조건: ${tone}한 어투, 4~6문장, 자료 제출 요청 포함, 사무소 서명 없이 본문만, 마크다운 없이`;
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:600,messages:[{role:'user',content:prompt}]})});
+      const data = await res.json();
+      const text = data.content?.map(b=>b.text||'').join('')||'생성 실패';
+      results.innerHTML += `<div style="margin-top:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="font-weight:700">${esc(c.name)} <span style="font-weight:400;color:#888;font-size:13px">(${esc(c.rep)}님)</span></div>
+          <button class="btn-sm" style="background:#f5f5f5" onclick="navigator.clipboard.writeText(this.previousSibling.nextSibling?.textContent||'');this.textContent='✓ 복사됨'">복사</button>
+        </div>
+        <div class="ai-result" id="r-${c.id}">${esc(text)}</div>
+      </div>`;
+    } catch(e) {
+      results.innerHTML += `<div style="color:red;margin-top:8px">${esc(c.name)}: 생성 실패 (API 오류)</div>`;
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// AI - 청구서
+// ══════════════════════════════════════════════════════
+function openAIInvoice() {
+  const active = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&c.fee>0);
+  showModal(`<div style="max-width:520px">
+  <div class="modal-header"><h3>🖨 청구서 PDF 생성</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+  <div class="modal-body">
+    <div><label class="flabel">청구 거래처</label>
+      <select class="fsel" id="inv-client" onchange="updateInvoicePreview()">
+        ${active.map(c=>`<option value="${c.id}">${esc(c.name)} (${esc(c.rep)}) — ${c.fee.toLocaleString()}원</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-grid">
+      <div><label class="flabel">발행일</label><input type="date" class="finput" id="inv-date" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div><label class="flabel">납부기한 (선택)</label><input type="date" class="finput" id="inv-due"></div>
+      <div><label class="flabel">사무소명</label><input class="finput" id="inv-office" value="${esc(G.settings.name)}"></div>
+      <div><label class="flabel">비고 (선택)</label><input class="finput" id="inv-note" placeholder="예: VAT 별도"></div>
+    </div>
+    <div id="inv-preview" style="background:#f8f9ff;border:2px dashed #b0bec5;border-radius:12px;padding:18px;font-size:13px"></div>
+    <button class="btn-green" style="width:100%" onclick="printInvoice()">🖨 인쇄 / PDF 저장</button>
+    <div style="font-size:12px;color:#aaa;text-align:center">인쇄 팝업에서 "PDF로 저장"을 선택하면 파일로 저장됩니다</div>
+  </div></div>`);
+  setTimeout(updateInvoicePreview, 50);
+}
+
+function updateInvoicePreview() {
+  const sel = document.getElementById('inv-client');
+  if (!sel) return;
+  const c = G.clients.find(x=>x.id===Number(sel.value));
+  if (!c) return;
+  const date = document.getElementById('inv-date')?.value||'';
+  document.getElementById('inv-preview').innerHTML = `
+    <div style="text-align:center;margin-bottom:12px"><div style="font-size:20px;font-weight:800;letter-spacing:6px">청 구 서</div>
+    <div style="font-size:12px;color:#888">${esc(G.settings.name)}</div></div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:10px">
+      <div><b>수신:</b> ${esc(c.name)} (${esc(c.rep)})</div><div><b>발행일:</b> ${date}</div>
+    </div>
+    <div style="background:#fff;border-radius:6px;padding:10px">
+      ${(c.contracts||[]).map(k=>`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #eee"><span>${contractLabel(k)} 수수료</span><span>—</span></div>`).join('')}
+      <div style="display:flex;justify-content:space-between;padding:6px 0 0;font-weight:800;border-top:2px solid #1a1a2e;margin-top:4px"><span>합계</span><span>${c.fee.toLocaleString()}원</span></div>
+    </div>`;
+}
+
+function printInvoice() {
+  const sel = document.getElementById('inv-client');
+  if (!sel) return;
+  const c = G.clients.find(x=>x.id===Number(sel.value));
+  if (!c) return;
+  const date = document.getElementById('inv-date')?.value||'';
+  const due = document.getElementById('inv-due')?.value||'';
+  const note = document.getElementById('inv-note')?.value||'';
+  const officeName = document.getElementById('inv-office')?.value||G.settings.name;
+  const s = G.settings;
+
+  const w = window.open('','_blank');
+  w.document.write(`<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>청구서_${c.name}</title>
+  <style>@page{size:A4;margin:20mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Malgun Gothic',sans-serif;color:#111;font-size:13px}
+  .h1{text-align:center;font-size:26px;letter-spacing:10px;color:#1a1a2e;margin-bottom:6px}.sub{text-align:center;font-size:13px;color:#555;margin-bottom:20px}
+  .meta{display:flex;justify-content:space-between;margin-bottom:20px}.mb{border:1px solid #ddd;border-radius:6px;padding:12px;width:48%}
+  .ml{font-size:11px;color:#888;margin-bottom:2px}.mv{font-size:14px;font-weight:700}
+  table{width:100%;border-collapse:collapse;margin-bottom:14px}th{background:#1a1a2e;color:#fff;padding:10px 12px;font-size:12px;text-align:left}
+  td{padding:10px 12px;border-bottom:1px solid #eee}.tr{font-weight:700;font-size:15px;background:#f8f9ff;border-top:2px solid #1a1a2e}
+  .amt{font-size:20px;font-weight:800;text-align:right;border:2px solid #1a1a2e;border-radius:8px;padding:12px 16px;margin-bottom:20px}
+  .bank{border:1px solid #ddd;border-radius:6px;padding:12px;margin-bottom:20px;font-size:13px}
+  .ft{text-align:center;font-size:11px;color:#aaa;border-top:1px solid #eee;padding-top:10px}
+  </style></head><body>
+  <div class="h1">청 구 서</div><div class="sub">${esc(officeName)}</div>
+  <div class="meta">
+    <div class="mb"><div class="ml">수신</div><div class="mv">${esc(c.name)} 귀중</div><div style="font-size:12px;color:#666">대표: ${esc(c.rep)}</div></div>
+    <div class="mb"><div class="ml">발행일</div><div class="mv">${date}</div>${due?`<div class="ml" style="margin-top:8px">납부기한</div><div class="mv">${due}</div>`:''}</div>
+  </div>
+  <table><thead><tr><th>항목</th><th>내용</th><th style="text-align:right">금액</th></tr></thead>
+  <tbody>
+  ${(c.contracts||[]).map(k=>`<tr><td>${contractLabel(k)} 수수료</td><td>${new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long'})} 기준</td><td style="text-align:right">—</td></tr>`).join('')}
+  <tr class="tr"><td colspan="2">합 계</td><td style="text-align:right">${c.fee.toLocaleString()} 원</td></tr>
+  </tbody></table>
+  <div class="amt">청구금액: ￦ ${c.fee.toLocaleString()}</div>
+  ${note?`<div style="background:#f9f9f9;border-radius:6px;padding:10px;margin-bottom:14px;font-size:12px;color:#666">※ ${esc(note)}</div>`:''}
+  <div class="bank"><div style="font-weight:700;font-size:11px;margin-bottom:6px;color:#555">입금 계좌 안내</div>
+  ${esc(s.bank)} ${esc(s.account)} (예금주: ${esc(s.accountHolder)})</div>
+  <div class="ft">${esc(officeName)} · Tel: ${esc(s.phone)} · ${esc(s.email)}</div>
+  </body></html>`);
+  w.document.close(); w.focus(); setTimeout(()=>w.print(),400);
+}
+
+// ══════════════════════════════════════════════════════
+// AI - 알림 문자
+// ══════════════════════════════════════════════════════
+function openAIReminder() {
+  const noData = G.clients.filter(c=>!c.dataReceived&&c.status!=='해지'&&c.status!=='폐업');
+  showModal(`<div style="max-width:540px">
+  <div class="modal-header"><h3>📱 자료 미제출 알림 문자</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+  <div class="modal-body">
+    ${noData.length===0?`<div style="background:#e8f5e9;border-radius:10px;padding:20px;text-align:center;color:#2e7d32;font-weight:600">✓ 자료 미제출 거래처가 없습니다</div>`:`
+    <div style="background:#fff3e0;border-radius:10px;padding:10px 14px;font-size:13px;color:#e65100;font-weight:600;margin-bottom:4px">⚠ 자료 미제출 ${noData.length}개</div>
+    <div class="form-grid">
+      <div><label class="flabel">신고 유형</label><select class="fsel" id="sms-type"><option>부가가치세</option><option>종합소득세</option><option>법인세</option><option>원천세</option></select></div>
+      <div><label class="flabel">문체</label><select class="fsel" id="sms-tone"><option>정중</option><option>친근</option><option>간결</option></select></div>
+      <div class="form-grid full"><label class="flabel">마감일 (선택)</label><input type="date" class="finput" id="sms-deadline"></div>
+    </div>
+    <div><label class="flabel">대상 거래처</label>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;max-height:120px;overflow-y:auto;margin-top:6px">
+        ${noData.map(c=>`<button class="contract-chip sc-chip on" data-id="${c.id}" onclick="this.classList.toggle('on')">${esc(c.name)}</button>`).join('')}
+      </div>
+    </div>
+    <button class="btn-primary" style="width:100%;background:linear-gradient(135deg,#e65100,#f57c00)" onclick="runAIReminder()">✦ 알림 문자 생성</button>
+    <div id="sms-results"></div>`}
+  </div></div>`);
+}
+
+async function runAIReminder() {
+  const chips = document.querySelectorAll('.sc-chip.on');
+  if (!chips.length) return alert('거래처를 선택해 주세요');
+  const type = document.getElementById('sms-type').value;
+  const tone = document.getElementById('sms-tone').value;
+  const deadline = document.getElementById('sms-deadline').value;
+  const results = document.getElementById('sms-results');
+  results.innerHTML = '<div style="text-align:center;padding:20px;color:#888">AI 생성 중...</div>';
+
+  for (const chip of chips) {
+    const c = G.clients.find(x=>x.id===Number(chip.dataset.id));
+    if (!c) continue;
+    const prompt = `세무사 사무소 직원으로서 아래 거래처에 보낼 자료 제출 요청 문자를 작성해주세요.
+거래처: ${c.name} (${c.rep}님), 신고 유형: ${type}${deadline?', 마감일: '+deadline:''}
+조건: ${tone}한 어투, SMS 80자 이내, 마감일 강조, 연락처 자리는 [연락처]로, 본문만, 마크다운 없이`;
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:200,messages:[{role:'user',content:prompt}]})});
+      const data = await res.json();
+      const text = (data.content?.map(b=>b.text||'').join('')||'생성 실패').trim();
+      const len = text.length;
+      results.innerHTML += `<div style="margin-top:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="font-weight:700">${esc(c.name)} <span style="font-size:12px;color:#888">${esc(c.phone)}</span></div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:11px;font-weight:700;color:${len>80?'#e53935':'#43a047'}">${len}자</span>
+            <button class="btn-sm" style="background:#f5f5f5" onclick="navigator.clipboard.writeText(document.getElementById('sms-${c.id}').textContent);this.textContent='✓ 복사됨'">복사</button>
+          </div>
+        </div>
+        <div class="sms-bubble" id="sms-${c.id}">${esc(text)}</div>
+      </div>`;
+    } catch(e) {
+      results.innerHTML += `<div style="color:red;margin-top:8px">${esc(c.name)}: 생성 실패</div>`;
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// 엑셀 내보내기
+// ══════════════════════════════════════════════════════
+function openExcel() {
+  showModal(`<div style="max-width:520px">
+  <div class="modal-header"><h3>데이터 관리</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+  <div class="modal-body">
+
+    <div style="background:#e8f5e9;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#2e7d32;display:flex;align-items:center;gap:8px">
+      <span style="font-size:16px">📱</span>
+      <span><b>다기기 동기화</b> — PC에서 백업 파일을 내려받아 모바일에서 불러오면 데이터가 동기화됩니다.</span>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+      <div class="card" style="background:#f0f7ff;border:1.5px solid #bbdefb;padding:14px">
+        <div class="card-title" style="margin-bottom:8px">💾 전체 백업</div>
+        <p style="font-size:12px;color:#555;margin-bottom:10px">거래처·결재현황 <b>전체 데이터</b>를 백업 파일로 내려받습니다.</p>
+        <button class="btn-primary" style="width:100%;font-size:13px" onclick="exportBackup()">백업 파일 내려받기</button>
+      </div>
+      <div class="card" style="background:#f3e5f5;border:1.5px solid #ce93d8;padding:14px">
+        <div class="card-title" style="margin-bottom:8px">📂 백업 복원</div>
+        <p style="font-size:12px;color:#555;margin-bottom:10px">백업 파일을 불러와 이 기기에 데이터를 복원합니다.</p>
+        <button class="btn-secondary" style="width:100%;font-size:13px;background:#f3e5f5;color:#6a1b9a;border-color:#ce93d8" onclick="document.getElementById('backup-input').click()">파일 선택</button>
+        <input type="file" id="backup-input" accept=".json" style="display:none" onchange="importBackup(this)">
+        <div id="backup-status" style="margin-top:6px;font-size:12px;color:#555"></div>
+      </div>
+    </div>
+
+    <hr style="border:none;border-top:1px solid #f0f0f0;margin-bottom:14px">
+
+    <div class="card" style="background:#f0f7ff;border:1.5px solid #bbdefb">
+      <div class="card-title">↓ 엑셀 내보내기</div>
+      <p style="font-size:13px;color:#555;margin-bottom:12px">현재 거래처 <b>${G.clients.length}개</b>를 엑셀로 내려받습니다</p>
+      <button class="btn-primary" onclick="exportExcel()">📥 엑셀 내보내기</button>
+    </div>
+    <div class="card" style="background:#fff8e1;border:1.5px solid #ffe082">
+      <div class="card-title">↑ 엑셀 가져오기</div>
+      <div style="background:#e8f5e9;border-radius:8px;padding:9px 12px;margin-bottom:10px;font-size:12px;display:flex;align-items:center;justify-content:space-between">
+        <span>📋 처음이라면 양식 파일을 먼저 내려받으세요</span>
+        <button class="btn-sm" style="background:#2e7d32;color:#fff;border:none" onclick="downloadTemplate()">양식 다운로드</button>
+      </div>
+      <p style="font-size:13px;color:#555;margin-bottom:10px">양식에 데이터를 입력 후 아래에서 파일을 선택하세요</p>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        ${['append:기존 유지+추가','replace:전체 교체'].map(x=>{const[v,l]=x.split(':');return`<label style="display:flex;align-items:center;gap:6px;padding:7px 12px;border-radius:8px;border:2px solid #e0e0e0;cursor:pointer;font-size:13px;font-weight:600"><input type="radio" name="importMode" value="${v}" ${v==='append'?'checked':''}>${l}</label>`}).join('')}
+      </div>
+      <button class="btn-secondary" style="background:#fff3e0;color:#e65100;border-color:#ffcc02" onclick="document.getElementById('xlsx-input').click()">📂 파일 선택</button>
+      <input type="file" id="xlsx-input" accept=".xlsx" style="display:none" onchange="importExcel(this)">
+      <div id="import-status" style="margin-top:8px;font-size:13px;color:#555"></div>
+    </div>
+  </div></div>`);
+}
+
+function downloadTemplate() {
+  const headers = ['거래처명','대표자','연락처','이메일','과세유형','부가세유형','업종','관할세무서','담당자','거래유형','월수수료','수금상태','수임계약항목','거래처상태','수임일자','해지일자','해지사유','폐업연도','신고접수','신고완료','자료수령','기장완료','결재완료','메모'];
+  const hints  = ['필수','필수','','','법인/개인','일반/간이/면세','','','','기장/신고대리/고문','숫자','수금완료/청구완료/미수금','쉼표 구분','정상/해지/폐업','YYYY-MM-DD','YYYY-MM-DD','폐업/타회계사무소이전/기타','연도(숫자)','Y/N','Y/N','Y/N','Y/N','Y/N',''];
+  const sample  = ['(주)예시법인','홍길동','051-123-4567','','법인','일반','제조업','부산진','이슬빈','기장','200000','청구완료','기장 (일반)','정상','2024-01-01','','','','N','N','N','N','N',''];
+  const sample2 = ['예시개인사업자','김세무','010-1234-5678','','개인','간이','음식업','수영','이현주','기장','100000','수금완료','기장 (간이)','정상','2023-06-01','','','','N','N','Y','Y','Y','메모 예시'];
+  const ws = XLSX.utils.aoa_to_sheet([headers, hints, sample, sample2]);
+  // 헤더 행 스타일 (배경색은 xlsx 무료버전에서 미지원, 열 너비만)
+  ws['!cols'] = [16,10,14,18,8,10,12,12,10,10,10,10,22,8,12,12,16,10,8,8,8,8,8,20].map(w=>({wch:w}));
+  ws['!rows'] = [{hpt:20},{hpt:16},{hpt:16},{hpt:16}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '거래처목록');
+  // 작성 안내 시트
+  const guide = [
+    ['항목','값 예시','설명'],
+    ['과세유형','법인 또는 개인','법인사업자는 법인, 개인사업자는 개인'],
+    ['부가세유형','일반 / 간이 / 면세','해당 과세 유형 입력'],
+    ['거래유형','기장 / 신고대리 / 고문','수임 거래 유형'],
+    ['수금상태','수금완료 / 청구완료 / 미수금','현재 수금 상태'],
+    ['거래처상태','정상 / 해지 / 폐업','해지·폐업 시 해당 값 입력'],
+    ['수임계약항목','기장 (일반), 법인세 신고','여러 항목은 쉼표(,)로 구분'],
+    ['날짜','2024-01-15','YYYY-MM-DD 형식'],
+    ['Y/N 항목','Y 또는 N','완료는 Y, 미완료는 N'],
+  ];
+  const ws2 = XLSX.utils.aoa_to_sheet(guide);
+  ws2['!cols'] = [{wch:16},{wch:24},{wch:36}];
+  XLSX.utils.book_append_sheet(wb, ws2, '작성안내');
+  XLSX.writeFile(wb, '거래처가져오기_양식.xlsx');
+}
+
+function exportBackup() {
+  const data = {
+    version: 2,
+    exportedAt: new Date().toISOString(),
+    clients: G.clients,
+    periods: G.periods,
+    julgae: G.julgae,
+    settings: G.settings
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `taxmanager_백업_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function importBackup(input) {
+  const file = input.files[0]; if (!file) return;
+  const st = document.getElementById('backup-status');
+  st.textContent = '읽는 중...';
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!data.clients || !Array.isArray(data.clients)) throw new Error('올바른 백업 파일이 아닙니다.');
+      if (!confirm(`백업 파일에 거래처 ${data.clients.length}개, 신고기간 ${(data.periods||[]).length}개가 있습니다.\n현재 데이터를 모두 교체할까요?`)) {
+        st.textContent = '취소되었습니다.';
+        input.value = '';
+        return;
+      }
+      G.clients  = data.clients;
+      G.periods  = data.periods  || G.periods;
+      G.julgae   = data.julgae   || G.julgae;
+      G.settings = data.settings || G.settings;
+      saveToLS();
+      st.innerHTML = `<span style="color:#2e7d32">✔ 복원 완료 — 거래처 ${G.clients.length}개</span>`;
+      closeModal();
+      renderDashboard();
+    } catch(err) {
+      st.innerHTML = `<span style="color:#e53935">오류: ${err.message}</span>`;
+    }
+    input.value = '';
+  };
+  reader.readAsText(file);
+}
+
+function exportExcel() {
+  const rows = G.clients.map(c=>({
+    거래처명:c.name, 대표자:c.rep, 연락처:c.phone, 이메일:c.email||'',
+    과세유형:c.taxType, 부가세유형:c.vatType, 업종:c.bizType||'', 관할세무서:c.taxOffice||'',
+    담당자:c.manager, 거래유형:c.dealType, 월수수료:c.fee,
+    수금상태:c.feeStatus, 수임계약항목:(c.contracts||[]).map(contractLabel).join(', '),
+    거래처상태:c.status, 수임일자:c.contractDate||'', 해지일자:c.terminationDate||'',
+    해지사유:c.terminationReason||'', 폐업연도:c.closureYear||'',
+    신고접수:c.closureTaxFiled?'Y':'N', 신고완료:c.closureTaxApproved?'Y':'N',
+    자료수령:c.dataReceived?'Y':'N', 기장완료:c.bookkeeping?'Y':'N', 결재완료:c.approved?'Y':'N',
+    메모:c.memo||''
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [20,12,14,22,8,10,12,12,10,10,12,10,30,8,12,12,14,10,8,8,8,8,8,30].map(w=>({wch:w}));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '거래처목록');
+  XLSX.writeFile(wb, `거래처목록_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+function importExcel(input) {
+  const file = input.files[0]; if (!file) return;
+  const mode = document.querySelector('input[name="importMode"]:checked')?.value||'append';
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+      const imported = rows.map((r,i)=>({
+        id: Date.now()+i, name:String(r['거래처명']||'').trim(), rep:String(r['대표자']||'').trim(),
+        bizNo:'', phone:String(r['연락처']||'').trim(), email:String(r['이메일']||'').trim(),
+        taxType:['법인','개인'].includes(r['과세유형'])?r['과세유형']:'개인',
+        vatType:['일반','간이','면세'].includes(r['부가세유형'])?r['부가세유형']:'일반',
+        bizType:String(r['업종']||''), taxOffice:String(r['관할세무서']||''),
+        manager:String(r['담당자']||''), dealType:String(r['거래유형']||'기장'),
+        fee:Number(r['월수수료'])||0, feeStatus:String(r['수금상태']||'청구완료'),
+        contracts:r['수임계약항목']?String(r['수임계약항목']).split(',').map(s=>s.trim()).filter(Boolean):[],
+        status:String(r['거래처상태']||'정상'), contractDate:String(r['수임일자']||''),
+        terminationDate:String(r['해지일자']||''), terminationReason:String(r['해지사유']||''),
+        closureYear:String(r['폐업연도']||''),
+        closureTaxFiled:String(r['신고접수']).toUpperCase()==='Y',
+        closureTaxApproved:String(r['신고완료']).toUpperCase()==='Y',
+        dataReceived:String(r['자료수령']).toUpperCase()==='Y',
+        bookkeeping:String(r['기장완료']).toUpperCase()==='Y',
+        approved:String(r['결재완료']).toUpperCase()==='Y',
+        memo:String(r['메모']||'')
+      })).filter(c=>c.name);
+      if (mode==='replace') G.clients=imported;
+      else {
+        const existing = new Set(G.clients.map(c=>c.name+c.rep));
+        G.clients=[...G.clients,...imported.filter(c=>!existing.has(c.name+c.rep))];
+      }
+      saveToLS();
+      document.getElementById('import-status').innerHTML=`<span style="color:#2e7d32;font-weight:600">✓ ${imported.length}개 거래처 ${mode==='replace'?'교체':'추가'} 완료</span>`;
+      updateBadge();
+    } catch(err) {
+      document.getElementById('import-status').innerHTML=`<span style="color:red">파일 읽기 실패: ${err.message}</span>`;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ══════════════════════════════════════════════════════
+// 사무소 설정
+// ══════════════════════════════════════════════════════
+function openSettings() {
+  const s = G.settings;
+  showModal(`<div style="max-width:480px">
+  <div class="modal-header"><h3>⚙ 사무소 설정</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+  <div class="modal-body">
+    <div style="font-size:12px;color:#888;background:#f8f9ff;border-radius:8px;padding:8px 12px;margin-bottom:4px">청구서·안내문에 자동 반영됩니다</div>
+    <div class="form-grid">
+      ${[['name','사무소명'],['rep','대표 세무사'],['regNo','사업자번호'],['phone','전화번호'],['fax','팩스'],['email','이메일']].map(([k,l])=>`
+      <div><label class="flabel">${l}</label><input class="finput" id="set-${k}" value="${esc(s[k]||'')}"></div>`).join('')}
+      <div style="grid-column:1/-1"><label class="flabel">주소</label><input class="finput" id="set-address" value="${esc(s.address||'')}"></div>
+      ${[['bank','은행명'],['account','계좌번호'],['accountHolder','예금주']].map(([k,l])=>`
+      <div><label class="flabel">${l}</label><input class="finput" id="set-${k}" value="${esc(s[k]||'')}"></div>`).join('')}
+    </div>
+    <div style="background:#f8f9ff;border-radius:10px;padding:14px;font-size:12px;color:#555;line-height:2;border:1px dashed #c5cae9" id="settings-preview"></div>
+    <div class="btn-row"><button class="btn-secondary" onclick="closeModal()">취소</button><button class="btn-primary" onclick="saveSettings()">저장</button></div>
+  </div></div>`);
+  updateSettingsPreview();
+}
+
+function updateSettingsPreview() {
+  const get = id => document.getElementById(id)?.value||'';
+  const el = document.getElementById('settings-preview');
+  if (!el) return;
+  el.innerHTML = `<b>${esc(get('set-name'))}</b><br>대표: ${esc(get('set-rep'))} | 사업자: ${esc(get('set-regNo'))}<br>전화: ${esc(get('set-phone'))} | 팩스: ${esc(get('set-fax'))} | ${esc(get('set-email'))}<br>${esc(get('set-address'))}<br>입금: ${esc(get('set-bank'))} ${esc(get('set-account'))} (${esc(get('set-accountHolder'))})`;
+}
+
+function saveSettings() {
+  ['name','rep','regNo','phone','fax','email','address','bank','account','accountHolder'].forEach(k=>{
+    G.settings[k] = document.getElementById('set-'+k)?.value||G.settings[k];
+  });
+  saveToLS();
+  closeModal();
+}
+
+// ══════════════════════════════════════════════════════
+// 공통 유틸
+// ══════════════════════════════════════════════════════
+function toggleField(id, field) {
+  const c = G.clients.find(x=>x.id===id);
+  if (c) c[field]=!c[field];
+  saveToLS();
+  updateBadge();
+}
+
+function updateBadge() {
+  const noData = G.clients.filter(c=>!c.dataReceived&&c.status!=='해지'&&c.status!=='폐업').length;
+  const el = document.getElementById('badge-no-data');
+  el.style.display = noData>0?'inline':'none';
+  el.textContent = '미수령 '+noData;
+}
+
+function showModal(html) {
+  const mc = document.getElementById('modal-container');
+  mc.innerHTML = `<div class="overlay" onclick="if(event.target===this)closeModal()">${html}</div>`;
+}
+function closeModal() {
+  document.getElementById('modal-container').innerHTML='';
+}
+
+// ══════════════════════════════════════════════════════
+// 앱 시작
+// ══════════════════════════════════════════════════════
+async function init() {
+  try {
+    const saved = localStorage.getItem('tm_clients');
+    if (saved) {
+      G.clients = JSON.parse(saved);
+    } else {
+      const json = await decompressB64(CLIENTS_B64);
+      const mini = JSON.parse(json);
+      G.clients = expandClients(mini);
+    }
+    const savedPeriods = localStorage.getItem('tm_periods');
+    G.periods = savedPeriods ? JSON.parse(savedPeriods) : JSON.parse(JSON.stringify(DEFAULT_PERIODS));
+    const savedJulgae = localStorage.getItem('tm_julgae');
+    G.julgae = savedJulgae ? JSON.parse(savedJulgae) : {};
+    const savedSettings = localStorage.getItem('tm_settings');
+    if (savedSettings) G.settings = JSON.parse(savedSettings);
+    updateBadge();
+  } catch(e) {
+    console.error('데이터 로드 실패:', e);
+  }
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('page-dashboard').style.display = 'block';
+  renderDashboard();
+}
+
+init();
+</script>
+</body>
+</html>
