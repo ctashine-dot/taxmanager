@@ -2362,6 +2362,233 @@ function renderAITools() {
 }
 
 // ══════════════════════════════════════════════════════
+// 세무사랑 데이터 가져오기
+// ══════════════════════════════════════════════════════
+window._importType = 'clients';
+window._importRows = null;
+window._importHeaders = null;
+
+function openImportModal() {
+  window._importRows = null;
+  window._importHeaders = null;
+  window._importType = 'clients';
+  showModal(`<div style="max-width:600px;width:min(600px,95vw)">
+  <div class="modal-header">
+    <h3>📥 세무사랑 데이터 가져오기</h3>
+    <button class="close-btn" onclick="closeModal()">✕</button>
+  </div>
+  <div class="modal-body">
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button id="itype-clients" onclick="setImportType('clients')"
+        style="flex:1;padding:12px;border-radius:10px;border:2px solid #4f8ef7;background:#e8f0fe;cursor:pointer;font-family:inherit;text-align:left">
+        <div style="font-weight:700;font-size:13px">👥 거래처 목록</div>
+        <div style="font-size:11px;color:#666;margin-top:3px">사업자번호 기준으로 신규 추가 / 정보 업데이트</div>
+      </button>
+      <button id="itype-invoice" onclick="setImportType('invoice')"
+        style="flex:1;padding:12px;border-radius:10px;border:2px solid #e0e0e0;background:#fff;cursor:pointer;font-family:inherit;text-align:left">
+        <div style="font-weight:700;font-size:13px">🧾 세금계산서 현황</div>
+        <div style="font-size:11px;color:#666;margin-top:3px">매출·매입 세금계산서 발행현황 저장</div>
+      </button>
+    </div>
+    <label for="import-file-input" style="display:block;background:#fafbff;border:2px dashed #c0c0c0;border-radius:10px;padding:24px;text-align:center;cursor:pointer;transition:border-color .15s"
+      onmouseover="this.style.borderColor='#4f8ef7'" onmouseout="this.style.borderColor='#c0c0c0'">
+      <div style="font-size:28px;margin-bottom:6px">📂</div>
+      <div style="font-size:13px;font-weight:600;color:#333;margin-bottom:3px">파일 선택 (엑셀 또는 CSV)</div>
+      <div style="font-size:11px;color:#aaa">세무사랑에서 [엑셀저장] → 파일 업로드</div>
+    </label>
+    <input type="file" id="import-file-input" accept=".csv,.txt,.xlsx,.xls" style="display:none"
+      onchange="parseImportFile(this.files[0])">
+    <div id="import-preview"></div>
+    <div style="margin-top:12px;background:#fff8e1;border-radius:8px;padding:10px 14px;font-size:11px;color:#795548;line-height:1.8">
+      <b>💡 세무사랑에서 내보내기 방법</b><br>
+      • 거래처 목록: 기초 → 거래처 관리 → 거래처 현황 → [엑셀] 버튼<br>
+      • 세금계산서: 홈택스 → 전자세금계산서 합계표 → [엑셀] 버튼
+    </div>
+  </div>
+  </div>`);
+}
+
+function setImportType(type) {
+  window._importType = type;
+  ['clients','invoice'].forEach(t => {
+    const btn = document.getElementById('itype-'+t);
+    if (!btn) return;
+    btn.style.border = t===type ? '2px solid #4f8ef7' : '2px solid #e0e0e0';
+    btn.style.background = t===type ? '#e8f0fe' : '#fff';
+  });
+  if (window._importHeaders) showImportPreview();
+}
+
+const _IMPORT_COL_RULES = {
+  bizNo:         ['사업자번호','사업자등록번호','사업자 번호','등록번호'],
+  name:          ['상호','거래처명','업체명','상호명'],
+  rep:           ['대표자','대표자명','대표','성명'],
+  taxType:       ['인격','법인구분','개인법인'],
+  vatType:       ['과세유형','부가세유형','과세구분','과세형태'],
+  phone:         ['전화번호','전화','연락처','휴대폰'],
+  bizType:       ['업태','업종'],
+  taxOffice:     ['관할세무서','세무서'],
+  period:        ['과세기간','기간','신고기간'],
+  salesCount:    ['매출건수','매출 건수','(매출)건수'],
+  salesAmount:   ['매출금액','매출 금액','공급가액(매출)','매출공급가액'],
+  purchaseCount: ['매입건수','매입 건수','(매입)건수'],
+  purchaseAmount:['매입금액','매입 금액','공급가액(매입)','매입공급가액'],
+};
+
+function autoDetectColumns(headers) {
+  const map = {};
+  headers.forEach((h, i) => {
+    const hc = String(h).replace(/\s+/g,'').toLowerCase();
+    for (const [field, candidates] of Object.entries(_IMPORT_COL_RULES)) {
+      if (map[field] !== undefined) continue;
+      if (candidates.some(c => hc.includes(c.replace(/\s+/g,'').toLowerCase()))) map[field] = i;
+    }
+  });
+  return map;
+}
+
+function parseImportFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      if (data.length < 2) {
+        document.getElementById('import-preview').innerHTML = '<div style="color:#e53935;margin-top:12px;font-size:13px">데이터가 없습니다.</div>';
+        return;
+      }
+      window._importHeaders = data[0].map(String);
+      window._importRows = data.slice(1).filter(r => r.some(v => String(v).trim()));
+      showImportPreview();
+    } catch(err) {
+      document.getElementById('import-preview').innerHTML = `<div style="color:#e53935;margin-top:12px;font-size:13px">파일 오류: ${err.message}</div>`;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function showImportPreview() {
+  const preview = document.getElementById('import-preview');
+  if (!preview || !window._importHeaders) return;
+  const headers = window._importHeaders;
+  const rows = window._importRows;
+  const colMap = autoDetectColumns(headers);
+  const type = window._importType;
+  const fieldLabels = {
+    bizNo:'사업자번호',name:'상호명',rep:'대표자',taxType:'인격',vatType:'부가세',
+    phone:'전화번호',bizType:'업태',taxOffice:'세무서',period:'기간',
+    salesCount:'매출건수',salesAmount:'매출금액',purchaseCount:'매입건수',purchaseAmount:'매입금액'
+  };
+  const relevantFields = type==='clients'
+    ? ['bizNo','name','rep','taxType','vatType','phone','bizType','taxOffice']
+    : ['bizNo','name','period','salesCount','salesAmount','purchaseCount','purchaseAmount'];
+  const mappedFields = relevantFields.filter(f => colMap[f] !== undefined);
+  const unmapped = relevantFields.filter(f => colMap[f] === undefined);
+  const previewRows = rows.slice(0,8);
+  preview.innerHTML = `
+  <div style="margin-top:14px">
+    <div style="font-size:12px;margin-bottom:8px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+      <b>미리보기</b><span style="color:#888">총 ${rows.length}행</span>
+      ${mappedFields.length>0?`<span style="color:#2e7d32;background:#e8f5e9;padding:2px 8px;border-radius:10px">✓ ${mappedFields.map(f=>fieldLabels[f]).join(', ')}</span>`:''}
+      ${unmapped.length>0?`<span style="color:#e65100;background:#fff3e0;padding:2px 8px;border-radius:10px">⚠ 미인식: ${unmapped.map(f=>fieldLabels[f]).join(', ')}</span>`:''}
+    </div>
+    ${mappedFields.length===0?`<div style="color:#e53935;font-size:13px;padding:12px;background:#fdecea;border-radius:8px;margin-bottom:12px">컬럼을 자동 인식하지 못했습니다. 파일의 헤더 행을 확인해주세요.</div>`:`
+    <div style="overflow:auto;max-height:160px;border:1px solid #e0e0e0;border-radius:8px;margin-bottom:10px">
+      <table style="width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap">
+        <thead><tr style="background:#f5f5f5">
+          ${mappedFields.map(f=>`<th style="padding:6px 10px;text-align:left;border-bottom:1px solid #e0e0e0">${fieldLabels[f]}</th>`).join('')}
+        </tr></thead>
+        <tbody>${previewRows.map(r=>`<tr style="border-bottom:1px solid #f5f5f5">${mappedFields.map(f=>`<td style="padding:5px 10px;color:#555;max-width:130px;overflow:hidden;text-overflow:ellipsis">${esc(String(r[colMap[f]]||''))}</td>`).join('')}</tr>`).join('')}</tbody>
+      </table>
+    </div>
+    ${rows.length>8?`<div style="font-size:11px;color:#aaa;margin-bottom:8px">...외 ${rows.length-8}행</div>`:''}`}
+    <div class="btn-row" style="margin-top:4px">
+      <button class="btn-secondary" onclick="closeModal()">취소</button>
+      <button class="btn-primary" onclick="doImport()" ${mappedFields.length===0?'disabled style="opacity:.5"':''}>
+        📥 ${rows.length}개 가져오기
+      </button>
+    </div>
+  </div>`;
+}
+
+function doImport() {
+  const rows = window._importRows;
+  const headers = window._importHeaders;
+  if (!rows || !headers) return;
+  const colMap = autoDetectColumns(headers);
+  const type = window._importType;
+  const getVal = (row, field) => colMap[field]!==undefined ? String(row[colMap[field]]||'').trim() : '';
+
+  if (type === 'clients') {
+    let added=0, updated=0, skipped=0;
+    rows.forEach(row => {
+      const bizNo = getVal(row,'bizNo').replace(/[^0-9]/g,'');
+      const name = getVal(row,'name');
+      if (!name) { skipped++; return; }
+      let existing = (bizNo.length>=10) ? G.clients.find(c=>(c.bizNo||'').replace(/[^0-9]/g,'')===bizNo) : null;
+      if (!existing) existing = G.clients.find(c=>c.name===name);
+      const rawVat = getVal(row,'vatType');
+      const vatType = rawVat.includes('일반')?'일반':rawVat.includes('간이')?'간이':rawVat.includes('면세')?'면세':null;
+      const rawTax = getVal(row,'taxType');
+      const taxType = rawTax.includes('법인')?'법인':rawTax.includes('개인')?'개인':null;
+      if (existing) {
+        if (bizNo.length>=10 && !existing.bizNo) existing.bizNo = bizNo;
+        if (vatType) existing.vatType = vatType;
+        if (taxType) existing.taxType = taxType;
+        if (getVal(row,'rep') && !existing.rep) existing.rep = getVal(row,'rep');
+        if (getVal(row,'phone') && !existing.phone) existing.phone = getVal(row,'phone');
+        if (getVal(row,'bizType') && !existing.bizType) existing.bizType = getVal(row,'bizType');
+        if (getVal(row,'taxOffice') && !existing.taxOffice) existing.taxOffice = getVal(row,'taxOffice');
+        updated++;
+      } else {
+        const maxId = G.clients.reduce((a,c)=>Math.max(a,c.id||0),0);
+        G.clients.push({
+          id:maxId+1+added, name, rep:getVal(row,'rep'),
+          bizNo:bizNo||'', jumin:'', relatedGroup:'',
+          phone:getVal(row,'phone'), email:'',
+          taxType:taxType||'개인', vatType:vatType||'일반',
+          bizType:getVal(row,'bizType'), taxOffice:getVal(row,'taxOffice'),
+          manager:'', managers:[], dealType:'기장', dealTypes:['기장'],
+          fee:0, feeStatus:'청구완료', status:'정상',
+          dataReceived:false, bookkeeping:false, approved:false,
+          memo:'', contractDate:'', contracts:[],
+          terminationDate:'', terminationReason:'', closureYear:'',
+          closureTaxFiled:false, closureTaxApproved:false
+        });
+        added++;
+      }
+    });
+    saveToLS(); closeModal(); renderClients();
+    alert(`거래처 가져오기 완료!\n• 신규 추가: ${added}개\n• 업데이트: ${updated}개\n• 건너뜀: ${skipped}개`);
+  } else {
+    if (!G.invoiceData) G.invoiceData = {};
+    let matched=0, unmatched=0;
+    rows.forEach(row => {
+      const bizNo = getVal(row,'bizNo').replace(/[^0-9]/g,'');
+      const name = getVal(row,'name');
+      if (!bizNo && !name) return;
+      let client = (bizNo.length>=10) ? G.clients.find(c=>(c.bizNo||'').replace(/[^0-9]/g,'')===bizNo) : null;
+      if (!client && name) client = G.clients.find(c=>c.name===name);
+      if (!client) { unmatched++; return; }
+      const period = getVal(row,'period') || new Date().toLocaleDateString('ko-KR');
+      if (!G.invoiceData[client.id]) G.invoiceData[client.id] = {periods:{}, lastImported:''};
+      G.invoiceData[client.id].periods[period] = {
+        salesCount:   Number(getVal(row,'salesCount').replace(/[^0-9]/g,'')||0),
+        salesAmount:  Number(getVal(row,'salesAmount').replace(/[^0-9]/g,'')||0),
+        purchaseCount:Number(getVal(row,'purchaseCount').replace(/[^0-9]/g,'')||0),
+        purchaseAmount:Number(getVal(row,'purchaseAmount').replace(/[^0-9]/g,'')||0),
+      };
+      G.invoiceData[client.id].lastImported = new Date().toLocaleDateString('ko-KR');
+      matched++;
+    });
+    saveToLS(); closeModal();
+    alert(`세금계산서 현황 가져오기 완료!\n• 매칭 성공: ${matched}개\n• 미매칭: ${unmatched}개${unmatched>0?'\n  (사업자번호/상호명으로 거래처를 찾을 수 없는 행)':''}`);
+  }
+}
+
+// ══════════════════════════════════════════════════════
 // AI - 신고 안내문
 // ══════════════════════════════════════════════════════
 function openAINotice() {
