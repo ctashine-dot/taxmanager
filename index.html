@@ -1804,6 +1804,8 @@ function openEnrollModal(pKey) {
   if (idx < 0) return;
   const period = G.periods[idx];
 
+  window._enrollFilters = {dealTypes:[], taxTypes:[], vatTypes:[]};
+
   // 선택 가능한 기본 풀: targetType 기반
   let pool = G.clients.filter(c => c.status !== '해지' && c.status !== '폐업');
   if (period.targetType === '법인') pool = pool.filter(c => c.taxType === '법인');
@@ -1812,7 +1814,6 @@ function openEnrollModal(pKey) {
   const enrolled = new Set(period.enrolled || []);
   const managers = [...new Set(pool.map(c => getManagers(c)[0] || '미지정'))].sort();
 
-  // 담당자별 그룹
   const groups = {};
   pool.forEach(c => {
     const m = getManagers(c)[0] || '미지정';
@@ -1822,14 +1823,15 @@ function openEnrollModal(pKey) {
 
   const rows = managers.map(m => {
     const list = (groups[m] || []).map(c => `
-      <label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;transition:background .1s"
+      <label data-cid="${c.id}" data-deal="${getDealTypes(c).join(',')}" data-tax="${c.taxType}" data-vat="${c.vatType}"
+        style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;transition:background .1s"
         onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background=''">
         <input type="checkbox" class="enroll-chk" data-id="${c.id}" ${enrolled.has(c.id)?'checked':''} style="width:15px;height:15px;cursor:pointer">
         <span style="font-size:13px;font-weight:600">${esc(c.name)}</span>
         <span style="font-size:11px;color:#aaa">${esc(c.rep)}</span>
-        <span style="margin-left:auto;font-size:11px;color:#888">${esc(c.taxType)}</span>
+        <span style="margin-left:auto;font-size:11px;color:#888">${getDealTypes(c).map(d=>dealBadge(d)).join('')} ${esc(c.vatType)}</span>
       </label>`).join('');
-    return `<div style="margin-bottom:12px">
+    return `<div data-group="${esc(m)}" style="margin-bottom:12px">
       <div style="font-size:12px;font-weight:700;color:#4f8ef7;padding:4px 8px;background:#e8f0fe;border-radius:6px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center">
         <span>${esc(m)} (${(groups[m]||[]).length})</span>
         <span style="display:flex;gap:6px">
@@ -1841,9 +1843,13 @@ function openEnrollModal(pKey) {
     </div>`;
   }).join('');
 
+  const efChip = (type, val) =>
+    `<button type="button" onclick="toggleEnrollFilter('${type}','${val}',this)"
+      style="padding:3px 9px;border-radius:10px;font-size:11px;cursor:pointer;font-family:inherit;border:1.5px solid #e0e0e0;background:#fff;color:#555;-webkit-tap-highlight-color:transparent;white-space:nowrap">${val}</button>`;
+
   showModal(`
-  <div style="background:#fff;border-radius:18px;padding:28px 24px;width:520px;max-width:95vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,.18)">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+  <div style="background:#fff;border-radius:18px;padding:22px 18px;width:520px;max-width:95vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,.18)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div>
         <div style="font-size:18px;font-weight:800">업체 선택</div>
         <div style="font-size:12px;color:#aaa;margin-top:2px">${esc(period.label)} — 대상 ${pool.length}개 업체</div>
@@ -1851,20 +1857,31 @@ function openEnrollModal(pKey) {
       <button onclick="closeModal()" style="font-size:22px;border:none;background:none;cursor:pointer;color:#aaa">✕</button>
     </div>
 
-    <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
+    <div style="display:flex;flex-wrap:wrap;gap:4px;padding:8px 10px;background:#f8f9ff;border-radius:10px;margin-bottom:10px;align-items:center">
+      <span style="font-size:10px;font-weight:700;color:#aaa;margin-right:2px">거래유형</span>
+      ${DEAL_TYPES.slice(1).map(v=>efChip('dealTypes',v)).join('')}
+      <span style="display:inline-block;width:1px;height:14px;background:#ddd;margin:0 4px;align-self:center"></span>
+      <span style="font-size:10px;font-weight:700;color:#aaa;margin-right:2px">인격</span>
+      ${TAX_TYPES.slice(1).map(v=>efChip('taxTypes',v)).join('')}
+      <span style="display:inline-block;width:1px;height:14px;background:#ddd;margin:0 4px;align-self:center"></span>
+      <span style="font-size:10px;font-weight:700;color:#aaa;margin-right:2px">부가세</span>
+      ${VAT_TYPES.slice(1).map(v=>efChip('vatTypes',v)).join('')}
+    </div>
+
+    <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
       <div class="search-box" style="flex:1">
         <span>🔍</span>
-        <input id="enroll_search" placeholder="거래처명 검색" oninput="filterEnrollList(this.value)" style="font-size:13px">
+        <input id="enroll_search" placeholder="거래처명 검색" oninput="applyEnrollFilters()" style="font-size:13px">
       </div>
-      <button type="button" onclick="enrollAll(true)" style="padding:6px 12px;border-radius:8px;border:1.5px solid #90caf9;background:#e3f2fd;color:#1565c0;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">전체 선택</button>
-      <button type="button" onclick="enrollAll(false)" style="padding:6px 12px;border-radius:8px;border:1.5px solid #ccc;background:#f5f5f5;color:#666;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">전체 해제</button>
+      <button type="button" onclick="enrollAll(true)" style="padding:6px 10px;border-radius:8px;border:1.5px solid #90caf9;background:#e3f2fd;color:#1565c0;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">전체 선택</button>
+      <button type="button" onclick="enrollAll(false)" style="padding:6px 10px;border-radius:8px;border:1.5px solid #ccc;background:#f5f5f5;color:#666;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">전체 해제</button>
     </div>
 
     <div id="enroll_list" style="overflow-y:auto;flex:1;padding-right:4px">
       ${rows}
     </div>
 
-    <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end;border-top:1px solid #f0f0f0;padding-top:16px">
+    <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end;border-top:1px solid #f0f0f0;padding-top:14px">
       <span id="enroll_count" style="font-size:13px;color:#666;align-self:center">
         ${enrolled.size > 0 ? enrolled.size + '개 선택됨' : '(전체 포함)'}
       </span>
@@ -1873,17 +1890,38 @@ function openEnrollModal(pKey) {
     </div>
   </div>`);
 
-  // 체크 변경 시 카운트 업데이트
   document.getElementById('enroll_list').addEventListener('change', updateEnrollCount);
 }
 
-function filterEnrollList(q) {
-  q = q.toLowerCase();
-  document.querySelectorAll('#enroll_list label').forEach(el => {
-    const txt = el.textContent.toLowerCase();
-    el.style.display = (!q || txt.includes(q)) ? '' : 'none';
+function toggleEnrollFilter(type, val, btn) {
+  const arr = window._enrollFilters[type];
+  if (arr.includes(val)) {
+    window._enrollFilters[type] = arr.filter(x=>x!==val);
+    btn.style.borderColor='#e0e0e0'; btn.style.background='#fff'; btn.style.color='#555';
+  } else {
+    window._enrollFilters[type] = [...arr, val];
+    btn.style.borderColor='#4f8ef7'; btn.style.background='#e8f0fe'; btn.style.color='#1565c0';
+  }
+  applyEnrollFilters();
+}
+
+function applyEnrollFilters() {
+  const q = (document.getElementById('enroll_search')?.value||'').toLowerCase();
+  const {dealTypes,taxTypes,vatTypes} = window._enrollFilters||{dealTypes:[],taxTypes:[],vatTypes:[]};
+  document.querySelectorAll('#enroll_list label[data-cid]').forEach(el => {
+    const elDeals = (el.dataset.deal||'').split(',').filter(Boolean);
+    const matchQ = !q || el.textContent.toLowerCase().includes(q);
+    const matchDeal = dealTypes.length===0 || elDeals.some(d=>dealTypes.includes(d));
+    const matchTax  = taxTypes.length===0  || taxTypes.includes(el.dataset.tax||'');
+    const matchVat  = vatTypes.length===0  || vatTypes.includes(el.dataset.vat||'');
+    el.style.display = (matchQ&&matchDeal&&matchTax&&matchVat)?'':'none';
+  });
+  document.querySelectorAll('#enroll_list [data-group]').forEach(grp => {
+    const hasVisible = [...grp.querySelectorAll('label[data-cid]')].some(el=>el.style.display!=='none');
+    grp.style.display = hasVisible?'':'none';
   });
 }
+
 
 function enrollAll(val) {
   document.querySelectorAll('#enroll_list .enroll-chk').forEach(chk => {
