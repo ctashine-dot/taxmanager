@@ -773,10 +773,18 @@ function renderClients() {
     </tr>
     <tr class="filter-row">
       <th style="padding:4px 6px;font-weight:normal"></th>
-      <th style="padding:4px 6px;font-weight:normal"><div style="display:flex;flex-wrap:wrap;gap:2px">${DEAL_TYPES.slice(1).map(v=>`<button onclick="toggleFilterDealType('${v}')" style="padding:1px 5px;border-radius:10px;font-size:9px;cursor:pointer;font-family:inherit;border:1.5px solid ${G.filterDealTypes.includes(v)?'#4f8ef7':'#ddd'};background:${G.filterDealTypes.includes(v)?'#e8f0fe':'#f9f9f9'};color:${G.filterDealTypes.includes(v)?'#1565c0':'#777'}">${v}</button>`).join('')}${G.filterDealTypes.length>0?`<button onclick="G.filterDealTypes=[];G.clientPage=0;renderClients()" style="padding:1px 5px;border-radius:10px;font-size:9px;cursor:pointer;font-family:inherit;border:1px solid #fcc;background:#fff;color:#e53935">✕</button>`:''}</div></th>
+      <th style="padding:4px 6px;font-weight:normal">${(()=>{
+        const lbl = G.filterDealTypes.length===0?'전체':G.filterDealTypes.length<=2?G.filterDealTypes.join(', '):`${G.filterDealTypes.length}개 선택`;
+        const active = G.filterDealTypes.length>0;
+        return `<button onclick="openFilterPopup('filterDealTypes',${JSON.stringify(DEAL_TYPES.slice(1))},this)" style="width:100%;padding:3px 6px;border-radius:7px;font-size:11px;cursor:pointer;font-family:inherit;border:1.5px solid ${active?'#4f8ef7':'#ddd'};background:${active?'#e8f0fe':'#fff'};color:${active?'#1565c0':'#555'};text-align:left;display:flex;justify-content:space-between;align-items:center"><span>${lbl}</span><span style="font-size:9px;opacity:.6">▾</span></button>`;
+      })()}</th>
       <th style="padding:4px 6px;font-weight:normal"><select ${filterRowSel} onchange="onFilter('filterTaxType',this.value)">${TAX_TYPES.map(v=>`<option${G.filterTaxType===v?' selected':''}>${v}</option>`).join('')}</select></th>
       <th style="padding:4px 6px;font-weight:normal"><select ${filterRowSel} onchange="onFilter('filterVatType',this.value)">${VAT_TYPES.map(v=>`<option${G.filterVatType===v?' selected':''}>${v}</option>`).join('')}</select></th>
-      <th style="padding:4px 6px;font-weight:normal"><div style="display:flex;flex-wrap:wrap;gap:2px">${MANAGERS.slice(1).map(v=>`<button onclick="toggleFilterManager('${v}')" style="padding:1px 5px;border-radius:10px;font-size:9px;cursor:pointer;font-family:inherit;border:1.5px solid ${G.filterManagers.includes(v)?'#4f8ef7':'#ddd'};background:${G.filterManagers.includes(v)?'#e8f0fe':'#f9f9f9'};color:${G.filterManagers.includes(v)?'#1565c0':'#777'}">${v}</button>`).join('')}<button onclick="toggleFilterManager('(없음)')" style="padding:1px 5px;border-radius:10px;font-size:9px;cursor:pointer;font-family:inherit;border:1.5px solid ${G.filterManagers.includes('(없음)')?'#4f8ef7':'#ddd'};background:${G.filterManagers.includes('(없음)')?'#e8f0fe':'#f9f9f9'};color:${G.filterManagers.includes('(없음)')?'#1565c0':'#777'}">없음</button>${G.filterManagers.length>0?`<button onclick="G.filterManagers=[];G.clientPage=0;renderClients()" style="padding:1px 5px;border-radius:10px;font-size:9px;cursor:pointer;font-family:inherit;border:1px solid #fcc;background:#fff;color:#e53935">✕</button>`:''}</div></th>
+      <th style="padding:4px 6px;font-weight:normal">${(()=>{
+        const lbl = G.filterManagers.length===0?'전체':G.filterManagers.length<=2?G.filterManagers.map(v=>v==='(없음)'?'없음':v).join(', '):`${G.filterManagers.length}개 선택`;
+        const active = G.filterManagers.length>0;
+        return `<button onclick="openFilterPopup('filterManagers',[...${JSON.stringify(MANAGERS.slice(1))},'(없음)'],this)" style="width:100%;padding:3px 6px;border-radius:7px;font-size:11px;cursor:pointer;font-family:inherit;border:1.5px solid ${active?'#4f8ef7':'#ddd'};background:${active?'#e8f0fe':'#fff'};color:${active?'#1565c0':'#555'};text-align:left;display:flex;justify-content:space-between;align-items:center"><span>${lbl}</span><span style="font-size:9px;opacity:.6">▾</span></button>`;
+      })()}</th>
       ${emptyTh}
       ${emptyTh}
       <th style="padding:4px 6px;font-weight:normal"><select ${filterRowSel} onchange="onFilter('filterFeeStatus',this.value)">${FEE_STATUSES.map(v=>`<option${G.filterFeeStatus===v?' selected':''}>${v}</option>`).join('')}</select></th>
@@ -847,16 +855,55 @@ function clientPageChange(dir) { G.clientPage += dir; renderClients(); }
 function toggleTerminated() { G.showTerminated=!G.showTerminated; renderClients(); }
 function onSearch(v) { G.searchText=v; G.clientPage=0; renderClients(); }
 function onFilter(field,v) { G[field]=v; G.clientPage=0; renderClients(); }
-function toggleFilterDealType(v) {
-  const a = G.filterDealTypes;
-  G.filterDealTypes = a.includes(v) ? a.filter(x=>x!==v) : [...a,v];
-  G.clientPage=0; renderClients();
+
+// ── 필터 팝업 ──────────────────────────────────────────
+let _fpField = null;
+function openFilterPopup(field, options, btnEl) {
+  // 이미 열려있으면 닫기
+  const existing = document.getElementById('filter-popup');
+  if (existing) { existing.remove(); document.removeEventListener('click', _fpOutside); if (_fpField===field) { _fpField=null; return; } }
+  _fpField = field;
+  const current = G[field]; // array
+  const rect = btnEl.getBoundingClientRect();
+  const pop = document.createElement('div');
+  pop.id = 'filter-popup';
+  pop.style.cssText = `position:fixed;z-index:9999;background:#fff;border:1.5px solid #e0e0e0;border-radius:14px;box-shadow:0 6px 28px rgba(0,0,0,0.18);padding:14px;min-width:170px;`;
+  const top = Math.min(rect.bottom + 6, window.innerHeight - 320);
+  const left = Math.max(8, Math.min(rect.left, window.innerWidth - 190));
+  pop.style.top = top + 'px'; pop.style.left = left + 'px';
+  const title = field==='filterDealTypes' ? '거래유형 필터' : '담당자 필터';
+  pop.innerHTML = `
+    <div style="font-size:12px;font-weight:800;color:#333;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #f0f0f0">${title}</div>
+    <div id="fp-opts">
+      ${options.map(v=>`<label style="display:flex;align-items:center;gap:9px;padding:6px 4px;cursor:pointer;border-radius:8px" onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background=''">
+        <input type="checkbox" class="fp-chk" data-val="${v}" ${current.includes(v)?'checked':''} style="width:16px;height:16px;cursor:pointer;accent-color:#4f8ef7">
+        <span style="font-size:13px;font-weight:500">${v==='(없음)'?'담당자 없음':v}</span>
+      </label>`).join('')}
+    </div>
+    <div style="display:flex;gap:6px;margin-top:12px;padding-top:10px;border-top:1px solid #f0f0f0">
+      <button onclick="fpAll()" style="flex:1;padding:6px 4px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:12px;cursor:pointer;font-family:inherit">전체</button>
+      <button onclick="fpNone()" style="flex:1;padding:6px 4px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:12px;cursor:pointer;font-family:inherit">해제</button>
+      <button onclick="fpConfirm()" style="flex:2;padding:6px 8px;border-radius:8px;border:none;background:#4f8ef7;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">확인</button>
+    </div>`;
+  document.body.appendChild(pop);
+  setTimeout(() => document.addEventListener('click', _fpOutside), 0);
 }
-function toggleFilterManager(v) {
-  const a = G.filterManagers;
-  G.filterManagers = a.includes(v) ? a.filter(x=>x!==v) : [...a,v];
-  G.clientPage=0; renderClients();
+function _fpOutside(e) {
+  const pop = document.getElementById('filter-popup');
+  if (pop && !pop.contains(e.target)) { pop.remove(); document.removeEventListener('click', _fpOutside); _fpField=null; }
 }
+function fpAll()  { document.querySelectorAll('.fp-chk').forEach(c=>c.checked=true); }
+function fpNone() { document.querySelectorAll('.fp-chk').forEach(c=>c.checked=false); }
+function fpConfirm() {
+  const selected = [...document.querySelectorAll('.fp-chk:checked')].map(c=>c.dataset.val);
+  G[_fpField] = selected;
+  G.clientPage = 0;
+  const pop = document.getElementById('filter-popup');
+  if (pop) { pop.remove(); document.removeEventListener('click', _fpOutside); }
+  _fpField = null;
+  renderClients();
+}
+
 function toggleInlineDealType(clientId, type) {
   const c = G.clients.find(x=>x.id===clientId); if(!c) return;
   const types = getDealTypes(c);
