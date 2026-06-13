@@ -279,14 +279,14 @@ let G = {
   currentTab: 'dashboard',
   searchText: '',
   filterManagers: [],
-  filterTaxType: '전체',
-  filterVatType: '전체',
-  filterFeeStatus: '전체',
+  filterTaxTypes: [],
+  filterVatTypes: [],
+  filterFeeStatuses: [],
   filterDealTypes: [],
   showTerminated: false,
   closureSearch: '',
   julgaeSearch: '',
-  julgaeManager: '전체',
+  julgaeManagers: [],
   julgaePeriodIdx: 0,
   julgaeFeeFilter: '전체',
   clientPage: 0,
@@ -501,9 +501,9 @@ function filteredClients() {
       const mgrs = getManagers(c);
       if (!(hasNone && mgrs.length === 0) && !mgrs.some(m => G.filterManagers.includes(m))) return false;
     }
-    if (G.filterTaxType !== '전체' && c.taxType !== G.filterTaxType) return false;
-    if (G.filterVatType !== '전체' && c.vatType !== G.filterVatType) return false;
-    if (G.filterFeeStatus !== '전체' && c.feeStatus !== G.filterFeeStatus) return false;
+    if (G.filterTaxTypes.length > 0 && !G.filterTaxTypes.includes(c.taxType)) return false;
+    if (G.filterVatTypes.length > 0 && !G.filterVatTypes.includes(c.vatType)) return false;
+    if (G.filterFeeStatuses.length > 0 && !G.filterFeeStatuses.includes(c.feeStatus)) return false;
     if (G.filterDealTypes.length > 0) {
       if (!getDealTypes(c).some(d => G.filterDealTypes.includes(d))) return false;
     }
@@ -773,21 +773,13 @@ function renderClients() {
     </tr>
     <tr class="filter-row">
       <th style="padding:4px 6px;font-weight:normal"></th>
-      <th style="padding:4px 6px;font-weight:normal">${(()=>{
-        const lbl = G.filterDealTypes.length===0?'전체':G.filterDealTypes.length<=2?G.filterDealTypes.join(', '):`${G.filterDealTypes.length}개 선택`;
-        const active = G.filterDealTypes.length>0;
-        return `<button onclick="openFilterPopup('filterDealTypes',${JSON.stringify(DEAL_TYPES.slice(1))},this)" style="width:100%;padding:3px 6px;border-radius:7px;font-size:11px;cursor:pointer;font-family:inherit;border:1.5px solid ${active?'#4f8ef7':'#ddd'};background:${active?'#e8f0fe':'#fff'};color:${active?'#1565c0':'#555'};text-align:left;display:flex;justify-content:space-between;align-items:center"><span>${lbl}</span><span style="font-size:9px;opacity:.6">▾</span></button>`;
-      })()}</th>
-      <th style="padding:4px 6px;font-weight:normal"><select ${filterRowSel} onchange="onFilter('filterTaxType',this.value)">${TAX_TYPES.map(v=>`<option${G.filterTaxType===v?' selected':''}>${v}</option>`).join('')}</select></th>
-      <th style="padding:4px 6px;font-weight:normal"><select ${filterRowSel} onchange="onFilter('filterVatType',this.value)">${VAT_TYPES.map(v=>`<option${G.filterVatType===v?' selected':''}>${v}</option>`).join('')}</select></th>
-      <th style="padding:4px 6px;font-weight:normal">${(()=>{
-        const lbl = G.filterManagers.length===0?'전체':G.filterManagers.length<=2?G.filterManagers.map(v=>v==='(없음)'?'없음':v).join(', '):`${G.filterManagers.length}개 선택`;
-        const active = G.filterManagers.length>0;
-        return `<button onclick="openFilterPopup('filterManagers',[...${JSON.stringify(MANAGERS.slice(1))},'(없음)'],this)" style="width:100%;padding:3px 6px;border-radius:7px;font-size:11px;cursor:pointer;font-family:inherit;border:1.5px solid ${active?'#4f8ef7':'#ddd'};background:${active?'#e8f0fe':'#fff'};color:${active?'#1565c0':'#555'};text-align:left;display:flex;justify-content:space-between;align-items:center"><span>${lbl}</span><span style="font-size:9px;opacity:.6">▾</span></button>`;
-      })()}</th>
+      <th style="padding:4px 6px;font-weight:normal">${filterPopupBtn('filterDealTypes','거래유형')}</th>
+      <th style="padding:4px 6px;font-weight:normal">${filterPopupBtn('filterTaxTypes','인격')}</th>
+      <th style="padding:4px 6px;font-weight:normal">${filterPopupBtn('filterVatTypes','부가세')}</th>
+      <th style="padding:4px 6px;font-weight:normal">${filterPopupBtn('filterManagers','담당자')}</th>
       ${emptyTh}
       ${emptyTh}
-      <th style="padding:4px 6px;font-weight:normal"><select ${filterRowSel} onchange="onFilter('filterFeeStatus',this.value)">${FEE_STATUSES.map(v=>`<option${G.filterFeeStatus===v?' selected':''}>${v}</option>`).join('')}</select></th>
+      <th style="padding:4px 6px;font-weight:normal">${filterPopupBtn('filterFeeStatuses','수금상태')}</th>
       ${emptyTh}
     </tr>
     </thead>
@@ -857,36 +849,46 @@ function onSearch(v) { G.searchText=v; G.clientPage=0; renderClients(); }
 function onFilter(field,v) { G[field]=v; G.clientPage=0; renderClients(); }
 
 // ── 필터 팝업 ──────────────────────────────────────────
+const _FP_OPTIONS = {
+  filterDealTypes:   () => DEAL_TYPES.slice(1),
+  filterManagers:    () => [...MANAGERS.slice(1), '(없음)'],
+  filterTaxTypes:    () => TAX_TYPES.slice(1),
+  filterVatTypes:    () => VAT_TYPES.slice(1),
+  filterFeeStatuses: () => FEE_STATUSES.slice(1),
+  julgaeManagers:    () => [...MANAGERS.slice(1), '(없음)'],
+};
+const _FP_TITLES = {
+  filterDealTypes:'거래유형 필터', filterManagers:'담당자 필터',
+  filterTaxTypes:'인격 필터', filterVatTypes:'부가세 필터',
+  filterFeeStatuses:'수금상태 필터', julgaeManagers:'담당자 필터',
+};
 let _fpField = null;
-function openFilterPopup(field, options, btnEl) {
-  // 이미 열려있으면 닫기
+function openFilterPopup(field, btnEl) {
   const existing = document.getElementById('filter-popup');
   if (existing) { existing.remove(); document.removeEventListener('click', _fpOutside); if (_fpField===field) { _fpField=null; return; } }
   _fpField = field;
-  const current = G[field]; // array
+  const options = (_FP_OPTIONS[field]||(() => []))();
+  const current = G[field] || [];
   const rect = btnEl.getBoundingClientRect();
   const pop = document.createElement('div');
   pop.id = 'filter-popup';
-  pop.style.cssText = `position:fixed;z-index:9999;background:#fff;border:1.5px solid #e0e0e0;border-radius:14px;box-shadow:0 6px 28px rgba(0,0,0,0.18);padding:14px;min-width:170px;`;
-  const top = Math.min(rect.bottom + 6, window.innerHeight - 320);
-  const left = Math.max(8, Math.min(rect.left, window.innerWidth - 190));
+  pop.style.cssText = 'position:fixed;z-index:9999;background:#fff;border:1.5px solid #e0e0e0;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,0.18);padding:14px;min-width:175px;max-height:80vh;overflow-y:auto;';
+  const top = Math.min(rect.bottom + 6, window.innerHeight - 340);
+  const left = Math.max(8, Math.min(rect.left, window.innerWidth - 200));
   pop.style.top = top + 'px'; pop.style.left = left + 'px';
-  const title = field==='filterDealTypes' ? '거래유형 필터' : '담당자 필터';
   pop.innerHTML = `
-    <div style="font-size:12px;font-weight:800;color:#333;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #f0f0f0">${title}</div>
-    <div id="fp-opts">
-      ${options.map(v=>`<label style="display:flex;align-items:center;gap:9px;padding:6px 4px;cursor:pointer;border-radius:8px" onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background=''">
-        <input type="checkbox" class="fp-chk" data-val="${v}" ${current.includes(v)?'checked':''} style="width:16px;height:16px;cursor:pointer;accent-color:#4f8ef7">
-        <span style="font-size:13px;font-weight:500">${v==='(없음)'?'담당자 없음':v}</span>
-      </label>`).join('')}
-    </div>
+    <div style="font-size:12px;font-weight:800;color:#333;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #f0f0f0">${_FP_TITLES[field]||'필터'}</div>
+    <div>${options.map(v=>`<label style="display:flex;align-items:center;gap:9px;padding:7px 6px;cursor:pointer;border-radius:8px;-webkit-tap-highlight-color:rgba(0,0,0,0.05)" onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background=''">
+      <input type="checkbox" class="fp-chk" data-val="${v}" ${current.includes(v)?'checked':''} style="width:17px;height:17px;cursor:pointer;accent-color:#4f8ef7;flex-shrink:0">
+      <span style="font-size:14px;font-weight:500">${v==='(없음)'?'담당자 없음':v}</span>
+    </label>`).join('')}</div>
     <div style="display:flex;gap:6px;margin-top:12px;padding-top:10px;border-top:1px solid #f0f0f0">
-      <button onclick="fpAll()" style="flex:1;padding:6px 4px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:12px;cursor:pointer;font-family:inherit">전체</button>
-      <button onclick="fpNone()" style="flex:1;padding:6px 4px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:12px;cursor:pointer;font-family:inherit">해제</button>
-      <button onclick="fpConfirm()" style="flex:2;padding:6px 8px;border-radius:8px;border:none;background:#4f8ef7;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">확인</button>
+      <button onclick="fpAll()" style="flex:1;padding:8px 4px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:13px;cursor:pointer;font-family:inherit">전체</button>
+      <button onclick="fpNone()" style="flex:1;padding:8px 4px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:13px;cursor:pointer;font-family:inherit">해제</button>
+      <button onclick="fpConfirm()" style="flex:2;padding:8px 10px;border-radius:8px;border:none;background:#4f8ef7;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">확인</button>
     </div>`;
   document.body.appendChild(pop);
-  setTimeout(() => document.addEventListener('click', _fpOutside), 0);
+  setTimeout(() => document.addEventListener('click', _fpOutside), 10);
 }
 function _fpOutside(e) {
   const pop = document.getElementById('filter-popup');
@@ -900,8 +902,18 @@ function fpConfirm() {
   G.clientPage = 0;
   const pop = document.getElementById('filter-popup');
   if (pop) { pop.remove(); document.removeEventListener('click', _fpOutside); }
-  _fpField = null;
-  renderClients();
+  const f = _fpField; _fpField = null;
+  if (f==='julgaeManagers') renderJulgae();
+  else if (G.currentTab==='clients') renderClients();
+}
+
+function filterPopupBtn(field, defaultLabel) {
+  const vals = G[field] || [];
+  const active = vals.length > 0;
+  const lbl = active
+    ? (vals.length <= 2 ? vals.map(v=>v==='(없음)'?'없음':v).join(', ') : `${vals.length}개 선택`)
+    : defaultLabel;
+  return `<button onclick="openFilterPopup('${field}',this)" style="width:100%;padding:4px 7px;border-radius:7px;font-size:11px;cursor:pointer;font-family:inherit;border:1.5px solid ${active?'#4f8ef7':'#ddd'};background:${active?'#e8f0fe':'#fff'};color:${active?'#1565c0':'#555'};display:flex;justify-content:space-between;align-items:center;gap:4px;"><span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${lbl}</span><span style="font-size:9px;opacity:.5;flex-shrink:0">▾</span></button>`;
 }
 
 function toggleInlineDealType(clientId, type) {
@@ -1560,7 +1572,7 @@ function renderJulgae() {
   const idx = Math.min(G.julgaePeriodIdx, Math.max(0, periods.length - 1));
   const period = periods[idx];
   const q = G.julgaeSearch.toLowerCase();
-  const mf = G.julgaeManager;
+  const mf = G.julgaeManagers || [];
   const pKey = period ? period.id : null;
 
   let baseClients = G.clients.filter(c => c.status !== '해지' && c.status !== '폐업');
@@ -1572,8 +1584,10 @@ function renderJulgae() {
   }
 
   let clients = baseClients;
-  if (mf === '(없음)') clients = clients.filter(c => getManagers(c).length === 0);
-  else if (mf !== '전체') clients = clients.filter(c => getManagers(c).includes(mf));
+  if (mf.length > 0) {
+    const hasNone = mf.includes('(없음)');
+    clients = clients.filter(c => (hasNone && getManagers(c).length===0) || getManagers(c).some(m=>mf.includes(m)));
+  }
   if (q) clients = clients.filter(c => c.name.toLowerCase().includes(q) || c.rep.toLowerCase().includes(q));
 
   const pKey2 = pKey || '';
@@ -1665,9 +1679,7 @@ function renderJulgae() {
       <span>🔍</span>
       <input placeholder="거래처명·대표자 검색" value="${esc(G.julgaeSearch)}" oninput="G.julgaeSearch=this.value;renderJulgae()">
     </div>
-    <select onchange="G.julgaeManager=this.value;renderJulgae()">
-      ${managerSet.map(m => `<option${G.julgaeManager===m?' selected':''}>${m}</option>`).join('')}
-    </select>
+    ${filterPopupBtn('julgaeManagers','담당자')}
     <select onchange="G.julgaeFeeFilter=this.value;renderJulgae()">
       ${['전체','수금','미수금'].map(v=>`<option${G.julgaeFeeFilter===v?' selected':''}>${v}</option>`).join('')}
     </select>
@@ -1771,10 +1783,12 @@ function updateJulgaeNum(pKey, clientId, field, rawVal) {
 
 function bulkJulgae(pKey, val) {
   if (!G.julgae[pKey]) G.julgae[pKey] = {};
-  const mf = G.julgaeManager;
+  const mf = G.julgaeManagers || [];
   let clients = G.clients.filter(c => c.status !== '해지' && c.status !== '폐업');
-  if (mf === '(없음)') clients = clients.filter(c => getManagers(c).length === 0);
-  else if (mf !== '전체') clients = clients.filter(c => getManagers(c).includes(mf));
+  if (mf.length > 0) {
+    const hasNone = mf.includes('(없음)');
+    clients = clients.filter(c => (hasNone && getManagers(c).length===0) || getManagers(c).some(m=>mf.includes(m)));
+  }
   clients.forEach(c => {
     const cur = julgaeVal(pKey, c.id);
     G.julgae[pKey][c.id] = {...cur, d:val, b:val, a:val};
