@@ -278,11 +278,11 @@ let G = {
   clients: [],
   currentTab: 'dashboard',
   searchText: '',
-  filterManager: '전체',
+  filterManagers: [],
   filterTaxType: '전체',
   filterVatType: '전체',
   filterFeeStatus: '전체',
-  filterDealType: '전체',
+  filterDealTypes: [],
   showTerminated: false,
   closureSearch: '',
   julgaeSearch: '',
@@ -320,7 +320,7 @@ const REPORT_TYPE_FILTERS = {
   vat:     c => c.vatType === '일반' || c.vatType === '간이',
   corp:    c => c.taxType === '법인',
   income:  c => c.taxType === '개인' && c.vatType !== '면세',
-  seongsi: c => c.taxType === '개인' && (!!c.seongsi || c.dealType === '성실'),
+  seongsi: c => c.taxType === '개인' && (!!c.seongsi || getDealTypes(c).includes('성실')),
   sajup:   c => c.vatType === '면세',
 };
 
@@ -451,6 +451,19 @@ function dealSortRank(dt) {
   const i = DEAL_SORT_ORDER.indexOf(dt);
   return i >= 0 ? i : DEAL_SORT_ORDER.length;
 }
+function getDealTypes(c) {
+  if (Array.isArray(c.dealTypes) && c.dealTypes.length > 0) return c.dealTypes;
+  if (c.dealType) return [c.dealType];
+  return ['기장'];
+}
+function getManagers(c) {
+  if (Array.isArray(c.managers) && c.managers.length > 0) return c.managers;
+  if (c.manager) return [c.manager];
+  return [];
+}
+function dealSortRankForClient(c) {
+  return Math.min(...getDealTypes(c).map(dt => dealSortRank(dt)));
+}
 
 function groupColor(key) {
   const palette = ['#4f8ef7','#a259ff','#2e7d32','#e65100','#c62828','#1976d2','#795548','#00838f'];
@@ -483,12 +496,17 @@ function filteredClients() {
       if (!c.name.includes(q) && !c.rep.includes(q) && !(c.phone||'').includes(q) &&
           !(c.bizType||'').includes(q) && !(c.bizNo||'').includes(q) && !(c.jumin||'').includes(q)) return false;
     }
-    if (G.filterManager === '(없음)') { if (c.manager) return false; }
-    else if (G.filterManager !== '전체' && c.manager !== G.filterManager) return false;
+    if (G.filterManagers.length > 0) {
+      const hasNone = G.filterManagers.includes('(없음)');
+      const mgrs = getManagers(c);
+      if (!(hasNone && mgrs.length === 0) && !mgrs.some(m => G.filterManagers.includes(m))) return false;
+    }
     if (G.filterTaxType !== '전체' && c.taxType !== G.filterTaxType) return false;
     if (G.filterVatType !== '전체' && c.vatType !== G.filterVatType) return false;
     if (G.filterFeeStatus !== '전체' && c.feeStatus !== G.filterFeeStatus) return false;
-    if (G.filterDealType !== '전체' && c.dealType !== G.filterDealType) return false;
+    if (G.filterDealTypes.length > 0) {
+      if (!getDealTypes(c).some(d => G.filterDealTypes.includes(d))) return false;
+    }
     return true;
   });
 
@@ -500,7 +518,7 @@ function filteredClients() {
   });
   const groupSortKeys = {};
   Object.entries(groupBuckets).forEach(([k, members]) => {
-    const minRank = Math.min(...members.map(c => dealSortRank(c.dealType)));
+    const minRank = Math.min(...members.map(c => dealSortRankForClient(c)));
     const lead = [...members].sort((a,b) => a.name.localeCompare(b.name,'ko'))[0].name;
     groupSortKeys[k] = {rank: minRank, lead};
   });
@@ -512,7 +530,7 @@ function filteredClients() {
       if (ga.rank !== gb.rank) return ga.rank - gb.rank;
       return ga.lead.localeCompare(gb.lead, 'ko');
     }
-    const da = dealSortRank(a.dealType), db = dealSortRank(b.dealType);
+    const da = dealSortRankForClient(a), db = dealSortRankForClient(b);
     if (da !== db) return da - db;
     return a.name.localeCompare(b.name, 'ko');
   });
@@ -565,7 +583,7 @@ function renderDashboard() {
   const feeActive = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업');
 
   // 월정 수수료 (이달 기준)
-  const monthlyClients = feeActive.filter(c=>['기장','고문','성실'].includes(c.dealType)&&(!c.contractDate||c.contractDate.slice(0,7)<=thisYM));
+  const monthlyClients = feeActive.filter(c=>getDealTypes(c).some(d=>['기장','고문','성실'].includes(d))&&(!c.contractDate||c.contractDate.slice(0,7)<=thisYM));
   const monthlyTotal     = monthlyClients.reduce((a,c)=>a+(c.fee||0),0);
   const monthlyCollected = monthlyClients.filter(c=>G.monthlyFees[c.id]?.[thisYM]).reduce((a,c)=>a+(c.fee||0),0);
 
@@ -594,7 +612,7 @@ function renderDashboard() {
   const monthlyUnpaid = monthlyClients.filter(c=>!(G.monthlyFees[c.id]?.[thisYM]));
 
   const feeByManager = MANAGERS.slice(1).map(m=>{
-    const mc = monthlyClients.filter(c=>c.manager===m);
+    const mc = monthlyClients.filter(c=>getManagers(c).includes(m));
     const t = mc.reduce((a,c)=>a+(c.fee||0),0);
     const col = mc.filter(c=>G.monthlyFees[c.id]?.[thisYM]).reduce((a,c)=>a+(c.fee||0),0);
     const p = t>0?Math.round(col/t*100):0;
@@ -609,9 +627,9 @@ function renderDashboard() {
   }).join('');
 
   const managerCards = ['이슬빈','이현주','정여주','최수이'].map(m=>{
-    const mc = G.clients.filter(c=>c.manager===m&&c.status!=='해지'&&c.status!=='폐업');
-    const g = mc.filter(c=>c.dealType==='기장'||c.dealType==='고문').length;
-    const s2 = mc.filter(c=>c.dealType?.includes('신고')||c.dealType==='종소세대리').length;
+    const mc = G.clients.filter(c=>getManagers(c).includes(m)&&c.status!=='해지'&&c.status!=='폐업');
+    const g = mc.filter(c=>getDealTypes(c).some(d=>d==='기장'||d==='고문')).length;
+    const s2 = mc.filter(c=>getDealTypes(c).some(d=>d.includes('신고')||d==='종소세대리')).length;
     return `<div class="stat-card" style="border-top:3px solid #4f8ef7">
       <div class="stat-label">${m}</div>
       <div class="stat-value" style="color:#1a1a2e;font-size:22px">${mc.length}<span style="font-size:11px;color:#aaa;font-weight:400">개</span></div>
@@ -692,7 +710,7 @@ function renderDashboard() {
     <div class="card-title" style="color:#e53935">이달 월정 미수금 (${monthlyUnpaid.length})</div>
     ${monthlyUnpaid.length>0?monthlyUnpaid.map(c=>`
     <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f5f5f5">
-      <div><div style="font-weight:600;font-size:13px">${esc(c.name)}</div><div style="font-size:11px;color:#888">${esc(c.manager)}</div></div>
+      <div><div style="font-weight:600;font-size:13px">${esc(c.name)}</div><div style="font-size:11px;color:#888">${getManagers(c).join(', ')||'-'}</div></div>
       <div style="font-weight:700;color:#e53935;font-size:13px">${(c.fee||0).toLocaleString()}원</div>
     </div>`).join(''):'<div style="color:#aaa;font-size:13px">미수금 없음</div>'}
   </div>
@@ -755,10 +773,10 @@ function renderClients() {
     </tr>
     <tr class="filter-row">
       <th style="padding:4px 6px;font-weight:normal"></th>
-      <th style="padding:4px 6px;font-weight:normal"><select ${filterRowSel} onchange="onFilter('filterDealType',this.value)">${DEAL_TYPES.map(v=>`<option${G.filterDealType===v?' selected':''}>${v}</option>`).join('')}</select></th>
+      <th style="padding:4px 6px;font-weight:normal"><div style="display:flex;flex-wrap:wrap;gap:2px">${DEAL_TYPES.slice(1).map(v=>`<button onclick="toggleFilterDealType('${v}')" style="padding:1px 5px;border-radius:10px;font-size:9px;cursor:pointer;font-family:inherit;border:1.5px solid ${G.filterDealTypes.includes(v)?'#4f8ef7':'#ddd'};background:${G.filterDealTypes.includes(v)?'#e8f0fe':'#f9f9f9'};color:${G.filterDealTypes.includes(v)?'#1565c0':'#777'}">${v}</button>`).join('')}${G.filterDealTypes.length>0?`<button onclick="G.filterDealTypes=[];G.clientPage=0;renderClients()" style="padding:1px 5px;border-radius:10px;font-size:9px;cursor:pointer;font-family:inherit;border:1px solid #fcc;background:#fff;color:#e53935">✕</button>`:''}</div></th>
       <th style="padding:4px 6px;font-weight:normal"><select ${filterRowSel} onchange="onFilter('filterTaxType',this.value)">${TAX_TYPES.map(v=>`<option${G.filterTaxType===v?' selected':''}>${v}</option>`).join('')}</select></th>
       <th style="padding:4px 6px;font-weight:normal"><select ${filterRowSel} onchange="onFilter('filterVatType',this.value)">${VAT_TYPES.map(v=>`<option${G.filterVatType===v?' selected':''}>${v}</option>`).join('')}</select></th>
-      <th style="padding:4px 6px;font-weight:normal"><select ${filterRowSel} onchange="onFilter('filterManager',this.value)">${['전체',...MANAGERS.slice(1),'(없음)'].map(v=>`<option${G.filterManager===v?' selected':''}>${v}</option>`).join('')}</select></th>
+      <th style="padding:4px 6px;font-weight:normal"><div style="display:flex;flex-wrap:wrap;gap:2px">${MANAGERS.slice(1).map(v=>`<button onclick="toggleFilterManager('${v}')" style="padding:1px 5px;border-radius:10px;font-size:9px;cursor:pointer;font-family:inherit;border:1.5px solid ${G.filterManagers.includes(v)?'#4f8ef7':'#ddd'};background:${G.filterManagers.includes(v)?'#e8f0fe':'#f9f9f9'};color:${G.filterManagers.includes(v)?'#1565c0':'#777'}">${v}</button>`).join('')}<button onclick="toggleFilterManager('(없음)')" style="padding:1px 5px;border-radius:10px;font-size:9px;cursor:pointer;font-family:inherit;border:1.5px solid ${G.filterManagers.includes('(없음)')?'#4f8ef7':'#ddd'};background:${G.filterManagers.includes('(없음)')?'#e8f0fe':'#f9f9f9'};color:${G.filterManagers.includes('(없음)')?'#1565c0':'#777'}">없음</button>${G.filterManagers.length>0?`<button onclick="G.filterManagers=[];G.clientPage=0;renderClients()" style="padding:1px 5px;border-radius:10px;font-size:9px;cursor:pointer;font-family:inherit;border:1px solid #fcc;background:#fff;color:#e53935">✕</button>`:''}</div></th>
       ${emptyTh}
       ${emptyTh}
       <th style="padding:4px 6px;font-weight:normal"><select ${filterRowSel} onchange="onFilter('filterFeeStatus',this.value)">${FEE_STATUSES.map(v=>`<option${G.filterFeeStatus===v?' selected':''}>${v}</option>`).join('')}</select></th>
@@ -783,10 +801,10 @@ function renderClients() {
       const groupSub = inGroup ? `<span style="font-size:10px;color:${gc};font-weight:600;margin-left:4px">👥 ${esc(groupLabel)}</span>` : '';
       return `<tr class="client-row" onclick="toggleExpand(${c.id})" style="${inGroup?`border-left:3px solid ${gc}`:''}" >
         <td><div class="td-name">${groupDot}${esc(c.name)}</div><div class="td-sub">${esc(c.rep)}${c.bizType?' · '+esc(c.bizType):''}${groupSub}</div></td>
-        <td>${em?iSel('dealType',DEAL_TYPES.slice(1),c.dealType):dealBadge(c.dealType)}</td>
+        <td>${em?`<div style="display:flex;flex-wrap:wrap;gap:2px">${DEAL_TYPES.slice(1).map(v=>`<button onclick="event.stopPropagation();toggleInlineDealType(${c.id},'${v}')" style="padding:1px 5px;border-radius:10px;font-size:9px;cursor:pointer;font-family:inherit;border:1.5px solid ${getDealTypes(c).includes(v)?'#4f8ef7':'#ddd'};background:${getDealTypes(c).includes(v)?'#e8f0fe':'#f9f9f9'};color:${getDealTypes(c).includes(v)?'#1565c0':'#aaa'}">${v}</button>`).join('')}</div>`:getDealTypes(c).map(d=>dealBadge(d)).join('')}</td>
         <td>${em?iSel('taxType',TAX_TYPES.slice(1),c.taxType):badge(c.taxType,c.taxType==='법인'?'blue':'gray')}</td>
         <td>${em?iSel('vatType',VAT_TYPES.slice(1),c.vatType):badge(c.vatType,c.vatType==='일반'?'blue':c.vatType==='간이'?'orange':'gray')}</td>
-        <td style="color:#555">${em?iSel('manager',MANAGERS.slice(1),c.manager):esc(c.manager||'-')}</td>
+        <td style="color:#555;font-size:12px">${em?`<div style="display:flex;flex-wrap:wrap;gap:2px">${MANAGERS.slice(1).map(v=>`<button onclick="event.stopPropagation();toggleInlineManager(${c.id},'${v}')" style="padding:1px 5px;border-radius:10px;font-size:9px;cursor:pointer;font-family:inherit;border:1.5px solid ${getManagers(c).includes(v)?'#4f8ef7':'#ddd'};background:${getManagers(c).includes(v)?'#e8f0fe':'#f9f9f9'};color:${getManagers(c).includes(v)?'#1565c0':'#aaa'}">${v}</button>`).join('')}</div>`:getManagers(c).join(', ')||'-'}</td>
         <td style="font-weight:600">${em?`<input type="number" onclick="event.stopPropagation()" onchange="event.stopPropagation();updateClientField(${c.id},'fee',this.value)" value="${c.fee||0}" class="inline-edit" style="width:90px">`:(c.status==='정상'||c.status==='주의'?c.fee.toLocaleString()+'원':'-')}</td>
         <td onclick="event.stopPropagation();cycleStatus(${c.id})" style="cursor:pointer">${badge(c.status,c.status==='정상'?'green':c.status==='주의'?'orange':'gray')}</td>
         <td onclick="event.stopPropagation();cycleFeeStatus(${c.id})" style="cursor:pointer">${badge(c.feeStatus,c.feeStatus==='수금완료'?'green':c.feeStatus==='청구완료'?'blue':'red')}</td>
@@ -829,6 +847,31 @@ function clientPageChange(dir) { G.clientPage += dir; renderClients(); }
 function toggleTerminated() { G.showTerminated=!G.showTerminated; renderClients(); }
 function onSearch(v) { G.searchText=v; G.clientPage=0; renderClients(); }
 function onFilter(field,v) { G[field]=v; G.clientPage=0; renderClients(); }
+function toggleFilterDealType(v) {
+  const a = G.filterDealTypes;
+  G.filterDealTypes = a.includes(v) ? a.filter(x=>x!==v) : [...a,v];
+  G.clientPage=0; renderClients();
+}
+function toggleFilterManager(v) {
+  const a = G.filterManagers;
+  G.filterManagers = a.includes(v) ? a.filter(x=>x!==v) : [...a,v];
+  G.clientPage=0; renderClients();
+}
+function toggleInlineDealType(clientId, type) {
+  const c = G.clients.find(x=>x.id===clientId); if(!c) return;
+  const types = getDealTypes(c);
+  if (types.includes(type)) { if (types.length===1) return; c.dealTypes=types.filter(x=>x!==type); }
+  else c.dealTypes=[...types,type];
+  c.dealType=c.dealTypes[0];
+  saveToLS(); renderClients();
+}
+function toggleInlineManager(clientId, manager) {
+  const c = G.clients.find(x=>x.id===clientId); if(!c) return;
+  const mgrs = getManagers(c);
+  c.managers = mgrs.includes(manager) ? mgrs.filter(x=>x!==manager) : [...mgrs,manager];
+  c.manager = c.managers[0]||'';
+  saveToLS(); renderClients();
+}
 function toggleEditMode() { G.editMode=!G.editMode; renderClients(); }
 
 function updateClientField(id, field, value) {
@@ -944,8 +987,8 @@ function openDetail(id) {
         <div class="detail-row"><span class="lbl">연락처</span><span>${esc(c.phone||'-')}</span></div>
         <div class="detail-row"><span class="lbl">업종</span><span>${esc(c.bizType||'-')}</span></div>
         <div class="detail-row"><span class="lbl">관할세무서</span><span>${esc(c.taxOffice||'-')}</span></div>
-        <div class="detail-row"><span class="lbl">담당자</span><span>${esc(c.manager||'-')}</span></div>
-        <div class="detail-row"><span class="lbl">거래유형</span>${dealBadge(c.dealType)}</div>
+        <div class="detail-row"><span class="lbl">담당자</span><span>${getManagers(c).join(', ')||'-'}</span></div>
+        <div class="detail-row"><span class="lbl">거래유형</span>${getDealTypes(c).map(d=>dealBadge(d)).join('')}</div>
         <div class="detail-row"><span class="lbl">과세유형</span><span>${badge(c.taxType,c.taxType==='법인'?'blue':'gray')} ${badge(c.vatType,'gray')}</span></div>
       </div>
     </div>
@@ -980,12 +1023,13 @@ function openForm(id) {
     name:'',rep:'',bizNo:'',jumin:'',relatedGroup:'',phone:'',email:'',
     taxType:'개인',vatType:'일반',bizType:'',taxOffice:'',
     manager:'이슬빈',fee:0,feeStatus:'청구완료',dealType:'기장',
+    dealTypes:['기장'],managers:['이슬빈'],
     contracts:[],status:'정상',dataReceived:false,bookkeeping:false,approved:false,
     memo:'',contractDate:'',terminationDate:'',terminationReason:'',
     closureYear:'',closureTaxFiled:false,closureTaxApproved:false
   };
 
-  window._formData = {...c};
+  window._formData = {...c, dealTypes: getDealTypes(c), managers: getManagers(c)};
 
   function contractsHTML() {
     const avail = availableContracts(window._formData.vatType, window._formData.taxType);
@@ -1037,10 +1081,27 @@ function openForm(id) {
     </div>
 
     <div class="form-grid">
-      ${[['taxType','과세유형',TAX_TYPES.slice(1)],['vatType','부가세유형',VAT_TYPES.slice(1)],['manager','담당자',MANAGERS.slice(1)],['dealType','거래유형',DEAL_TYPES.slice(1)],['feeStatus','수금상태',FEE_STATUSES.slice(1)]].map(([k,l,opts])=>`
-      <div><label class="flabel">${l}</label><select class="fsel" onchange="onFormSelect('${k}',this.value)">
-        ${opts.map(v=>`<option value="${v}"${c[k]===v?' selected':''}>${v}</option>`).join('')}
-      </select></div>`).join('')}
+      <div><label class="flabel">과세유형</label><select class="fsel" onchange="onFormSelect('taxType',this.value)">
+        ${TAX_TYPES.slice(1).map(v=>`<option value="${v}"${c.taxType===v?' selected':''}>${v}</option>`).join('')}
+      </select></div>
+      <div><label class="flabel">부가세유형</label><select class="fsel" onchange="onFormSelect('vatType',this.value)">
+        ${VAT_TYPES.slice(1).map(v=>`<option value="${v}"${c.vatType===v?' selected':''}>${v}</option>`).join('')}
+      </select></div>
+      <div><label class="flabel">수금상태</label><select class="fsel" onchange="onFormSelect('feeStatus',this.value)">
+        ${FEE_STATUSES.slice(1).map(v=>`<option value="${v}"${c.feeStatus===v?' selected':''}>${v}</option>`).join('')}
+      </select></div>
+    </div>
+    <div>
+      <label class="flabel">거래유형 <span style="font-weight:400;color:#aaa">(복수 선택 가능)</span></label>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px" id="form-dealTypes">
+        ${DEAL_TYPES.slice(1).map(v=>`<button type="button" onclick="toggleFormDealType('${v}')" class="contract-chip ${(window._formData.dealTypes||[]).includes(v)?'on':''}">${v}</button>`).join('')}
+      </div>
+    </div>
+    <div>
+      <label class="flabel">담당자 <span style="font-weight:400;color:#aaa">(복수 선택 가능)</span></label>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px" id="form-managers">
+        ${MANAGERS.slice(1).map(v=>`<button type="button" onclick="toggleFormManager('${v}')" class="contract-chip ${(window._formData.managers||[]).includes(v)?'on':''}">${v}</button>`).join('')}
+      </div>
     </div>
 
     <div class="form-grid">
@@ -1121,6 +1182,29 @@ window.onFormSelect = function(field, val) {
   }
 };
 
+window.toggleFormDealType = function(v) {
+  const arr = window._formData.dealTypes || [];
+  if (arr.includes(v)) {
+    if (arr.length === 1) return;
+    window._formData.dealTypes = arr.filter(x=>x!==v);
+  } else {
+    window._formData.dealTypes = [...arr, v];
+  }
+  window._formData.dealType = window._formData.dealTypes[0];
+  document.querySelectorAll('#form-dealTypes .contract-chip').forEach(el=>{
+    el.classList.toggle('on', window._formData.dealTypes.includes(el.textContent.trim()));
+  });
+};
+
+window.toggleFormManager = function(v) {
+  const arr = window._formData.managers || [];
+  window._formData.managers = arr.includes(v) ? arr.filter(x=>x!==v) : [...arr, v];
+  window._formData.manager = window._formData.managers[0] || '';
+  document.querySelectorAll('#form-managers .contract-chip').forEach(el=>{
+    el.classList.toggle('on', window._formData.managers.includes(el.textContent.trim()));
+  });
+};
+
 window.toggleContract = function(key) {
   const c = window._formData.contracts||[];
   window._formData.contracts = c.includes(key)?c.filter(x=>x!==key):[...c,key];
@@ -1172,6 +1256,12 @@ window.saveForm = function(id) {
       if (!confirm(`${lbl}가 이미 등록된 거래처(${juminDup.name})와 중복됩니다.\n${warn}\n\n[확인] 계속 추가  [취소] 돌아가기`)) return;
     }
   }
+
+  // Ensure arrays are set for multi-value fields
+  if (!d.dealTypes || !d.dealTypes.length) d.dealTypes = [d.dealType || '기장'];
+  if (!d.managers) d.managers = [];
+  d.dealType = d.dealTypes[0];
+  d.manager = d.managers[0] || '';
 
   if (id === null) {
     G.clients.push({...d, id: Date.now()});
@@ -1348,7 +1438,7 @@ function registerToPeriod(label, type) {
 function renderClosure() {
   const q = G.closureSearch.toLowerCase();
   const all = G.clients.filter(c=>c.status==='해지'||c.status==='폐업');
-  const terminated = q ? all.filter(c=>c.name.toLowerCase().includes(q)||c.rep.toLowerCase().includes(q)||(c.manager||'').toLowerCase().includes(q)) : all;
+  const terminated = q ? all.filter(c=>c.name.toLowerCase().includes(q)||c.rep.toLowerCase().includes(q)||getManagers(c).join(' ').toLowerCase().includes(q)) : all;
   const closurePending = terminated.filter(c=>c.status==='폐업'&&!c.closureTaxApproved);
   const rLabel = r=>r==='폐업'?'폐업':r==='타회계사무소이전'?'타 사무소 이전':r||'-';
 
@@ -1371,7 +1461,7 @@ function renderClosure() {
     ${closurePending.map(c=>`<div style="background:#fffde7;border-radius:10px;padding:12px 14px;margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;margin-bottom:10px">
         <div><div style="font-weight:700">${esc(c.name)}</div>
-        <div style="font-size:12px;color:#888">${esc(c.rep)} · ${esc(c.taxType)} · 폐업 <b>${esc(c.closureYear||'미입력')}년</b> · ${esc(c.manager)}</div></div>
+        <div style="font-size:12px;color:#888">${esc(c.rep)} · ${esc(c.taxType)} · 폐업 <b>${esc(c.closureYear||'미입력')}년</b> · ${getManagers(c).join(', ')||'-'}</div></div>
         ${badge('신고 미완료','orange')}
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1395,7 +1485,7 @@ function renderClosure() {
       <td style="font-size:12px">${c.status==='폐업'?(c.closureYear?c.closureYear+'년':'-'):'-'}</td>
       <td onclick="event.stopPropagation();c.status==='폐업'&&toggleField(${c.id},'closureTaxFiled')&&renderClosure()">${c.status==='폐업'?chk(c.closureTaxFiled):'<span style="color:#ccc;font-size:12px">해당없음</span>'}</td>
       <td onclick="event.stopPropagation();c.status==='폐업'&&toggleField(${c.id},'closureTaxApproved')&&renderClosure()">${c.status==='폐업'?chk(c.closureTaxApproved):'<span style="color:#ccc;font-size:12px">해당없음</span>'}</td>
-      <td style="color:#555">${esc(c.manager)}</td>
+      <td style="color:#555;font-size:12px">${getManagers(c).join(', ')||'-'}</td>
     </tr>`).join(''):
     '<tr><td colspan="10" style="text-align:center;padding:40px;color:#aaa">해지·폐업 거래처가 없습니다</td></tr>'}
     </tbody>
@@ -1435,8 +1525,8 @@ function renderJulgae() {
   }
 
   let clients = baseClients;
-  if (mf === '(없음)') clients = clients.filter(c => !c.manager);
-  else if (mf !== '전체') clients = clients.filter(c => c.manager === mf);
+  if (mf === '(없음)') clients = clients.filter(c => getManagers(c).length === 0);
+  else if (mf !== '전체') clients = clients.filter(c => getManagers(c).includes(mf));
   if (q) clients = clients.filter(c => c.name.toLowerCase().includes(q) || c.rep.toLowerCase().includes(q));
 
   const pKey2 = pKey || '';
@@ -1452,8 +1542,8 @@ function renderJulgae() {
   const total = clients.length;
   const pct = total ? Math.round(doneCount / total * 100) : 0;
 
-  const managerSet = ['전체', ...new Set(baseClients.map(c=>c.manager).filter(Boolean))];
-  if (baseClients.some(c=>!c.manager)) managerSet.push('(없음)');
+  const managerSet = ['전체', ...new Set(baseClients.flatMap(c=>getManagers(c)))];
+  if (baseClients.some(c=>getManagers(c).length===0)) managerSet.push('(없음)');
 
   const reportLabel = {vat:'부가세(일반·간이)',corp:'법인세(법인)',income:'종소세(개인)',seongsi:'성실신고(개인)',sajup:'사업장현황(면세)',undefined:'전체'};
 
@@ -1568,7 +1658,7 @@ function renderJulgae() {
       return `<tr id="jr-${pKey2}-${c.id}" style="background:${rowBg}">
         <td style="color:#aaa;font-size:11px">${i+1}</td>
         <td><div class="td-name">${esc(c.name)}</div><div class="td-sub">${esc(c.rep)}</div></td>
-        <td style="color:#555;font-size:12px">${esc(c.manager||'-')}</td>
+        <td style="color:#555;font-size:12px">${getManagers(c).join(', ')||'-'}</td>
         <td style="text-align:center" onclick="toggleJulgaeField('${pKey2}',${c.id},'d')">
           <div class="chk ${v.d?'on':''}" style="margin:0 auto;width:24px;height:24px">${v.d?'✓':''}</div>
         </td>
@@ -1636,8 +1726,8 @@ function bulkJulgae(pKey, val) {
   if (!G.julgae[pKey]) G.julgae[pKey] = {};
   const mf = G.julgaeManager;
   let clients = G.clients.filter(c => c.status !== '해지' && c.status !== '폐업');
-  if (mf === '(없음)') clients = clients.filter(c => !c.manager);
-  else if (mf !== '전체') clients = clients.filter(c => c.manager === mf);
+  if (mf === '(없음)') clients = clients.filter(c => getManagers(c).length === 0);
+  else if (mf !== '전체') clients = clients.filter(c => getManagers(c).includes(mf));
   clients.forEach(c => {
     const cur = julgaeVal(pKey, c.id);
     G.julgae[pKey][c.id] = {...cur, d:val, b:val, a:val};
@@ -1657,12 +1747,12 @@ function openEnrollModal(pKey) {
   else if (period.targetType === '개인') pool = pool.filter(c => c.taxType === '개인');
 
   const enrolled = new Set(period.enrolled || []);
-  const managers = [...new Set(pool.map(c => c.manager).filter(Boolean))].sort();
+  const managers = [...new Set(pool.map(c => getManagers(c)[0] || '미지정'))].sort();
 
   // 담당자별 그룹
   const groups = {};
   pool.forEach(c => {
-    const m = c.manager || '미지정';
+    const m = getManagers(c)[0] || '미지정';
     if (!groups[m]) groups[m] = [];
     groups[m].push(c);
   });
@@ -1859,7 +1949,7 @@ function renderFees() {
   // 월정 수수료 대상: 기장/고문/성실 활성 거래처
   const monthlyClients = G.clients.filter(c =>
     c.status !== '해지' && c.status !== '폐업' &&
-    ['기장','고문','성실'].includes(c.dealType)
+    getDealTypes(c).some(d => ['기장','고문','성실'].includes(d))
   );
 
   // 이 달 수임 이후인 거래처만
@@ -1912,8 +2002,8 @@ function renderFees() {
     const collected = G.monthlyFees[c.id]?.[ym] || false;
     return `<tr style="background:${collected?'#e8f5e9':'#fff'}">
       <td><div style="font-weight:600;font-size:13px">${esc(c.name)}</div><div style="font-size:11px;color:#888">${esc(c.rep)}</div></td>
-      <td>${esc(c.dealType||'-')}</td>
-      <td style="color:#555;font-size:12px">${esc(c.manager||'-')}</td>
+      <td>${getDealTypes(c).map(d=>dealBadge(d)).join('')}</td>
+      <td style="color:#555;font-size:12px">${getManagers(c).join(', ')||'-'}</td>
       <td style="font-size:11px;color:#888">${c.contractDate?c.contractDate.slice(0,7):'-'}</td>
       <td style="text-align:right;font-weight:700;color:#7b1fa2">${(c.fee||0).toLocaleString()}원</td>
       <td style="text-align:center" onclick="toggleMonthlyFee(${c.id},'${ym}')">
@@ -2459,7 +2549,7 @@ function exportExcel() {
   const rows = G.clients.map(c=>({
     거래처명:c.name, 대표자:c.rep, 연락처:c.phone, 이메일:c.email||'',
     과세유형:c.taxType, 부가세유형:c.vatType, 업종:c.bizType||'', 관할세무서:c.taxOffice||'',
-    담당자:c.manager, 거래유형:c.dealType, 월수수료:c.fee,
+    담당자:getManagers(c).join(', '), 거래유형:getDealTypes(c).join(', '), 월수수료:c.fee,
     수금상태:c.feeStatus, 수임계약항목:(c.contracts||[]).map(contractLabel).join(', '),
     거래처상태:c.status, 수임일자:c.contractDate||'', 해지일자:c.terminationDate||'',
     해지사유:c.terminationReason||'', 폐업연도:c.closureYear||'',
