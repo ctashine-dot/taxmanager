@@ -260,7 +260,7 @@ function expandClients(mini) {
   return mini.map(m => ({
     id: m.i, name: m.n, rep: m.r, bizNo: '', jumin: '', relatedGroup: '', phone: m.p || '', email: '',
     taxType: m.t, vatType: m.v, bizType: m.b || '', taxOffice: m.o || '',
-    manager: m.m || '', fee: m.f || 0,
+    manager: m.m || '', fee: m.f || 0, feeSingo: m.fs || 0, feeJojung: m.fj || 0, feeSeongsi: m.fse || 0,
     feeStatus: '청구완료', contracts: m.c || [],
     status: '정상', dealType: m.d || '기장',
     dataReceived: false, bookkeeping: false, approved: false,
@@ -326,6 +326,12 @@ const REPORT_TYPE_FILTERS = {
   income:   c => c.taxType === '개인' && c.vatType !== '면세' && !getDealTypes(c).includes('성실'),
   seongsi:  c => getDealTypes(c).includes('성실'),
   sajup:    c => c.vatType === '면세',
+};
+
+// 신고유형별 거래처 수수료 필드 매핑
+const REPORT_FEE_FIELD = {
+  vat:'feeSingo', vat_hak_1:'feeSingo', vat_hak_2:'feeSingo', vat_yej:'feeSingo',
+  sajup:'feeSingo', corp:'feeJojung', income:'feeJojung', seongsi:'feeSeongsi'
 };
 
 function applyReportFilter(clients, period) {
@@ -813,7 +819,7 @@ function renderClients() {
         <td>${em?iSel('taxType',TAX_TYPES.slice(1),c.taxType):badge(c.taxType,c.taxType==='법인'?'blue':'gray')}</td>
         <td>${em?iSel('vatType',VAT_TYPES.slice(1),c.vatType):badge(c.vatType,c.vatType==='일반'?'blue':c.vatType==='간이'?'orange':'gray')}</td>
         <td style="color:#555;font-size:12px">${em?iSel('manager',MANAGERS.slice(1),getManagers(c)[0]||''):getManagers(c).join(', ')||'-'}</td>
-        <td style="font-weight:600">${em?`<input type="number" onclick="event.stopPropagation()" onchange="event.stopPropagation();updateClientField(${c.id},'fee',this.value)" value="${c.fee||0}" class="inline-edit" style="width:90px">`:(c.status==='정상'||c.status==='주의'?c.fee.toLocaleString()+'원':'-')}</td>
+        <td style="font-weight:600;font-size:11px">${em?`<div onclick="event.stopPropagation()" style="display:grid;grid-template-columns:auto 1fr;gap:2px 4px;align-items:center;font-size:10px"><span style="color:#888">기장</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'fee',this.value)" value="${c.fee||0}" class="inline-edit" style="width:65px"><span style="color:#888">신고</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeSingo',this.value)" value="${c.feeSingo||0}" class="inline-edit" style="width:65px"><span style="color:#888">조정</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeJojung',this.value)" value="${c.feeJojung||0}" class="inline-edit" style="width:65px"><span style="color:#888">성실</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeSeongsi',this.value)" value="${c.feeSeongsi||0}" class="inline-edit" style="width:65px"></div>`:(c.status==='정상'||c.status==='주의'?(()=>{const p=[];if(c.fee)p.push('<span style="color:#aaa;font-size:10px">기장</span> '+c.fee.toLocaleString());if(c.feeSingo)p.push('<span style="color:#aaa;font-size:10px">신고</span> '+c.feeSingo.toLocaleString());if(c.feeJojung)p.push('<span style="color:#aaa;font-size:10px">조정</span> '+c.feeJojung.toLocaleString());if(c.feeSeongsi)p.push('<span style="color:#aaa;font-size:10px">성실</span> '+c.feeSeongsi.toLocaleString());return p.length?p.join('<br>'):'-';})():'-')}</td>
         <td onclick="event.stopPropagation();cycleStatus(${c.id})" style="cursor:pointer">${badge(c.status,c.status==='정상'?'green':c.status==='주의'?'orange':'gray')}</td>
         <td onclick="event.stopPropagation();cycleFeeStatus(${c.id})" style="cursor:pointer">${badge(c.feeStatus,c.feeStatus==='수금완료'?'green':c.feeStatus==='청구완료'?'blue':'red')}</td>
         <td style="text-align:center;color:#aaa;font-size:11px" id="expand-arrow-${c.id}">▼</td>
@@ -1184,7 +1190,10 @@ function openDetail(id) {
     ${!isTerminated?`<div class="detail-section">
       <div class="detail-section-title">수수료</div>
       <div class="detail-section-body">
-        <div class="detail-row"><span class="lbl">월 수수료</span><strong>${c.fee.toLocaleString()}원</strong></div>
+        <div class="detail-row"><span class="lbl">기장료</span><strong>${(c.fee||0).toLocaleString()}원</strong></div>
+        <div class="detail-row"><span class="lbl">신고대리</span><strong>${(c.feeSingo||0).toLocaleString()}원</strong></div>
+        <div class="detail-row"><span class="lbl">조정료</span><strong>${(c.feeJojung||0).toLocaleString()}원</strong></div>
+        <div class="detail-row"><span class="lbl">성실신고</span><strong>${(c.feeSeongsi||0).toLocaleString()}원</strong></div>
         <div class="detail-row"><span class="lbl">수금 상태</span>${badge(c.feeStatus,c.feeStatus==='수금완료'?'green':c.feeStatus==='청구완료'?'blue':'red')}</div>
       </div>
     </div>`:''}
@@ -1202,7 +1211,7 @@ function openForm(id) {
   const c = isEdit ? G.clients.find(x=>x.id===id) : {
     name:'',rep:'',bizNo:'',jumin:'',relatedGroup:'',phone:'',email:'',
     taxType:'개인',vatType:'일반',bizType:'',taxOffice:'',
-    manager:'이슬빈',fee:0,feeStatus:'청구완료',dealType:'기장',
+    manager:'이슬빈',fee:0,feeSingo:0,feeJojung:0,feeSeongsi:0,feeStatus:'청구완료',dealType:'기장',
     dealTypes:['기장'],managers:['이슬빈'],
     contracts:[],status:'정상',dataReceived:false,bookkeeping:false,approved:false,
     memo:'',contractDate:'',terminationDate:'',terminationReason:'',
@@ -1304,7 +1313,15 @@ function openForm(id) {
       <div><label class="flabel">관할세무서</label><input class="finput" id="f-taxOffice" value="${esc(c.taxOffice||'')}" oninput="window._formData.taxOffice=this.value"></div>
     </div>
 
-    <div><label class="flabel">월 수수료 (원)</label><input type="number" class="finput" id="f-fee" value="${c.fee||0}" oninput="window._formData.fee=Number(this.value)"></div>
+    <div>
+      <label class="flabel">월 수수료 (원)</label>
+      <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:8px;margin-top:4px">
+        <div><label class="flabel" style="font-size:11px;color:#888;margin-bottom:2px">기장료</label><input type="number" class="finput" id="f-fee" value="${c.fee||0}" oninput="window._formData.fee=Number(this.value)"></div>
+        <div><label class="flabel" style="font-size:11px;color:#888;margin-bottom:2px">신고대리</label><input type="number" class="finput" id="f-feeSingo" value="${c.feeSingo||0}" oninput="window._formData.feeSingo=Number(this.value)"></div>
+        <div><label class="flabel" style="font-size:11px;color:#888;margin-bottom:2px">조정료</label><input type="number" class="finput" id="f-feeJojung" value="${c.feeJojung||0}" oninput="window._formData.feeJojung=Number(this.value)"></div>
+        <div><label class="flabel" style="font-size:11px;color:#888;margin-bottom:2px">성실신고</label><input type="number" class="finput" id="f-feeSeongsi" value="${c.feeSeongsi||0}" oninput="window._formData.feeSeongsi=Number(this.value)"></div>
+      </div>
+    </div>
 
     <div style="border:1.5px solid #e0e0e0;border-radius:10px;overflow:hidden">
       <div style="background:#f8f9ff;padding:9px 14px;font-size:12px;font-weight:700;color:#555;border-bottom:1px solid #e8eaf6">
@@ -1753,26 +1770,44 @@ function renderJulgae() {
 
   const reportLabel = {vat:'부가세(일반·간이)',vat_hak_1:'부가세 확정1기(일반)',vat_hak_2:'부가세 확정2기(일반+간이)',vat_yej:'부가세 예정(법인 일반)',corp:'법인세(법인)',income:'종소세(개인,성실제외)',seongsi:'성실신고(성실)',sajup:'사업장현황(면세)',undefined:'전체'};
 
-  // 전년도 동일 신고 데이터
-  const prevPeriods = period ? prevYearPeriods(period) : [];
-  const prevMap = {}; // clientId → {revenue, fee}
-  if (prevPeriods.length > 0) {
-    prevPeriods.forEach(pp => {
-      const ppData = G.julgae[pp.id] || {};
-      Object.entries(ppData).forEach(([cidStr, v]) => {
-        const cid = Number(cidStr);
-        if (!prevMap[cid]) prevMap[cid] = {revenue:0, fee:0};
-        prevMap[cid].revenue += (v&&v.revenue)||0;
-        prevMap[cid].fee     += (v&&v.fee)||0;
-      });
+  // 전년도 동일 신고 데이터 (3개년: 전년·전전년)
+  const _yrMatch = (period?.label||'').match(/^(\d{2})년/);
+  const _baseYr = _yrMatch ? 2000 + Number(_yrMatch[1]) : 0;
+  const prevPeriods1 = period ? prevYearPeriods(period) : [];
+  const prevPeriods2 = (_baseYr > 0 && period) ? G.periods.filter(p => {
+    if (p.reportType !== period.reportType) return false;
+    const m2 = (p.label||'').match(/^(\d{2})년/);
+    return m2 && (2000 + Number(m2[1])) === _baseYr - 2;
+  }) : [];
+  const prevPeriods = [...prevPeriods1, ...prevPeriods2];
+  const prevMap1 = {}, prevMap2 = {};
+  prevPeriods1.forEach(pp => {
+    const ppData = G.julgae[pp.id] || {};
+    Object.entries(ppData).forEach(([cidStr, v]) => {
+      const cid = Number(cidStr);
+      if (!prevMap1[cid]) prevMap1[cid] = {revenue:0, salesAmount:0, fee:0};
+      prevMap1[cid].revenue     += (v&&v.revenue)||0;
+      prevMap1[cid].salesAmount += (v&&v.salesAmount)||0;
+      prevMap1[cid].fee         += (v&&v.fee)||0;
     });
-  }
+  });
+  prevPeriods2.forEach(pp => {
+    const ppData = G.julgae[pp.id] || {};
+    Object.entries(ppData).forEach(([cidStr, v]) => {
+      const cid = Number(cidStr);
+      if (!prevMap2[cid]) prevMap2[cid] = {revenue:0, salesAmount:0, fee:0};
+      prevMap2[cid].revenue     += (v&&v.revenue)||0;
+      prevMap2[cid].salesAmount += (v&&v.salesAmount)||0;
+      prevMap2[cid].fee         += (v&&v.fee)||0;
+    });
+  });
 
   const rt = period ? (period.reportType||'') : '';
   const isIncomeType = ['corp','income','seongsi'].includes(rt);
   const isVatType = ['vat','vat_hak_1','vat_hak_2','vat_yej'].includes(rt);
   const isSajupType = rt === 'sajup';
   const totalCols = isIncomeType ? 15 : isVatType ? 11 : isSajupType ? 10 : 11;
+  const feeFieldKey = REPORT_FEE_FIELD[rt] || 'fee';
   const niInput = (cid, field, val, extraStyle='') =>
     `<input type="number" class="julgae-num-input" value="${val||''}" placeholder="0"
       onchange="updateJulgaeNum('${pKey2}',${cid},'${field}',this.value)"
@@ -1872,7 +1907,7 @@ function renderJulgae() {
     <button class="btn-sm" style="background:#fdecea;color:#c62828;border:1.5px solid #ef9a9a" onclick="bulkJulgae('${pKey}',false)">전체 해제</button>
   </div>
 
-  ${prevPeriods.length>0?`<div style="font-size:12px;color:#888;background:#fffde7;padding:6px 12px;border-radius:8px;margin-bottom:10px">💡 전년도 동기(${prevPeriods.map(p=>esc(p.label)).join(', ')}) 수입금액·수수료청구액이 참고로 표시됩니다.</div>`:''}
+  ${prevPeriods.length>0?`<div style="font-size:12px;color:#888;background:#fffde7;padding:6px 12px;border-radius:8px;margin-bottom:10px">💡 과거 동기(${prevPeriods.map(p=>esc(p.label)).join(', ')}) 수입금액·수수료청구액이 참고로 표시됩니다. (전년·전전년)</div>`:''}
 
   <div class="tbl-wrap">
   <table>
@@ -1909,9 +1944,19 @@ function renderJulgae() {
     <tbody>
     ${clients.map((c, i) => {
       const v = julgaeVal(pKey2, c.id);
-      const prev = prevMap[c.id];
-      const prevRevTxt = prev&&prev.revenue ? `<div style="font-size:10px;color:#aaa">전년:${prev.revenue.toLocaleString()}</div>` : '';
-      const prevFeeTxt = prev&&prev.fee ? `<div style="font-size:10px;color:#aaa">전년:${prev.fee.toLocaleString()}</div>` : '';
+      const prev1 = prevMap1[c.id];
+      const prev2 = prevMap2[c.id];
+      const _prevRevVal1 = isVatType ? (prev1?.salesAmount||0) : (prev1?.revenue||0);
+      const _prevRevVal2 = isVatType ? (prev2?.salesAmount||0) : (prev2?.revenue||0);
+      const prevRevTxt = [
+        _prevRevVal1 ? `<div style="font-size:10px;color:#aaa">전년:${_prevRevVal1.toLocaleString()}</div>` : '',
+        _prevRevVal2 ? `<div style="font-size:10px;color:#aaa">전전년:${_prevRevVal2.toLocaleString()}</div>` : ''
+      ].join('');
+      const prevFeeTxt = [
+        prev1?.fee ? `<div style="font-size:10px;color:#aaa">전년:${prev1.fee.toLocaleString()}</div>` : '',
+        prev2?.fee ? `<div style="font-size:10px;color:#aaa">전전년:${prev2.fee.toLocaleString()}</div>` : ''
+      ].join('');
+      const autoFee = v.fee || (c[feeFieldKey] || 0);
       const rowBg = v.s?'#e8f5e9':v.a?'#f1f8e9':'#fff';
       const margin = (v.revenue&&v.income) ? (v.income/v.revenue*100).toFixed(1) : null;
       return `<tr id="jr-${pKey2}-${c.id}" style="background:${rowBg}">
@@ -1948,7 +1993,7 @@ function renderJulgae() {
           <td style="text-align:right;padding:4px 8px">${niInput(c.id,'taxBase',v.taxBase)}</td>
         `}
         <td style="text-align:right;padding:4px 8px">
-          ${niInput(c.id,'fee',v.fee,v.fee?'font-weight:700;color:#7b1fa2':'')}
+          ${niInput(c.id,'fee',autoFee,autoFee?'font-weight:700;color:#7b1fa2':'')}
           ${prevFeeTxt}
         </td>
         <td style="text-align:center" onclick="toggleJulgaeField('${pKey2}',${c.id},'s')">
@@ -1978,6 +2023,14 @@ function updateJulgaeNum(pKey, clientId, field, rawVal) {
   const cur = julgaeVal(pKey, clientId);
   cur[field] = Number(rawVal) || 0;
   G.julgae[pKey][clientId] = cur;
+  if (field === 'fee') {
+    const period = G.periods.find(p => p.id === pKey);
+    const feeField = period && REPORT_FEE_FIELD[period.reportType];
+    if (feeField) {
+      const client = G.clients.find(c => c.id === clientId);
+      if (client) client[feeField] = Number(rawVal) || 0;
+    }
+  }
   saveToLS();
   if (G.currentTab === 'fees') renderFees();
   else if (G.currentTab === 'dashboard') renderDashboard();
