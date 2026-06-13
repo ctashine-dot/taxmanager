@@ -258,7 +258,7 @@ async function decompressB64(b64) {
 
 function expandClients(mini) {
   return mini.map(m => ({
-    id: m.i, name: m.n, rep: m.r, bizNo: '', jumin: '', phone: m.p || '', email: '',
+    id: m.i, name: m.n, rep: m.r, bizNo: '', jumin: '', relatedGroup: '', phone: m.p || '', email: '',
     taxType: m.t, vatType: m.v, bizType: m.b || '', taxOffice: m.o || '',
     manager: m.m || '', fee: m.f || 0,
     feeStatus: '청구완료', contracts: m.c || [],
@@ -452,8 +452,31 @@ function dealSortRank(dt) {
   return i >= 0 ? i : DEAL_SORT_ORDER.length;
 }
 
+function groupColor(key) {
+  const palette = ['#4f8ef7','#a259ff','#2e7d32','#e65100','#c62828','#1976d2','#795548','#00838f'];
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) & 0xffff;
+  return palette[h % palette.length];
+}
+
+function buildClientGroupMap(allClients) {
+  const repCount = {};
+  allClients.forEach(c => {
+    if (c.status === '해지' || c.status === '폐업') return;
+    const r = (c.rep || '').trim();
+    if (r) repCount[r] = (repCount[r] || 0) + 1;
+  });
+  return function getGroupKey(c) {
+    if (c.relatedGroup && c.relatedGroup.trim()) return 'G:' + c.relatedGroup.trim();
+    const r = (c.rep || '').trim();
+    if (r && repCount[r] > 1) return 'R:' + r;
+    return 'S:' + c.id;
+  };
+}
+
 function filteredClients() {
-  return G.clients.filter(c => {
+  const getGroupKey = buildClientGroupMap(G.clients);
+  const list = G.clients.filter(c => {
     if (!G.showTerminated && (c.status==='해지'||c.status==='폐업')) return false;
     if (G.searchText) {
       const q = G.searchText;
@@ -467,11 +490,31 @@ function filteredClients() {
     if (G.filterFeeStatus !== '전체' && c.feeStatus !== G.filterFeeStatus) return false;
     if (G.filterDealType !== '전체' && c.dealType !== G.filterDealType) return false;
     return true;
-  }).sort((a, b) => {
-    const da = dealSortRank(a.dealType);
-    const db = dealSortRank(b.dealType);
+  });
+
+  const groupBuckets = {};
+  list.forEach(c => {
+    const k = getGroupKey(c);
+    if (!groupBuckets[k]) groupBuckets[k] = [];
+    groupBuckets[k].push(c);
+  });
+  const groupSortKeys = {};
+  Object.entries(groupBuckets).forEach(([k, members]) => {
+    const minRank = Math.min(...members.map(c => dealSortRank(c.dealType)));
+    const lead = [...members].sort((a,b) => a.name.localeCompare(b.name,'ko'))[0].name;
+    groupSortKeys[k] = {rank: minRank, lead};
+  });
+
+  return list.sort((a, b) => {
+    const ka = getGroupKey(a), kb = getGroupKey(b);
+    if (ka !== kb) {
+      const ga = groupSortKeys[ka], gb = groupSortKeys[kb];
+      if (ga.rank !== gb.rank) return ga.rank - gb.rank;
+      return ga.lead.localeCompare(gb.lead, 'ko');
+    }
+    const da = dealSortRank(a.dealType), db = dealSortRank(b.dealType);
     if (da !== db) return da - db;
-    return (a.name || '').localeCompare(b.name || '', 'ko');
+    return a.name.localeCompare(b.name, 'ko');
   });
 }
 
@@ -723,13 +766,23 @@ function renderClients() {
     </tr>
     </thead>
     <tbody>
-    ${pageList.map(c=>{
+    ${(()=>{
+      const getGroupKey = buildClientGroupMap(G.clients);
+      const groupCounts = {};
+      pageList.forEach(c => { const k=getGroupKey(c); groupCounts[k]=(groupCounts[k]||0)+1; });
+      return pageList.map(c=>{
       const contracts = (c.contracts||[]).map(k=>contractLabel(k)).join(', ');
       const em = G.editMode;
       const iSel = (field,opts,val)=>`<select onclick="event.stopPropagation()" onchange="event.stopPropagation();updateClientField(${c.id},'${field}',this.value)" class="inline-edit">${opts.map(v=>`<option${val===v?' selected':''}>${esc(v)}</option>`).join('')}</select>`;
       const iInput = (field,val,attrs='')=>`<input ${attrs} onclick="event.stopPropagation()" onchange="event.stopPropagation();updateClientField(${c.id},'${field}',this.value)" value="${esc(val||'')}" class="inline-edit">`;
-      return `<tr class="client-row" onclick="toggleExpand(${c.id})">
-        <td><div class="td-name">${esc(c.name)}</div><div class="td-sub">${esc(c.rep)}${c.bizType?' · '+esc(c.bizType):''}</div></td>
+      const gk = getGroupKey(c);
+      const inGroup = groupCounts[gk] > 1;
+      const gc = inGroup ? groupColor(gk) : null;
+      const groupLabel = inGroup ? (c.relatedGroup && c.relatedGroup.trim() ? c.relatedGroup.trim() : c.rep) : null;
+      const groupDot = inGroup ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${gc};margin-right:5px;vertical-align:middle"></span>` : '';
+      const groupSub = inGroup ? `<span style="font-size:10px;color:${gc};font-weight:600;margin-left:4px">👥 ${esc(groupLabel)}</span>` : '';
+      return `<tr class="client-row" onclick="toggleExpand(${c.id})" style="${inGroup?`border-left:3px solid ${gc}`:''}" >
+        <td><div class="td-name">${groupDot}${esc(c.name)}</div><div class="td-sub">${esc(c.rep)}${c.bizType?' · '+esc(c.bizType):''}${groupSub}</div></td>
         <td>${em?iSel('dealType',DEAL_TYPES.slice(1),c.dealType):dealBadge(c.dealType)}</td>
         <td>${em?iSel('taxType',TAX_TYPES.slice(1),c.taxType):badge(c.taxType,c.taxType==='법인'?'blue':'gray')}</td>
         <td>${em?iSel('vatType',VAT_TYPES.slice(1),c.vatType):badge(c.vatType,c.vatType==='일반'?'blue':c.vatType==='간이'?'orange':'gray')}</td>
@@ -751,6 +804,7 @@ function renderClients() {
             ${contracts?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">수임항목</div><div style="font-size:12px;color:#555">${esc(contracts)}</div></div>`:''}
             ${c.memo?`<div style="max-width:240px"><div style="font-size:11px;color:#888;margin-bottom:3px">메모</div><div style="font-size:12px;color:#555">${esc(c.memo)}</div></div>`:''}
             ${c.seongsi?`<div>${badge('성실신고','purple')}</div>`:''}
+            ${inGroup?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">관계회사 그룹</div><div style="font-weight:600;font-size:12px;color:${gc}">👥 ${esc(groupLabel)}</div>${em?`<div style="margin-top:4px">${iInput('relatedGroup',c.relatedGroup,'placeholder="그룹명" style="width:140px"')}</div>`:''}</div>`:(em?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">관계회사 그룹</div>${iInput('relatedGroup',c.relatedGroup,'placeholder="그룹명 입력" style="width:140px"')}</div>`:'')}
             <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
               <button class="btn-sm" style="background:#f0f4ff;color:#4f8ef7" onclick="event.stopPropagation();openForm(${c.id})">✏ 수정</button>
               <button class="btn-sm" style="background:#fdecea;color:#c62828;border:1px solid #ef9a9a" onclick="event.stopPropagation();deleteClient(${c.id})">🗑 삭제</button>
@@ -758,7 +812,8 @@ function renderClients() {
           </div>
         </td>
       </tr>`;
-    }).join('')}
+      }).join('');
+    })()}
     ${pageList.length===0?'<tr><td colspan="9" style="text-align:center;padding:40px;color:#aaa">검색 결과가 없습니다</td></tr>':''}
     </tbody>
   </table>
@@ -922,7 +977,7 @@ function openDetail(id) {
 function openForm(id) {
   const isEdit = id !== null;
   const c = isEdit ? G.clients.find(x=>x.id===id) : {
-    name:'',rep:'',bizNo:'',jumin:'',phone:'',email:'',
+    name:'',rep:'',bizNo:'',jumin:'',relatedGroup:'',phone:'',email:'',
     taxType:'개인',vatType:'일반',bizType:'',taxOffice:'',
     manager:'이슬빈',fee:0,feeStatus:'청구완료',dealType:'기장',
     contracts:[],status:'정상',dataReceived:false,bookkeeping:false,approved:false,
@@ -973,6 +1028,12 @@ function openForm(id) {
     <div class="form-grid">
       <div><label class="flabel">사업자등록번호</label><input class="finput" id="f-bizNo" value="${esc(c.bizNo||'')}" placeholder="000-00-00000" oninput="window._formData.bizNo=this.value"></div>
       <div><label class="flabel" id="f-jumin-label">${c.taxType==='법인'?'법인등록번호':'주민등록번호'}</label><input class="finput" id="f-jumin" value="${esc(c.jumin||'')}" placeholder="000000-0000000" oninput="window._formData.jumin=this.value"></div>
+    </div>
+
+    <div>
+      <label class="flabel">관계회사 그룹 <span style="font-weight:400;color:#aaa">(같은 이름 입력 시 관계회사로 묶임)</span></label>
+      <input class="finput" id="f-relatedGroup" value="${esc(c.relatedGroup||'')}" placeholder="예: 홍길동그룹 (비워두면 자동 감지)" oninput="window._formData.relatedGroup=this.value" list="related-group-list">
+      <datalist id="related-group-list">${[...new Set(G.clients.map(c=>c.relatedGroup).filter(Boolean))].map(g=>`<option value="${esc(g)}">`).join('')}</datalist>
     </div>
 
     <div class="form-grid">
