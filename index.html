@@ -1791,9 +1791,6 @@ function renderJulgae() {
   const dataCount   = clients.filter(c => julgaeVal(pKey2, c.id).d).length;
   const bookCount   = clients.filter(c => julgaeVal(pKey2, c.id).b).length;
   const doneCount   = clients.filter(c => julgaeVal(pKey2, c.id).a).length;
-  const _jFeeSum   = c => { const v=julgaeVal(pKey2,c.id); return (v.fee||0)+(rt==='seongsi'?(v.feeSeongsi||0):0); };
-  const feeTotal    = clients.reduce((a,c) => a + _jFeeSum(c), 0);
-  const feeCollected= clients.filter(c => julgaeVal(pKey2,c.id).s).reduce((a,c) => a + _jFeeSum(c), 0);
   const total = clients.length;
   const pct = total ? Math.round(doneCount / total * 100) : 0;
 
@@ -1841,6 +1838,9 @@ function renderJulgae() {
   const isSeongsiType = rt === 'seongsi';
   const totalCols = isSeongsiType ? 16 : isIncomeType ? 15 : isVatType ? 11 : isSajupType ? 10 : 11;
   const feeFieldKey = REPORT_FEE_FIELD[rt] || 'fee';
+  const _jFeeSum    = c => { const v=julgaeVal(pKey2,c.id); return (v.fee||0)+(isSeongsiType?(v.feeSeongsi||0):0); };
+  const feeTotal    = clients.reduce((a,c) => a + _jFeeSum(c), 0);
+  const feeCollected= clients.filter(c => julgaeVal(pKey2,c.id).s).reduce((a,c) => a + _jFeeSum(c), 0);
   const niInput = (cid, field, val, extraStyle='') =>
     `<input type="number" class="julgae-num-input" value="${val||''}" placeholder="0"
       onchange="updateJulgaeNum('${pKey2}',${cid},'${field}',this.value)"
