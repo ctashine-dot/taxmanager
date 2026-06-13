@@ -746,7 +746,7 @@ function renderClients() {
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">관할세무서</div>${em?iInput('taxOffice',c.taxOffice,'list="taxoffice-list" placeholder="세무서 선택·입력" style="width:150px"'):`<div style="font-weight:600">${esc(c.taxOffice||'-')}</div>`}</div>
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">수임일자</div>${em?iInput('contractDate',c.contractDate,'type="date"'):`<div style="font-weight:600">${esc(c.contractDate||'-')}</div>`}</div>
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">사업자번호</div>${em?iInput('bizNo',c.bizNo,'placeholder="000-00-00000" style="width:130px"'):`<div style="font-weight:600;font-family:monospace">${esc(c.bizNo||'-')}</div>`}</div>
-            <div><div style="font-size:11px;color:#888;margin-bottom:3px">주민번호 (개인)</div>${em?iInput('jumin',c.jumin,'placeholder="000000-0000000" style="width:150px"'):`<div style="font-weight:600;font-family:monospace">${c.jumin?esc(c.jumin.slice(0,6)+'-'+c.jumin.slice(6,7)+'••••••'):'-'}</div>`}</div>
+            <div><div style="font-size:11px;color:#888;margin-bottom:3px">${c.taxType==='법인'?'법인등록번호':'주민번호'}</div>${em?iInput('jumin',c.jumin,'placeholder="000000-0000000" style="width:150px"'):`<div style="font-weight:600;font-family:monospace">${c.jumin?esc(c.jumin.slice(0,6)+'-'+c.jumin.slice(6,7)+'••••••'):'-'}</div>`}</div>
             ${c.status==='해지'||c.status==='폐업'?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">해지/폐업일</div><div style="font-weight:600;color:#c62828">${esc(c.terminationDate||'-')}</div></div>`:''}
             ${contracts?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">수임항목</div><div style="font-size:12px;color:#555">${esc(contracts)}</div></div>`:''}
             ${c.memo?`<div style="max-width:240px"><div style="font-size:11px;color:#888;margin-bottom:3px">메모</div><div style="font-size:12px;color:#555">${esc(c.memo)}</div></div>`:''}
@@ -972,7 +972,7 @@ function openForm(id) {
 
     <div class="form-grid">
       <div><label class="flabel">사업자등록번호</label><input class="finput" id="f-bizNo" value="${esc(c.bizNo||'')}" placeholder="000-00-00000" oninput="window._formData.bizNo=this.value"></div>
-      <div><label class="flabel">주민등록번호 (개인)</label><input class="finput" id="f-jumin" value="${esc(c.jumin||'')}" placeholder="000000-0000000" oninput="window._formData.jumin=this.value"></div>
+      <div><label class="flabel" id="f-jumin-label">${c.taxType==='법인'?'법인등록번호':'주민등록번호'}</label><input class="finput" id="f-jumin" value="${esc(c.jumin||'')}" placeholder="000000-0000000" oninput="window._formData.jumin=this.value"></div>
     </div>
 
     <div class="form-grid">
@@ -1024,6 +1024,10 @@ function openForm(id) {
 
 window.onFormSelect = function(field, val) {
   window._formData[field] = val;
+  if (field === 'taxType') {
+    const lbl = document.getElementById('f-jumin-label');
+    if (lbl) lbl.textContent = val === '법인' ? '법인등록번호' : '주민등록번호';
+  }
   if (field==='taxType'||field==='vatType') {
     // remove incompatible contracts
     const avail = CONTRACT_GROUPS.flatMap(g=>g.items).filter(i=>{
@@ -1095,12 +1099,16 @@ window.saveForm = function(id) {
     }
   }
 
-  // 주민번호 중복 검사
+  // 주민번호/법인등록번호 중복 검사
   const jn = (d.jumin||'').replace(/[-\s]/g,'');
   if (jn) {
     const juminDup = G.clients.find(c => c.id !== id && c.jumin && c.jumin.replace(/[-\s]/g,'') === jn);
     if (juminDup) {
-      if (!confirm(`주민번호가 이미 등록된 거래처(${juminDup.name})와 중복됩니다.\n소득세는 개인별로 신고하므로 중복 신고가 발생할 수 있습니다.\n\n[확인] 계속 추가  [취소] 돌아가기`)) return;
+      const lbl = d.taxType === '법인' ? '법인등록번호' : '주민번호';
+      const warn = d.taxType === '법인'
+        ? '법인세는 법인별로 신고하므로 중복 신고가 발생할 수 있습니다.'
+        : '소득세는 개인별로 신고하므로 중복 신고가 발생할 수 있습니다.';
+      if (!confirm(`${lbl}가 이미 등록된 거래처(${juminDup.name})와 중복됩니다.\n${warn}\n\n[확인] 계속 추가  [취소] 돌아가기`)) return;
     }
   }
 
@@ -1723,7 +1731,8 @@ function saveEnrollment(pKey) {
     }
   }
 
-  if (isIncome) {
+  const isCorpTax = period.reportType === 'corp';
+  if (isIncome || isCorpTax) {
     const juminGroups = {};
     enrolledClients.forEach(c => {
       const key = (c.jumin||'').replace(/[-\s]/g,'');
@@ -1734,7 +1743,9 @@ function saveEnrollment(pKey) {
     const dups = Object.values(juminGroups).filter(g => g.length > 1);
     if (dups.length > 0) {
       const dupMsg = dups.map(g => `  · ${g.map(c=>c.name).join(', ')}`).join('\n');
-      alert(`소득세는 개인별로 신고합니다. 동일 주민번호 중복이 있습니다:\n${dupMsg}\n\n중복 여부를 직접 확인하고 제거해 주세요.`);
+      const lbl = isCorpTax ? '법인등록번호' : '주민번호';
+      const taxLabel = isCorpTax ? '법인세는 법인별로' : '소득세는 개인별로';
+      alert(`${taxLabel} 신고합니다. 동일 ${lbl} 중복이 있습니다:\n${dupMsg}\n\n중복 여부를 직접 확인하고 제거해 주세요.`);
     }
   }
 
