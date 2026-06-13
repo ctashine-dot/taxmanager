@@ -293,6 +293,7 @@ let G = {
   editMode: false,
   periods: [],
   julgae: {},
+  invoiceData: {},
   monthlyFees: {},
   feesYM: '',
   settings: {
@@ -359,14 +360,16 @@ function saveToLS() {
     localStorage.setItem('tm_julgae', JSON.stringify(G.julgae));
     localStorage.setItem('tm_settings', JSON.stringify(G.settings));
     localStorage.setItem('tm_monthlyFees', JSON.stringify(G.monthlyFees));
+    localStorage.setItem('tm_invoiceData', JSON.stringify(G.invoiceData||{}));
   } catch(e) {}
   if (G.user) {
     fbDb.ref('taxmanager/' + G.user.uid).set({
-      clients:  JSON.stringify(G.clients),
-      periods:  JSON.stringify(G.periods),
-      julgae:   JSON.stringify(G.julgae),
-      settings: JSON.stringify(G.settings),
+      clients:     JSON.stringify(G.clients),
+      periods:     JSON.stringify(G.periods),
+      julgae:      JSON.stringify(G.julgae),
+      settings:    JSON.stringify(G.settings),
       monthlyFees: JSON.stringify(G.monthlyFees),
+      invoiceData: JSON.stringify(G.invoiceData||{}),
     }).catch(e => console.error('Firebase 저장 실패:', e));
   }
 }
@@ -753,6 +756,7 @@ function renderClients() {
     <div style="display:flex;gap:8px">
       <button class="btn-sm" style="background:${G.editMode?'#e8f5e9':'#f5f5f5'};color:${G.editMode?'#2e7d32':'#888'};border:2px solid ${G.editMode?'#43a047':'#e0e0e0'}" onclick="toggleEditMode()">${G.editMode?'✓ 수정모드 ON':'✏ 수정모드'}</button>
       <button class="btn-sm" style="background:${G.showTerminated?'#fff3e0':'#f5f5f5'};color:${G.showTerminated?'#e65100':'#888'};border:2px solid ${G.showTerminated?'#ffcc02':'#e0e0e0'}" onclick="toggleTerminated()">${G.showTerminated?'▲ 해지·폐업 숨기기':'해지·폐업 보기 ('+terminated+')'}</button>
+      <button class="btn-sm" style="background:#f0f8ff;color:#1565c0;border:1.5px solid #90caf9" onclick="openImportModal()">📥 세무사랑 가져오기</button>
       <button class="btn-primary btn-sm" onclick="openForm(null)" style="padding:8px 14px">+ 거래처 추가</button>
     </div>
   </div>
@@ -1074,6 +1078,7 @@ function openDetail(id) {
       </div>
     </div>`:''}
     ${c.memo?`<div class="detail-section"><div class="detail-section-title">메모</div><div style="font-size:14px;color:#555;line-height:1.6;background:#fafbff;border-radius:8px;padding:10px 14px">${esc(c.memo)}</div></div>`:''}
+    ${(()=>{const inv=G.invoiceData&&G.invoiceData[c.id];if(!inv||!inv.periods||Object.keys(inv.periods).length===0)return'';const entries=Object.entries(inv.periods);return`<div class="detail-section"><div class="detail-section-title">🧾 세금계산서 현황</div><div class="detail-section-body">${entries.map(([period,d])=>`<div style="padding:8px 0;border-bottom:1px solid #f0f0f0"><div style="font-size:11px;color:#888;margin-bottom:4px">${esc(period)}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:12px"><div><span style="color:#888">매출</span> <b>${(d.salesCount||0)}건</b> ${(d.salesAmount||0).toLocaleString()}원</div><div><span style="color:#888">매입</span> <b>${(d.purchaseCount||0)}건</b> ${(d.purchaseAmount||0).toLocaleString()}원</div></div></div>`).join('')}<div style="font-size:11px;color:#aaa;padding-top:6px">최종 가져오기: ${esc(inv.lastImported||'-')}</div></div></div>`;})()}
   </div>
   </div>`);
 }
@@ -2894,6 +2899,7 @@ async function loadFromFirebase() {
       G.julgae      = data.julgae      ? JSON.parse(data.julgae)      : {};
       G.settings    = data.settings    ? JSON.parse(data.settings)    : G.settings;
       G.monthlyFees = data.monthlyFees ? JSON.parse(data.monthlyFees) : {};
+      G.invoiceData = data.invoiceData ? JSON.parse(data.invoiceData) : {};
     } else {
       // 신규 계정: 로컬스토리지 데이터 마이그레이션 시도
       const saved = localStorage.getItem('tm_clients');
@@ -2907,6 +2913,8 @@ async function loadFromFirebase() {
         if (ss) G.settings = JSON.parse(ss);
         const smf = localStorage.getItem('tm_monthlyFees');
         G.monthlyFees = smf ? JSON.parse(smf) : {};
+        const sid = localStorage.getItem('tm_invoiceData');
+        G.invoiceData = sid ? JSON.parse(sid) : {};
         saveToLS(); // Firebase에 업로드
       } else {
         const json = await decompressB64(CLIENTS_B64);
@@ -2926,6 +2934,8 @@ async function loadFromFirebase() {
     if (ss) G.settings = JSON.parse(ss);
     const smf = localStorage.getItem('tm_monthlyFees');
     G.monthlyFees = smf ? JSON.parse(smf) : {};
+    const sid2 = localStorage.getItem('tm_invoiceData');
+    G.invoiceData = sid2 ? JSON.parse(sid2) : {};
   }
   migrateJulgae();
   if (G.settings.managers) MANAGERS = ['전체', ...G.settings.managers];
