@@ -486,6 +486,7 @@ function buildClientGroupMap(allClients) {
     if (r) repCount[r] = (repCount[r] || 0) + 1;
   });
   return function getGroupKey(c) {
+    if (c.soloGroup) return 'S:' + c.id;
     if (c.relatedGroup && c.relatedGroup.trim()) return 'G:' + c.relatedGroup.trim();
     const r = (c.rep || '').trim();
     if (r && repCount[r] > 1) return 'R:' + r;
@@ -829,7 +830,7 @@ function renderClients() {
             ${contracts?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">수임항목</div><div style="font-size:12px;color:#555">${esc(contracts)}</div></div>`:''}
             ${c.memo?`<div style="max-width:240px"><div style="font-size:11px;color:#888;margin-bottom:3px">메모</div><div style="font-size:12px;color:#555">${esc(c.memo)}</div></div>`:''}
             ${c.seongsi?`<div>${badge('성실신고','purple')}</div>`:''}
-            ${inGroup?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">관계회사 그룹</div><div style="font-weight:600;font-size:12px;color:${gc}">👥 ${esc(groupLabel)}</div>${em?`<div style="margin-top:4px">${iInput('relatedGroup',c.relatedGroup,'placeholder="그룹명" style="width:140px"')}</div>`:''}</div>`:(em?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">관계회사 그룹</div>${iInput('relatedGroup',c.relatedGroup,'placeholder="그룹명 입력" style="width:140px"')}</div>`:'')}
+            ${inGroup?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">관계회사 그룹</div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><div style="font-weight:600;font-size:12px;color:${gc}">👥 ${esc(groupLabel)}</div>${!em?`<button onclick="event.stopPropagation();removeFromGroup(${c.id})" style="padding:2px 8px;border-radius:6px;font-size:11px;border:1px solid #e0e0e0;background:#fff;color:#e53935;cursor:pointer;font-family:inherit">🔓 그룹 분리</button>`:''}</div>${em?`<div style="margin-top:4px">${iInput('relatedGroup',c.relatedGroup,'placeholder="그룹명" style="width:140px"')}</div>`:''}</div>`:(em?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">관계회사 그룹</div>${iInput('relatedGroup',c.relatedGroup,'placeholder="그룹명 입력" style="width:140px"')}</div>`:'')}
             <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
               <button class="btn-sm" style="background:#f0f4ff;color:#4f8ef7" onclick="event.stopPropagation();openForm(${c.id})">✏ 수정</button>
               <button class="btn-sm" style="background:#fdecea;color:#c62828;border:1px solid #ef9a9a" onclick="event.stopPropagation();deleteClient(${c.id})">🗑 삭제</button>
@@ -939,6 +940,16 @@ function toggleInlineManager(clientId, manager) {
   saveToLS(); renderClients();
 }
 function toggleEditMode() { G.editMode=!G.editMode; renderClients(); }
+
+function removeFromGroup(id) {
+  const c = G.clients.find(x=>x.id===id);
+  if (!c) return;
+  if (!confirm(`"${c.name}"을 관계사 그룹에서 분리할까요?\n분리 후에도 수정 화면에서 다시 그룹에 포함시킬 수 있습니다.`)) return;
+  c.relatedGroup = '';
+  c.soloGroup = true;
+  saveToLS();
+  renderClients();
+}
 
 function updateClientField(id, field, value) {
   const c = G.clients.find(x=>x.id===id); if(!c) return;
@@ -1100,6 +1111,13 @@ function openForm(id) {
 
   window._formData = {...c, dealTypes: getDealTypes(c), managers: getManagers(c)};
 
+  // Pre-compute group data for form UI
+  const _allGroups = [...new Set(G.clients.filter(cl=>cl.id!==c.id&&cl.relatedGroup).map(cl=>cl.relatedGroup))];
+  window._formGroupNames = _allGroups;
+  const _groupMembers = c.relatedGroup
+    ? G.clients.filter(cl=>cl.id!==c.id&&cl.relatedGroup===c.relatedGroup)
+    : (isEdit && !c.soloGroup && c.rep ? G.clients.filter(cl=>cl.id!==c.id&&!cl.soloGroup&&!cl.relatedGroup&&cl.rep===c.rep) : []);
+
   function contractsHTML() {
     const avail = availableContracts(window._formData.vatType, window._formData.taxType);
     return avail.map(g=>`
@@ -1144,9 +1162,17 @@ function openForm(id) {
     </div>
 
     <div>
-      <label class="flabel">관계회사 그룹 <span style="font-weight:400;color:#aaa">(같은 이름 입력 시 관계회사로 묶임)</span></label>
-      <input class="finput" id="f-relatedGroup" value="${esc(c.relatedGroup||'')}" placeholder="예: 홍길동그룹 (비워두면 자동 감지)" oninput="window._formData.relatedGroup=this.value" list="related-group-list">
-      <datalist id="related-group-list">${[...new Set(G.clients.map(c=>c.relatedGroup).filter(Boolean))].map(g=>`<option value="${esc(g)}">`).join('')}</datalist>
+      <label class="flabel">관계회사 그룹</label>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input class="finput" style="flex:1" id="f-relatedGroup" value="${esc(c.relatedGroup||'')}"
+          placeholder="그룹명 입력 (비우면 대표자명으로 자동 감지)"
+          oninput="window._formData.relatedGroup=this.value;window._formData.soloGroup=false"
+          list="related-group-list">
+        ${c.relatedGroup||c.soloGroup?`<button type="button" onclick="document.getElementById('f-relatedGroup').value='';window._formData.relatedGroup='';window._formData.soloGroup=false" style="padding:4px 10px;border-radius:8px;border:1px solid #e0e0e0;background:#fff;color:#e53935;cursor:pointer;font-family:inherit;font-size:12px;white-space:nowrap">✕ 해제</button>`:''}
+      </div>
+      ${_groupMembers.length>0?`<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;align-items:center"><span style="font-size:11px;color:#888">같은 그룹:</span>${_groupMembers.map(cl=>`<span style="background:#e8f0fe;color:#4f8ef7;border-radius:10px;padding:2px 10px;font-size:12px">👥 ${esc(cl.name)}</span>`).join('')}</div>`:''}
+      ${_allGroups.length>0?`<div style="margin-top:8px"><div style="font-size:11px;color:#888;margin-bottom:4px">기존 그룹에 포함:</div><div style="display:flex;flex-wrap:wrap;gap:4px">${_allGroups.map((g,gi)=>{const cnt=G.clients.filter(cl=>cl.id!==c.id&&cl.relatedGroup===g).length;return`<button type="button" onclick="(function(){var n=window._formGroupNames[${gi}];document.getElementById('f-relatedGroup').value=n;window._formData.relatedGroup=n;window._formData.soloGroup=false;})()" style="background:#f5f5f5;border:1px solid #e0e0e0;border-radius:10px;padding:3px 10px;font-size:12px;cursor:pointer;font-family:inherit">👥 ${esc(g)}<span style="color:#aaa;margin-left:4px">${cnt}개</span></button>`;}).join('')}</div></div>`:''}
+      <datalist id="related-group-list">${[...new Set(G.clients.map(cl=>cl.relatedGroup).filter(Boolean))].map(g=>`<option value="${esc(g)}">`).join('')}</datalist>
     </div>
 
     <div class="form-grid">
@@ -1331,6 +1357,8 @@ window.saveForm = function(id) {
   if (!d.managers) d.managers = [];
   d.dealType = d.dealTypes[0];
   d.manager = d.managers[0] || '';
+  // If user explicitly set a group, clear solo flag
+  if (d.relatedGroup && d.relatedGroup.trim()) d.soloGroup = false;
 
   if (id === null) {
     G.clients.push({...d, id: Date.now()});
