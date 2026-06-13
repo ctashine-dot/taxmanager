@@ -284,6 +284,7 @@ let G = {
   julgaeSearch: '',
   julgaeManager: '전체',
   julgaePeriodIdx: 0,
+  clientPage: 0,
   periods: [],
   julgae: {},
   settings: {
@@ -291,7 +292,8 @@ let G = {
     phone: '02-1234-5678', fax: '02-1234-5679',
     email: 'office@taxoffice.kr', address: '부산시 ○○구 ○○로 123',
     bank: '국민은행', account: '123-456-789012', accountHolder: '홍세무',
-    regNo: '123-45-67890'
+    regNo: '123-45-67890',
+    managers: ['이슬빈','이현주','정여주','최수이']
   }
 };
 
@@ -310,7 +312,7 @@ const REPORT_TYPE_FILTERS = {
   vat:     c => c.vatType === '일반' || c.vatType === '간이',
   corp:    c => c.taxType === '법인',
   income:  c => c.taxType === '개인' && c.vatType !== '면세',
-  seongsi: c => c.taxType === '개인' && !!c.seongsi,
+  seongsi: c => c.taxType === '개인' && (!!c.seongsi || c.dealType === '성실'),
   sajup:   c => c.vatType === '면세',
 };
 
@@ -355,11 +357,12 @@ function saveToLS() {
   }
 }
 
-const MANAGERS = ['전체','이슬빈','이현주','정여주','최수이'];
+let MANAGERS = ['전체','이슬빈','이현주','정여주','최수이'];
+let _tempMgrs = [];
 const TAX_TYPES = ['전체','법인','개인'];
 const VAT_TYPES = ['전체','일반','간이','면세'];
 const FEE_STATUSES = ['전체','수금완료','청구완료','미수금'];
-const DEAL_TYPES = ['전체','기장','신고대리','종소세대리','고문'];
+const DEAL_TYPES = ['전체','기장','신고대리','종소세대리','고문','성실'];
 const STATUS_LIST = ['정상','주의','해지','폐업'];
 
 const CONTRACT_GROUPS = [
@@ -448,7 +451,7 @@ function chk(val, onclick='') {
   return `<div class="chk ${val?'on':''}" onclick="${onclick}">${val?'✓':''}</div>`;
 }
 function dealBadge(d) {
-  const map={기장:'blue',신고대리:'purple',종소세대리:'orange',고문:'gray',신고:'purple'};
+  const map={기장:'blue',신고대리:'purple',종소세대리:'orange',고문:'gray',신고:'purple',성실:'purple'};
   return badge(d||'기장', map[d]||'blue');
 }
 
@@ -538,11 +541,22 @@ function renderDashboard() {
 // ══════════════════════════════════════════════════════
 // 거래처 목록
 // ══════════════════════════════════════════════════════
+const CLIENT_PAGE_SIZE = 50;
+
 function renderClients() {
   const list = filteredClients();
   const terminated = G.clients.filter(c=>c.status==='해지'||c.status==='폐업').length;
+  const totalPages = Math.max(1, Math.ceil(list.length / CLIENT_PAGE_SIZE));
+  if (G.clientPage >= totalPages) G.clientPage = totalPages - 1;
+  const pageList = list.slice(G.clientPage * CLIENT_PAGE_SIZE, (G.clientPage + 1) * CLIENT_PAGE_SIZE);
+
+  const filterSel = (field, opts, label='style="width:100%;font-size:11px;padding:3px 4px;border:1px solid #ddd;border-radius:6px"') =>
+    `<select ${label} onchange="onFilter('${field}',this.value)">${opts.map(v=>`<option${G[field]===v?' selected':''}>${v}</option>`).join('')}</select>`;
+  const emptyTh = `<th style="padding:4px 6px;font-weight:normal"></th>`;
+  const filterRowSel = `style="width:100%;font-size:11px;padding:3px 4px;border:1px solid #ddd;border-radius:6px"`;
+
   document.getElementById('page-clients').innerHTML = `
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
     <h2 style="font-size:20px;font-weight:800">거래처 목록</h2>
     <div style="display:flex;gap:8px">
       <button class="btn-sm" style="background:${G.showTerminated?'#fff3e0':'#f5f5f5'};color:${G.showTerminated?'#e65100':'#888'};border:2px solid ${G.showTerminated?'#ffcc02':'#e0e0e0'}" onclick="toggleTerminated()">${G.showTerminated?'▲ 해지·폐업 숨기기':'해지·폐업 보기 ('+terminated+')'}</button>
@@ -550,29 +564,33 @@ function renderClients() {
     </div>
   </div>
 
-  <div class="filter-bar">
-    <div class="search-box">
-      <span>🔍</span>
-      <input id="search-input" placeholder="거래처명, 대표자, 연락처, 업종 검색" value="${esc(G.searchText)}" oninput="onSearch(this.value)">
-    </div>
-    <select onchange="onFilter('filterManager',this.value)">
-      ${['전체',...MANAGERS.slice(1),'(없음)'].map(v=>`<option${G.filterManager===v?' selected':''}>${v}</option>`).join('')}
-    </select>
-    <select onchange="onFilter('filterTaxType',this.value)">${TAX_TYPES.map(v=>`<option${G.filterTaxType===v?' selected':''}>${v}</option>`).join('')}</select>
-    <select onchange="onFilter('filterVatType',this.value)">${VAT_TYPES.map(v=>`<option${G.filterVatType===v?' selected':''}>${v}</option>`).join('')}</select>
-    <select onchange="onFilter('filterDealType',this.value)">${DEAL_TYPES.map(v=>`<option${G.filterDealType===v?' selected':''}>${v}</option>`).join('')}</select>
-    <select onchange="onFilter('filterFeeStatus',this.value)">${FEE_STATUSES.map(v=>`<option${G.filterFeeStatus===v?' selected':''}>${v}</option>`).join('')}</select>
+  <div class="search-box" style="margin-bottom:10px;background:#fff;border:1px solid #e0e0e0;border-radius:10px;padding:8px 14px">
+    <span>🔍</span>
+    <input id="search-input" placeholder="거래처명, 대표자, 연락처, 업종 검색" value="${esc(G.searchText)}" oninput="onSearch(this.value)">
   </div>
 
-  <div style="font-size:12px;color:#888;margin-bottom:10px">총 ${list.length}개 거래처</div>
+  <div style="font-size:12px;color:#888;margin-bottom:8px">총 ${list.length}개 거래처 (${G.clientPage+1}/${totalPages} 페이지)</div>
 
   <div class="tbl-wrap">
   <table>
-    <thead><tr>
-      <th>거래처명</th><th>거래유형</th><th>과세</th><th>부가세</th><th>담당자</th><th>수수료</th><th>상태</th><th>수금</th><th style="width:28px"></th>
-    </tr></thead>
+    <thead>
+    <tr>
+      <th>거래처명</th><th>거래유형</th><th>인격</th><th>부가세</th><th>담당자</th><th>수수료</th><th>상태</th><th>수금</th><th style="width:28px"></th>
+    </tr>
+    <tr class="filter-row">
+      <th style="padding:4px 6px;font-weight:normal"></th>
+      <th style="padding:4px 6px;font-weight:normal"><select ${filterRowSel} onchange="onFilter('filterDealType',this.value)">${DEAL_TYPES.map(v=>`<option${G.filterDealType===v?' selected':''}>${v}</option>`).join('')}</select></th>
+      <th style="padding:4px 6px;font-weight:normal"><select ${filterRowSel} onchange="onFilter('filterTaxType',this.value)">${TAX_TYPES.map(v=>`<option${G.filterTaxType===v?' selected':''}>${v}</option>`).join('')}</select></th>
+      <th style="padding:4px 6px;font-weight:normal"><select ${filterRowSel} onchange="onFilter('filterVatType',this.value)">${VAT_TYPES.map(v=>`<option${G.filterVatType===v?' selected':''}>${v}</option>`).join('')}</select></th>
+      <th style="padding:4px 6px;font-weight:normal"><select ${filterRowSel} onchange="onFilter('filterManager',this.value)">${['전체',...MANAGERS.slice(1),'(없음)'].map(v=>`<option${G.filterManager===v?' selected':''}>${v}</option>`).join('')}</select></th>
+      ${emptyTh}
+      ${emptyTh}
+      <th style="padding:4px 6px;font-weight:normal"><select ${filterRowSel} onchange="onFilter('filterFeeStatus',this.value)">${FEE_STATUSES.map(v=>`<option${G.filterFeeStatus===v?' selected':''}>${v}</option>`).join('')}</select></th>
+      ${emptyTh}
+    </tr>
+    </thead>
     <tbody>
-    ${list.map(c=>{
+    ${pageList.map(c=>{
       const contracts = (c.contracts||[]).map(k=>contractLabel(k)).join(', ');
       return `<tr class="client-row" onclick="toggleExpand(${c.id})">
         <td><div class="td-name">${esc(c.name)}</div><div class="td-sub">${esc(c.rep)}${c.bizType?' · '+esc(c.bizType):''}</div></td>
@@ -581,8 +599,8 @@ function renderClients() {
         <td>${badge(c.vatType,c.vatType==='일반'?'blue':c.vatType==='간이'?'orange':'gray')}</td>
         <td style="color:#555">${esc(c.manager||'-')}</td>
         <td style="font-weight:600">${c.status==='정상'||c.status==='주의'?c.fee.toLocaleString()+'원':'-'}</td>
-        <td>${badge(c.status,c.status==='정상'?'green':c.status==='주의'?'orange':'gray')}</td>
-        <td>${badge(c.feeStatus,c.feeStatus==='수금완료'?'green':c.feeStatus==='청구완료'?'blue':'red')}</td>
+        <td onclick="event.stopPropagation();cycleStatus(${c.id})" style="cursor:pointer">${badge(c.status,c.status==='정상'?'green':c.status==='주의'?'orange':'gray')}</td>
+        <td onclick="event.stopPropagation();cycleFeeStatus(${c.id})" style="cursor:pointer">${badge(c.feeStatus,c.feeStatus==='수금완료'?'green':c.feeStatus==='청구완료'?'blue':'red')}</td>
         <td style="text-align:center;color:#aaa;font-size:11px" id="expand-arrow-${c.id}">▼</td>
       </tr>
       <tr class="expand-row" id="expand-${c.id}" style="display:none">
@@ -603,15 +621,21 @@ function renderClients() {
         </td>
       </tr>`;
     }).join('')}
-    ${list.length===0?'<tr><td colspan="9" style="text-align:center;padding:40px;color:#aaa">검색 결과가 없습니다</td></tr>':''}
+    ${pageList.length===0?'<tr><td colspan="9" style="text-align:center;padding:40px;color:#aaa">검색 결과가 없습니다</td></tr>':''}
     </tbody>
   </table>
-  </div>`;
+  </div>
+  ${totalPages > 1 ? `<div style="display:flex;justify-content:center;gap:12px;margin-top:12px;align-items:center">
+    <button class="btn-sm" style="background:#f5f5f5;color:#555" onclick="clientPageChange(-1)" ${G.clientPage===0?'disabled':''}>이전</button>
+    <span style="font-size:13px;color:#555">${G.clientPage+1} / ${totalPages}</span>
+    <button class="btn-sm" style="background:#f5f5f5;color:#555" onclick="clientPageChange(1)" ${G.clientPage===totalPages-1?'disabled':''}>다음</button>
+  </div>` : ''}`;
 }
 
+function clientPageChange(dir) { G.clientPage += dir; renderClients(); }
 function toggleTerminated() { G.showTerminated=!G.showTerminated; renderClients(); }
-function onSearch(v) { G.searchText=v; renderClients(); }
-function onFilter(field,v) { G[field]=v; renderClients(); }
+function onSearch(v) { G.searchText=v; G.clientPage=0; renderClients(); }
+function onFilter(field,v) { G[field]=v; G.clientPage=0; renderClients(); }
 
 function toggleExpand(id) {
   const row = document.getElementById('expand-'+id);
@@ -624,6 +648,24 @@ function toggleExpand(id) {
     const arrow = document.getElementById('expand-arrow-'+id);
     if (arrow) { arrow.textContent = '▲'; arrow.closest('tr')?.classList.add('expanded'); }
   }
+}
+
+function cycleFeeStatus(id) {
+  const c = G.clients.find(x=>x.id===id); if(!c) return;
+  const opts = ['수금완료','청구완료','미수금'];
+  c.feeStatus = opts[(opts.indexOf(c.feeStatus)+1) % opts.length];
+  saveToLS();
+  const cell = document.querySelector(`#expand-arrow-${id}`).closest('tr').querySelectorAll('td')[7];
+  if(cell) cell.innerHTML = badge(c.feeStatus, c.feeStatus==='수금완료'?'green':c.feeStatus==='청구완료'?'blue':'red');
+}
+
+function cycleStatus(id) {
+  const c = G.clients.find(x=>x.id===id); if(!c) return;
+  const opts = ['정상','주의','해지','폐업'];
+  c.status = opts[(opts.indexOf(c.status)+1) % opts.length];
+  saveToLS();
+  const rows = document.querySelector(`#expand-arrow-${id}`).closest('tr').querySelectorAll('td');
+  if(rows[6]) rows[6].innerHTML = badge(c.status, c.status==='정상'?'green':c.status==='주의'?'orange':'gray');
 }
 
 function deleteClient(id) {
@@ -1004,7 +1046,9 @@ function renderSchedule() {
       </div>
       ${items.length>0?items.map((d,i)=>{
         const isKey = ['부가세 확정신고','부가세 예정신고','법인세 신고','종합소득세 신고','성실신고사업자 신고'].some(k=>d.l.includes(k.split(' ')[0]));
-        return `<div style="display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-bottom:${i<items.length-1?'1px solid #f5f5f5':'none'};${isKey?'border-left:3px solid #4f8ef7;padding-left:8px;margin-left:-8px':''}">
+        const safeL = d.l.replace(/'/g,"\\'");
+        const safeT = d.t.replace(/'/g,"\\'");
+        return `<div onclick="registerToPeriod('${safeL}','${safeT}')" style="display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-bottom:${i<items.length-1?'1px solid #f5f5f5':'none'};${isKey?'border-left:3px solid #4f8ef7;padding-left:8px;margin-left:-8px':''};cursor:pointer" title="클릭하여 신고 및 결재 리스트에 추가">
           ${badge(d.t,d.c)}
           <div style="flex:1">
             <div style="font-size:13px;font-weight:${isKey?700:500}">${d.l}</div>
@@ -1028,6 +1072,27 @@ function renderSchedule() {
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px">${cards}</div>`;
 }
 
+function registerToPeriod(label, type) {
+  const yr = new Date().getFullYear();
+  const fullLabel = String(yr).slice(2) + '년 ' + label;
+  if (!confirm(`"${fullLabel}"을 신고 및 결재 리스트에 추가할까요?`)) return;
+  const tpl = PERIOD_TEMPLATES.find(t => t.label === label);
+  const existing = G.periods.find(p => p.label === fullLabel);
+  if (existing) {
+    G.julgaePeriodIdx = G.periods.indexOf(existing);
+    switchTab('julgae');
+    saveToLS();
+    return;
+  }
+  const id = (tpl ? tpl.tpl : 'custom') + '_' + yr + '_' + Date.now();
+  const reportType = tpl ? tpl.reportType : undefined;
+  const targetType = tpl ? tpl.targetType : '전체';
+  G.periods.push({ id, label: fullLabel, type, targetType, reportType });
+  G.julgaePeriodIdx = G.periods.length - 1;
+  saveToLS();
+  switchTab('julgae');
+}
+
 // ══════════════════════════════════════════════════════
 // 수수료
 // ══════════════════════════════════════════════════════
@@ -1038,7 +1103,14 @@ function renderFees() {
   const unpaid = G.clients.filter(c=>c.feeStatus==='미수금');
   const pct = total>0?Math.round(collected/total*100):0;
 
-  const byManager = ['이슬빈','이현주','정여주','최수이'].map(m=>{
+  const monthlyClients = active.filter(c => ['기장','고문','성실'].includes(c.dealType));
+  const filingClients  = active.filter(c => ['신고대리','종소세대리'].includes(c.dealType));
+  const monthlyTotal   = monthlyClients.reduce((s,c)=>s+c.fee,0);
+  const filingTotal    = filingClients.reduce((s,c)=>s+c.fee,0);
+  const monthlyCollected = monthlyClients.filter(c=>c.feeStatus==='수금완료').reduce((s,c)=>s+c.fee,0);
+  const filingCollected  = filingClients.filter(c=>c.feeStatus==='수금완료').reduce((s,c)=>s+c.fee,0);
+
+  const byManager = MANAGERS.slice(1).map(m=>{
     const mc = active.filter(c=>c.manager===m);
     const t = mc.reduce((s,c)=>s+c.fee,0);
     const col = mc.filter(c=>c.feeStatus==='수금완료').reduce((s,c)=>s+c.fee,0);
@@ -1060,6 +1132,22 @@ function renderFees() {
     <div class="stat-card" style="border-top:4px solid #2e7d32"><div class="stat-label">수금 완료</div><div class="stat-value" style="font-size:18px;color:#2e7d32">${collected.toLocaleString()}원</div></div>
     <div class="stat-card" style="border-top:4px solid #e53935"><div class="stat-label">미수금</div><div class="stat-value" style="font-size:18px;color:#e53935">${(total-collected).toLocaleString()}원</div></div>
   </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+    <div class="card" style="margin-bottom:0;border-top:3px solid #4f8ef7">
+      <div class="card-title" style="font-size:13px">월 수수료 (기장·고문·성실)</div>
+      <div style="font-size:20px;font-weight:800;color:#4f8ef7;margin-bottom:4px">${monthlyTotal.toLocaleString()}원</div>
+      <div style="font-size:12px;color:#2e7d32">수금 완료: ${monthlyCollected.toLocaleString()}원</div>
+      <div style="font-size:12px;color:#aaa">${monthlyClients.length}개 업체</div>
+    </div>
+    <div class="card" style="margin-bottom:0;border-top:3px solid #a259ff">
+      <div class="card-title" style="font-size:13px">건별 수수료 (신고대리·종소세대리)</div>
+      <div style="font-size:20px;font-weight:800;color:#a259ff;margin-bottom:4px">${filingTotal.toLocaleString()}원</div>
+      <div style="font-size:12px;color:#2e7d32">수금 완료: ${filingCollected.toLocaleString()}원</div>
+      <div style="font-size:12px;color:#aaa">${filingClients.length}개 업체</div>
+    </div>
+  </div>
+
   <div class="card"><div class="card-title">담당자별 현황</div>${byManager}</div>
   <div class="card" style="border-top:3px solid #e53935">
     <div class="card-title" style="color:#e53935">미수금 거래처</div>
@@ -1935,6 +2023,10 @@ function importExcel(input) {
 // ══════════════════════════════════════════════════════
 function openSettings() {
   const s = G.settings;
+  _tempMgrs = [...(s.managers || MANAGERS.slice(1))];
+  function mgrListHTML() {
+    return _tempMgrs.map((m,i) => `<span style="background:#f0f4ff;border-radius:20px;padding:4px 10px;font-size:12px;display:flex;align-items:center;gap:6px">${esc(m)}<button onclick="removeMgr(${i})" style="border:none;background:none;color:#e53935;cursor:pointer;font-size:14px;line-height:1">×</button></span>`).join('');
+  }
   showModal(`<div style="max-width:480px">
   <div class="modal-header"><h3>⚙ 사무소 설정</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
   <div class="modal-body">
@@ -1946,10 +2038,34 @@ function openSettings() {
       ${[['bank','은행명'],['account','계좌번호'],['accountHolder','예금주']].map(([k,l])=>`
       <div><label class="flabel">${l}</label><input class="finput" id="set-${k}" value="${esc(s[k]||'')}"></div>`).join('')}
     </div>
+    <div>
+      <label class="flabel">담당자 관리</label>
+      <div id="mgr-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">${mgrListHTML()}</div>
+      <div style="display:flex;gap:8px">
+        <input id="new-mgr" class="finput" placeholder="새 담당자 이름" style="flex:1">
+        <button onclick="addMgr()" class="btn-sm" style="background:#4f8ef7;color:#fff">추가</button>
+      </div>
+    </div>
     <div style="background:#f8f9ff;border-radius:10px;padding:14px;font-size:12px;color:#555;line-height:2;border:1px dashed #c5cae9" id="settings-preview"></div>
     <div class="btn-row"><button class="btn-secondary" onclick="closeModal()">취소</button><button class="btn-primary" onclick="saveSettings()">저장</button></div>
   </div></div>`);
   updateSettingsPreview();
+}
+
+function addMgr() {
+  const inp = document.getElementById('new-mgr');
+  const name = inp ? inp.value.trim() : '';
+  if (!name) return;
+  _tempMgrs.push(name);
+  inp.value = '';
+  const el = document.getElementById('mgr-list');
+  if (el) el.innerHTML = _tempMgrs.map((m,i) => `<span style="background:#f0f4ff;border-radius:20px;padding:4px 10px;font-size:12px;display:flex;align-items:center;gap:6px">${esc(m)}<button onclick="removeMgr(${i})" style="border:none;background:none;color:#e53935;cursor:pointer;font-size:14px;line-height:1">×</button></span>`).join('');
+}
+
+function removeMgr(i) {
+  _tempMgrs.splice(i, 1);
+  const el = document.getElementById('mgr-list');
+  if (el) el.innerHTML = _tempMgrs.map((m,idx) => `<span style="background:#f0f4ff;border-radius:20px;padding:4px 10px;font-size:12px;display:flex;align-items:center;gap:6px">${esc(m)}<button onclick="removeMgr(${idx})" style="border:none;background:none;color:#e53935;cursor:pointer;font-size:14px;line-height:1">×</button></span>`).join('');
 }
 
 function updateSettingsPreview() {
@@ -1963,6 +2079,8 @@ function saveSettings() {
   ['name','rep','regNo','phone','fax','email','address','bank','account','accountHolder'].forEach(k=>{
     G.settings[k] = document.getElementById('set-'+k)?.value||G.settings[k];
   });
+  G.settings.managers = [..._tempMgrs];
+  MANAGERS = ['전체', ...G.settings.managers];
   saveToLS();
   closeModal();
 }
@@ -2063,6 +2181,7 @@ async function loadFromFirebase() {
     if (ss) G.settings = JSON.parse(ss);
   }
   migrateJulgae();
+  if (G.settings.managers) MANAGERS = ['전체', ...G.settings.managers];
   updateBadge();
   document.getElementById('loading').style.display = 'none';
   document.getElementById('page-dashboard').style.display = 'block';
