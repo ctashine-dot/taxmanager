@@ -830,7 +830,7 @@ function renderClients() {
             ${contracts?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">수임항목</div><div style="font-size:12px;color:#555">${esc(contracts)}</div></div>`:''}
             ${c.memo?`<div style="max-width:240px"><div style="font-size:11px;color:#888;margin-bottom:3px">메모</div><div style="font-size:12px;color:#555">${esc(c.memo)}</div></div>`:''}
             ${c.seongsi?`<div>${badge('성실신고','purple')}</div>`:''}
-            ${inGroup?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">관계회사 그룹</div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><div style="font-weight:600;font-size:12px;color:${gc}">👥 ${esc(groupLabel)}</div>${!em?`<button onclick="event.stopPropagation();removeFromGroup(${c.id})" style="padding:2px 8px;border-radius:6px;font-size:11px;border:1px solid #e0e0e0;background:#fff;color:#e53935;cursor:pointer;font-family:inherit">🔓 그룹 분리</button>`:''}</div>${em?`<div style="margin-top:4px">${iInput('relatedGroup',c.relatedGroup,'placeholder="그룹명" style="width:140px"')}</div>`:''}</div>`:`<div><div style="font-size:11px;color:#888;margin-bottom:3px">관계회사 그룹</div>${em?iInput('relatedGroup',c.relatedGroup,'placeholder="그룹명 입력" style="width:140px"'):`<button onclick="event.stopPropagation();openGroupConnectModal(${c.id})" style="padding:2px 10px;border-radius:6px;font-size:11px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;cursor:pointer;font-family:inherit">🔗 그룹 연결</button>`}</div>`}
+            ${inGroup?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">관계회사 그룹</div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><div style="font-weight:600;font-size:12px;color:${gc}">👥 ${esc(groupLabel)}</div>${!em?`<button onclick="event.stopPropagation();removeFromGroup(${c.id})" style="padding:2px 8px;border-radius:6px;font-size:11px;border:1px solid #e0e0e0;background:#fff;color:#e53935;cursor:pointer;font-family:inherit">🔓 그룹 분리</button>`:''}</div>${c.groupReason&&!em?`<div style="font-size:11px;color:#888;margin-top:3px">사유: ${esc(c.groupReason)}</div>`:''} ${em?`<div style="margin-top:4px">${iInput('relatedGroup',c.relatedGroup,'placeholder="그룹명" style="width:140px"')}</div>`:''}</div>`:`<div><div style="font-size:11px;color:#888;margin-bottom:3px">관계회사 그룹</div>${em?iInput('relatedGroup',c.relatedGroup,'placeholder="그룹명 입력" style="width:140px"'):`<button onclick="event.stopPropagation();openGroupConnectModal(${c.id})" style="padding:2px 10px;border-radius:6px;font-size:11px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;cursor:pointer;font-family:inherit">🔗 그룹 연결</button>`}</div>`}
             <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
               <button class="btn-sm" style="background:#f0f4ff;color:#4f8ef7" onclick="event.stopPropagation();openForm(${c.id})">✏ 수정</button>
               <button class="btn-sm" style="background:#fdecea;color:#c62828;border:1px solid #ef9a9a" onclick="event.stopPropagation();deleteClient(${c.id})">🗑 삭제</button>
@@ -981,6 +981,10 @@ function openGroupConnectModal(id) {
     <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:6px">또는 새 그룹명 입력</div>
     `:`<div style="font-size:12px;font-weight:700;color:#555;margin-bottom:6px">그룹명 입력</div>`}
     <input class="finput" id="gc-name" placeholder="예: 홍길동그룹" autofocus>
+    <div style="margin-top:10px">
+      <label class="flabel">연결 이유 <span style="font-weight:400;color:#aaa">(선택)</span></label>
+      <input class="finput" id="gc-reason" placeholder="예: 동일 대표자, 계열사, 가족 법인 등">
+    </div>
     <div class="btn-row" style="margin-top:14px">
       <button class="btn-secondary" onclick="closeModal()">취소</button>
       <button class="btn-primary" onclick="doGroupConnect()">🔗 연결</button>
@@ -992,9 +996,11 @@ function openGroupConnectModal(id) {
 function doGroupConnect() {
   const name = (document.getElementById('gc-name')?.value||'').trim();
   if (!name) return alert('그룹명을 입력하거나 기존 그룹을 선택해주세요');
+  const reason = (document.getElementById('gc-reason')?.value||'').trim();
   const c = G.clients.find(x=>x.id===window._gcTargetId);
   if (!c) return;
   c.relatedGroup = name;
+  c.groupReason = reason;
   c.soloGroup = false;
   saveToLS();
   closeModal();
