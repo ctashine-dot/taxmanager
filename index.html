@@ -1768,6 +1768,16 @@ function renderJulgae() {
     });
   }
 
+  const rt = period ? (period.reportType||'') : '';
+  const isIncomeType = ['corp','income','seongsi'].includes(rt);
+  const isVatType = ['vat','vat_hak_1','vat_hak_2','vat_yej'].includes(rt);
+  const isSajupType = rt === 'sajup';
+  const totalCols = isIncomeType ? 15 : isVatType ? 11 : isSajupType ? 10 : 11;
+  const niInput = (cid, field, val, extraStyle='') =>
+    `<input type="number" class="julgae-num-input" value="${val||''}" placeholder="0"
+      onchange="updateJulgaeNum('${pKey2}',${cid},'${field}',this.value)"
+      style="width:100%;text-align:right;border:1px solid #e0e0e0;border-radius:5px;padding:3px 5px;font-size:12px;font-family:inherit;${extraStyle}">`;
+
   document.getElementById('page-julgae').innerHTML = `
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
     <h2 style="font-size:20px;font-weight:800">신고 및 결재</h2>
@@ -1873,9 +1883,26 @@ function renderJulgae() {
       <th style="width:56px;text-align:center">자료</th>
       <th style="width:56px;text-align:center">기장</th>
       <th style="width:56px;text-align:center">결재</th>
-      <th style="width:110px;text-align:right">수입금액</th>
-      <th style="width:110px;text-align:right">소득금액</th>
-      <th style="width:110px;text-align:right">과세표준</th>
+      ${isIncomeType?`
+        <th style="width:100px;text-align:right">수입금액</th>
+        <th style="width:100px;text-align:right">소득금액</th>
+        <th style="width:55px;text-align:center">이익률</th>
+        <th style="width:100px;text-align:right">과세표준</th>
+        <th style="width:100px;text-align:right">결정세액</th>
+        <th style="width:100px;text-align:right">납부세액</th>
+        <th style="width:80px;text-align:right">주민세</th>
+      `:isVatType?`
+        <th style="width:110px;text-align:right">매출액</th>
+        <th style="width:110px;text-align:right">매입액</th>
+        <th style="width:110px;text-align:right">부가세</th>
+      `:isSajupType?`
+        <th style="width:110px;text-align:right">수입금액</th>
+        <th style="width:110px;text-align:right">필요경비</th>
+      `:`
+        <th style="width:110px;text-align:right">수입금액</th>
+        <th style="width:110px;text-align:right">소득금액</th>
+        <th style="width:110px;text-align:right">과세표준</th>
+      `}
       <th style="width:110px;text-align:right">수수료청구</th>
       <th style="width:60px;text-align:center">수금</th>
     </tr></thead>
@@ -1886,6 +1913,7 @@ function renderJulgae() {
       const prevRevTxt = prev&&prev.revenue ? `<div style="font-size:10px;color:#aaa">전년:${prev.revenue.toLocaleString()}</div>` : '';
       const prevFeeTxt = prev&&prev.fee ? `<div style="font-size:10px;color:#aaa">전년:${prev.fee.toLocaleString()}</div>` : '';
       const rowBg = v.s?'#e8f5e9':v.a?'#f1f8e9':'#fff';
+      const margin = (v.revenue&&v.income) ? (v.income/v.revenue*100).toFixed(1) : null;
       return `<tr id="jr-${pKey2}-${c.id}" style="background:${rowBg}">
         <td style="color:#aaa;font-size:11px">${i+1}</td>
         <td><div class="td-name">${esc(c.name)}</div><div class="td-sub">${esc(c.rep)}</div></td>
@@ -1899,26 +1927,28 @@ function renderJulgae() {
         <td style="text-align:center" onclick="toggleJulgaeField('${pKey2}',${c.id},'a')">
           <div class="chk ${v.a?'on':''}" style="margin:0 auto;width:24px;height:24px">${v.a?'✓':''}</div>
         </td>
+        ${isIncomeType?`
+          <td style="text-align:right;padding:4px 8px">${niInput(c.id,'revenue',v.revenue)}${prevRevTxt}</td>
+          <td style="text-align:right;padding:4px 8px">${niInput(c.id,'income',v.income)}</td>
+          <td style="text-align:center;padding:4px;font-size:12px;font-weight:700;${margin!==null?(Number(margin)<0?'color:#e53935':'color:#2e7d32'):'color:#ccc'}">${margin!==null?margin+'%':'-'}</td>
+          <td style="text-align:right;padding:4px 8px">${niInput(c.id,'taxBase',v.taxBase)}</td>
+          <td style="text-align:right;padding:4px 8px">${niInput(c.id,'taxAmount',v.taxAmount)}</td>
+          <td style="text-align:right;padding:4px 8px">${niInput(c.id,'payTax',v.payTax)}</td>
+          <td style="text-align:right;padding:4px 8px">${niInput(c.id,'residentTax',v.residentTax)}</td>
+        `:isVatType?`
+          <td style="text-align:right;padding:4px 8px">${niInput(c.id,'salesAmount',v.salesAmount)}${prevRevTxt}</td>
+          <td style="text-align:right;padding:4px 8px">${niInput(c.id,'purchaseAmount',v.purchaseAmount)}</td>
+          <td style="text-align:right;padding:4px 8px">${niInput(c.id,'vatAmount',v.vatAmount)}</td>
+        `:isSajupType?`
+          <td style="text-align:right;padding:4px 8px">${niInput(c.id,'revenue',v.revenue)}${prevRevTxt}</td>
+          <td style="text-align:right;padding:4px 8px">${niInput(c.id,'expenses',v.expenses)}</td>
+        `:`
+          <td style="text-align:right;padding:4px 8px">${niInput(c.id,'revenue',v.revenue)}${prevRevTxt}</td>
+          <td style="text-align:right;padding:4px 8px">${niInput(c.id,'income',v.income)}</td>
+          <td style="text-align:right;padding:4px 8px">${niInput(c.id,'taxBase',v.taxBase)}</td>
+        `}
         <td style="text-align:right;padding:4px 8px">
-          <input type="number" class="julgae-num-input" value="${v.revenue||''}" placeholder="0"
-            onchange="updateJulgaeNum('${pKey2}',${c.id},'revenue',this.value)"
-            style="width:100%;text-align:right;border:1px solid #e0e0e0;border-radius:5px;padding:3px 5px;font-size:12px;font-family:inherit">
-          ${prevRevTxt}
-        </td>
-        <td style="text-align:right;padding:4px 8px">
-          <input type="number" class="julgae-num-input" value="${v.income||''}" placeholder="0"
-            onchange="updateJulgaeNum('${pKey2}',${c.id},'income',this.value)"
-            style="width:100%;text-align:right;border:1px solid #e0e0e0;border-radius:5px;padding:3px 5px;font-size:12px;font-family:inherit">
-        </td>
-        <td style="text-align:right;padding:4px 8px">
-          <input type="number" class="julgae-num-input" value="${v.taxBase||''}" placeholder="0"
-            onchange="updateJulgaeNum('${pKey2}',${c.id},'taxBase',this.value)"
-            style="width:100%;text-align:right;border:1px solid #e0e0e0;border-radius:5px;padding:3px 5px;font-size:12px;font-family:inherit">
-        </td>
-        <td style="text-align:right;padding:4px 8px">
-          <input type="number" class="julgae-num-input" value="${v.fee||''}" placeholder="0"
-            onchange="updateJulgaeNum('${pKey2}',${c.id},'fee',this.value)"
-            style="width:100%;text-align:right;border:1px solid #e0e0e0;border-radius:5px;padding:3px 5px;font-size:12px;font-family:inherit;${v.fee?'font-weight:700;color:#7b1fa2':''}">
+          ${niInput(c.id,'fee',v.fee,v.fee?'font-weight:700;color:#7b1fa2':'')}
           ${prevFeeTxt}
         </td>
         <td style="text-align:center" onclick="toggleJulgaeField('${pKey2}',${c.id},'s')">
@@ -1926,7 +1956,7 @@ function renderJulgae() {
         </td>
       </tr>`;
     }).join('')}
-    ${clients.length===0?`<tr><td colspan="11" style="text-align:center;padding:40px;color:#aaa">해당 조건의 거래처가 없습니다</td></tr>`:''}
+    ${clients.length===0?`<tr><td colspan="${totalCols}" style="text-align:center;padding:40px;color:#aaa">해당 조건의 거래처가 없습니다</td></tr>`:''}
     </tbody>
   </table></div>` : ''}
   `}`;
