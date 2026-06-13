@@ -306,22 +306,25 @@ let G = {
 };
 
 const PERIOD_TEMPLATES = [
-  { tpl:'vat_hak_1', label:'부가세 확정신고 1기',  type:'부가세', targetType:'전체', reportType:'vat',     deadline:'7월 25일',  hint:'(1~6월분, 일반·간이)' },
-  { tpl:'vat_hak_2', label:'부가세 확정신고 2기',  type:'부가세', targetType:'전체', reportType:'vat',     deadline:'1월 25일',  hint:'(7~12월분, 일반·간이)' },
-  { tpl:'vat_yej_1', label:'부가세 예정신고 1기',  type:'부가세', targetType:'전체', reportType:'vat',     deadline:'4월 25일',  hint:'(1~3월분, 일반·간이)' },
-  { tpl:'vat_yej_2', label:'부가세 예정신고 2기',  type:'부가세', targetType:'전체', reportType:'vat',     deadline:'10월 25일', hint:'(7~9월분, 일반·간이)' },
-  { tpl:'corp',      label:'법인세 신고',           type:'법인세', targetType:'법인', reportType:'corp',    deadline:'3월 31일',  hint:'(12월 결산 법인)' },
-  { tpl:'income',    label:'종합소득세 신고',       type:'소득세', targetType:'개인', reportType:'income',  deadline:'5월 31일',  hint:'(개인사업자 일반·간이)' },
-  { tpl:'seongsi',   label:'성실신고사업자 신고',   type:'소득세', targetType:'개인', reportType:'seongsi', deadline:'6월 30일',  hint:'(성실신고확인 대상)' },
-  { tpl:'sajup',     label:'사업장현황신고',        type:'소득세', targetType:'개인', reportType:'sajup',   deadline:'2월 10일',  hint:'(면세사업자)' },
+  { tpl:'vat_hak_1', label:'부가세 확정신고 1기',  type:'부가세', targetType:'전체', reportType:'vat_hak_1', deadline:'7월 25일',  hint:'(1~6월분, 일반과세)' },
+  { tpl:'vat_hak_2', label:'부가세 확정신고 2기',  type:'부가세', targetType:'전체', reportType:'vat_hak_2', deadline:'1월 25일',  hint:'(7~12월분, 일반+간이)' },
+  { tpl:'vat_yej_1', label:'부가세 예정신고 1기',  type:'부가세', targetType:'법인', reportType:'vat_yej',   deadline:'4월 25일',  hint:'(1~3월분, 법인 일반과세)' },
+  { tpl:'vat_yej_2', label:'부가세 예정신고 2기',  type:'부가세', targetType:'법인', reportType:'vat_yej',   deadline:'10월 25일', hint:'(7~9월분, 법인 일반과세)' },
+  { tpl:'corp',      label:'법인세 신고',           type:'법인세', targetType:'법인', reportType:'corp',      deadline:'3월 31일',  hint:'(12월 결산 법인)' },
+  { tpl:'income',    label:'종합소득세 신고',       type:'소득세', targetType:'개인', reportType:'income',    deadline:'5월 31일',  hint:'(개인·성실 제외)' },
+  { tpl:'seongsi',   label:'성실신고사업자 신고',   type:'소득세', targetType:'개인', reportType:'seongsi',   deadline:'6월 30일',  hint:'(성실신고확인 대상)' },
+  { tpl:'sajup',     label:'사업장현황신고',        type:'소득세', targetType:'개인', reportType:'sajup',     deadline:'2월 10일',  hint:'(면세사업자)' },
 ];
 
 const REPORT_TYPE_FILTERS = {
-  vat:     c => c.vatType === '일반' || c.vatType === '간이',
-  corp:    c => c.taxType === '법인',
-  income:  c => c.taxType === '개인' && c.vatType !== '면세',
-  seongsi: c => c.taxType === '개인' && (!!c.seongsi || getDealTypes(c).includes('성실')),
-  sajup:   c => c.vatType === '면세',
+  vat:      c => c.vatType === '일반' || c.vatType === '간이',
+  vat_hak_1:c => c.vatType === '일반',
+  vat_hak_2:c => c.vatType === '일반' || c.vatType === '간이',
+  vat_yej:  c => c.taxType === '법인' && c.vatType === '일반',
+  corp:     c => c.taxType === '법인',
+  income:   c => c.taxType === '개인' && c.vatType !== '면세' && !getDealTypes(c).includes('성실'),
+  seongsi:  c => getDealTypes(c).includes('성실'),
+  sajup:    c => c.vatType === '면세',
 };
 
 function applyReportFilter(clients, period) {
@@ -1475,15 +1478,16 @@ function renderSchedule() {
 function registerToPeriod(label, type) {
   const yr = new Date().getFullYear();
   const fullLabel = String(yr).slice(2) + '년 ' + label;
-  if (!confirm(`"${fullLabel}"을 신고 및 결재 리스트에 추가할까요?`)) return;
   const tpl = PERIOD_TEMPLATES.find(t => t.label === label);
   const existing = G.periods.find(p => p.label === fullLabel);
   if (existing) {
+    if (!confirm(`"${fullLabel}" 리스트가 이미 있습니다.\n해당 리스트로 이동할까요?\n(새로 추가하려면 취소 후 신고 및 결재에서 직접 추가하세요)`)) return;
     G.julgaePeriodIdx = G.periods.indexOf(existing);
     switchTab('julgae');
     saveToLS();
     return;
   }
+  if (!confirm(`"${fullLabel}"을 신고 및 결재 리스트에 추가할까요?`)) return;
   const id = (tpl ? tpl.tpl : 'custom') + '_' + yr + '_' + Date.now();
   const reportType = tpl ? tpl.reportType : undefined;
   const targetType = tpl ? tpl.targetType : '전체';
@@ -1569,6 +1573,12 @@ function prevYearPeriods(period) {
   });
 }
 
+window._julgaeYearsOpen = window._julgaeYearsOpen || {};
+function toggleJulgaeYear(yr) {
+  window._julgaeYearsOpen[yr] = !window._julgaeYearsOpen[yr];
+  renderJulgae();
+}
+
 function renderJulgae() {
   const periods = G.periods;
   const idx = Math.min(G.julgaePeriodIdx, Math.max(0, periods.length - 1));
@@ -1608,7 +1618,7 @@ function renderJulgae() {
   const managerSet = ['전체', ...new Set(baseClients.flatMap(c=>getManagers(c)))];
   if (baseClients.some(c=>getManagers(c).length===0)) managerSet.push('(없음)');
 
-  const reportLabel = {vat:'부가세(일반·간이)',corp:'법인세(법인)',income:'종소세(개인)',seongsi:'성실신고(개인)',sajup:'사업장현황(면세)',undefined:'전체'};
+  const reportLabel = {vat:'부가세(일반·간이)',vat_hak_1:'부가세 확정1기(일반)',vat_hak_2:'부가세 확정2기(일반+간이)',vat_yej:'부가세 예정(법인 일반)',corp:'법인세(법인)',income:'종소세(개인,성실제외)',seongsi:'성실신고(성실)',sajup:'사업장현황(면세)',undefined:'전체'};
 
   // 전년도 동일 신고 데이터
   const prevPeriods = period ? prevYearPeriods(period) : [];
@@ -1634,17 +1644,44 @@ function renderJulgae() {
   ${periods.length === 0 ? `<div class="card" style="text-align:center;padding:40px;color:#aaa">
     신고리스트가 없습니다. <b>+ 신고리스트 추가</b> 버튼을 눌러 시작하세요.</div>` : `
 
-  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center">
-    ${periods.map((p, i) => {
-      const pEnroll = p.enrolled && p.enrolled.length > 0;
-      return `<div style="display:flex;align-items:center;gap:3px">
-        <button onclick="G.julgaePeriodIdx=${i};G.julgaeSearch='';renderJulgae()"
-          style="padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;border:2px solid ${i===idx?'#4f8ef7':'#e0e0e0'};background:${i===idx?'#e8f0fe':'#fff'};color:${i===idx?'#4f8ef7':'#555'}">
-          ${esc(p.label)}${pEnroll?` <span style="font-size:10px;background:#4f8ef7;color:#fff;border-radius:10px;padding:1px 6px;margin-left:4px">${p.enrolled.length}</span>`:''}
-        </button>
-        <button onclick="deletePeriod('${p.id}')" style="padding:4px 7px;border-radius:6px;font-size:11px;border:1px solid #e0e0e0;background:#fff;color:#e53935;cursor:pointer;font-family:inherit" title="삭제">✕</button>
-      </div>`;
-    }).join('')}
+  <div style="margin-bottom:16px">
+    ${(()=>{
+      const byYear = {}; const yearOrder = [];
+      periods.forEach((p,i)=>{
+        const m = p.label.match(/^(\d{2})년/);
+        const yr = m ? (2000+Number(m[1])) : 'other';
+        if (!byYear[yr]) { byYear[yr]=[]; yearOrder.push(yr); }
+        byYear[yr].push({p,i});
+      });
+      const currentYr = new Date().getFullYear();
+      yearOrder.forEach(yr=>{
+        if (window._julgaeYearsOpen[yr]===undefined) {
+          const hasSelected = byYear[yr].some(({i})=>i===idx);
+          window._julgaeYearsOpen[yr] = hasSelected || yr===currentYr;
+        }
+      });
+      return yearOrder.map(yr=>{
+        const isOpen = window._julgaeYearsOpen[yr];
+        const label = yr==='other'?'기타':(yr+'년');
+        return `<div style="margin-bottom:6px">
+          <button onclick="toggleJulgaeYear(${yr==='other'?'\'other\'':yr})" style="padding:5px 12px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;border:2px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;margin-bottom:6px">
+            ${label} ${isOpen?'▲':'▼'}
+          </button>
+          ${isOpen?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-left:4px">
+            ${byYear[yr].map(({p,i})=>{
+              const pEnroll = p.enrolled && p.enrolled.length > 0;
+              return `<div style="display:flex;align-items:center;gap:3px">
+                <button onclick="G.julgaePeriodIdx=${i};G.julgaeSearch='';renderJulgae()"
+                  style="padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;border:2px solid ${i===idx?'#4f8ef7':'#e0e0e0'};background:${i===idx?'#e8f0fe':'#fff'};color:${i===idx?'#4f8ef7':'#555'}">
+                  ${esc(p.label)}${pEnroll?` <span style="font-size:10px;background:#4f8ef7;color:#fff;border-radius:10px;padding:1px 6px;margin-left:4px">${p.enrolled.length}</span>`:''}
+                </button>
+                <button onclick="deletePeriod('${p.id}')" style="padding:4px 7px;border-radius:6px;font-size:11px;border:1px solid #e0e0e0;background:#fff;color:#e53935;cursor:pointer;font-family:inherit" title="삭제">✕</button>
+              </div>`;
+            }).join('')}
+          </div>`:''}
+        </div>`;
+      }).join('');
+    })()}
   </div>
 
   ${period ? `
@@ -2223,9 +2260,12 @@ function openAddPeriod() {
         <div><label class="flabel">신고 유형 (자동 필터)</label>
           <select class="fsel" id="p-reporttype">
             <option value="">전체</option>
+            <option value="vat_hak_1">부가세 확정 1기 (일반과세)</option>
+            <option value="vat_hak_2">부가세 확정 2기 (일반+간이)</option>
+            <option value="vat_yej">부가세 예정 (법인 일반과세)</option>
             <option value="vat">부가세 (일반·간이)</option>
             <option value="corp">법인세 (법인)</option>
-            <option value="income">종합소득세 (개인 일반·간이)</option>
+            <option value="income">종합소득세 (개인, 성실 제외)</option>
             <option value="seongsi">성실신고 (성실신고확인 대상)</option>
             <option value="sajup">사업장현황신고 (면세)</option>
           </select>
@@ -2249,6 +2289,9 @@ function applyPeriodTemplate(tplKey) {
   if (!t) return;
   const yr = new Date().getFullYear();
   const label = String(yr).slice(2) + '년 ' + t.label;
+  if (G.periods.some(p=>p.label===label)) {
+    if (!confirm(`"${label}" 리스트가 이미 있습니다.\n그래도 새로 추가하시겠습니까?`)) return;
+  }
   const id = tplKey + '_' + yr + '_' + Date.now();
   G.periods.push({ id, label, type: t.type, targetType: t.targetType, reportType: t.reportType });
   G.julgaePeriodIdx = G.periods.length - 1;
@@ -2260,9 +2303,12 @@ function applyPeriodTemplate(tplKey) {
 function savePeriod() {
   const label = document.getElementById('p-label').value.trim();
   if (!label) return alert('리스트 이름을 입력해주세요');
+  if (G.periods.some(p=>p.label===label)) {
+    if (!confirm(`"${label}" 리스트가 이미 있습니다.\n그래도 새로 추가하시겠습니까?`)) return;
+  }
   const type = document.getElementById('p-type').value;
   const reportType = document.getElementById('p-reporttype').value || undefined;
-  const targetMap = {vat:'전체',corp:'법인',income:'개인',seongsi:'개인',sajup:'개인'};
+  const targetMap = {vat:'전체',vat_hak_1:'전체',vat_hak_2:'전체',vat_yej:'법인',corp:'법인',income:'개인',seongsi:'개인',sajup:'개인'};
   const targetType = reportType ? (targetMap[reportType]||'전체') : '전체';
   const id = 'p_' + Date.now();
   G.periods.push({ id, label, type, targetType, reportType });
