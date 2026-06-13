@@ -331,7 +331,7 @@ const REPORT_TYPE_FILTERS = {
 // 신고유형별 거래처 수수료 필드 매핑
 const REPORT_FEE_FIELD = {
   vat:'feeSingo', vat_hak_1:'feeSingo', vat_hak_2:'feeSingo', vat_yej:'feeSingo',
-  sajup:'feeSingo', corp:'feeJojung', income:'feeJojung', seongsi:'feeSeongsi'
+  sajup:'feeSingo', corp:'feeJojung', income:'feeJojung', seongsi:'feeJojung'
 };
 
 function applyReportFilter(clients, period) {
@@ -346,7 +346,7 @@ function applyReportFilter(clients, period) {
 
 function julgaeVal(pKey, clientId) {
   const v = G.julgae[pKey]?.[clientId];
-  const def = {d:false, b:false, a:false, s:false, revenue:0, income:0, taxBase:0, fee:0};
+  const def = {d:false, b:false, a:false, s:false, revenue:0, income:0, taxBase:0, fee:0, feeSeongsi:0};
   if (!v) return def;
   if (typeof v === 'boolean') return {...def, a:v};
   return {...def, ...v};
@@ -535,6 +535,23 @@ function filteredClients() {
     const lead = [...members].sort((a,b) => a.name.localeCompare(b.name,'ko'))[0].name;
     groupSortKeys[k] = {rank: minRank, lead};
   });
+
+  // 검색 중일 때는 일치도 높은 순으로 정렬
+  if (G.searchText) {
+    const q = G.searchText;
+    const score = c => {
+      const name = c.name || '', rep = c.rep || '', biz = c.bizType || '';
+      if (name === q) return 100;
+      if (name.startsWith(q)) return 90 - name.length;
+      if (name.includes(q)) return 80 - name.indexOf(q);
+      if (rep === q) return 70;
+      if (rep.startsWith(q)) return 60 - rep.length;
+      if (rep.includes(q)) return 50 - rep.indexOf(q);
+      if (biz.includes(q)) return 40;
+      return 30;
+    };
+    return list.sort((a, b) => score(b) - score(a));
+  }
 
   return list.sort((a, b) => {
     const ka = getGroupKey(a), kb = getGroupKey(b);
@@ -859,7 +876,21 @@ function renderClients() {
 
 function clientPageChange(dir) { G.clientPage += dir; renderClients(); }
 function toggleTerminated() { G.showTerminated=!G.showTerminated; renderClients(); }
-function onSearch(v) { G.searchText=v; G.clientPage=0; renderClients(); }
+function onSearch(v) {
+  G.searchText = v; G.clientPage = 0; renderClients();
+  const inp = document.getElementById('search-input');
+  if (inp) { inp.focus(); const l=v.length; inp.setSelectionRange(l,l); }
+}
+function onJulgaeSearch(v) {
+  G.julgaeSearch = v; renderJulgae();
+  const inp = document.getElementById('julgae-search-input');
+  if (inp) { inp.focus(); const l=v.length; inp.setSelectionRange(l,l); }
+}
+function onClosureSearch(v) {
+  G.closureSearch = v; renderClosure();
+  const inp = document.getElementById('closure-search-input');
+  if (inp) { inp.focus(); const l=v.length; inp.setSelectionRange(l,l); }
+}
 function onFilter(field,v) { G[field]=v; G.clientPage=0; renderClients(); }
 
 // ── 필터 팝업 ──────────────────────────────────────────
@@ -1662,7 +1693,7 @@ function renderClosure() {
     <h2 style="font-size:20px;font-weight:800;margin:0">해지·폐업 관리</h2>
     <div class="search-box" style="max-width:260px">
       <span>🔍</span>
-      <input placeholder="거래처명·대표자·담당자 검색" value="${esc(G.closureSearch)}" oninput="G.closureSearch=this.value;renderClosure()">
+      <input id="closure-search-input" placeholder="거래처명·대표자·담당자 검색" value="${esc(G.closureSearch)}" oninput="onClosureSearch(this.value)">
     </div>
   </div>
   <div class="stat-grid" style="margin-bottom:16px">
@@ -1760,8 +1791,9 @@ function renderJulgae() {
   const dataCount   = clients.filter(c => julgaeVal(pKey2, c.id).d).length;
   const bookCount   = clients.filter(c => julgaeVal(pKey2, c.id).b).length;
   const doneCount   = clients.filter(c => julgaeVal(pKey2, c.id).a).length;
-  const feeTotal    = clients.reduce((a,c) => a + (julgaeVal(pKey2,c.id).fee||0), 0);
-  const feeCollected= clients.filter(c => julgaeVal(pKey2,c.id).s).reduce((a,c) => a + (julgaeVal(pKey2,c.id).fee||0), 0);
+  const _jFeeSum   = c => { const v=julgaeVal(pKey2,c.id); return (v.fee||0)+(rt==='seongsi'?(v.feeSeongsi||0):0); };
+  const feeTotal    = clients.reduce((a,c) => a + _jFeeSum(c), 0);
+  const feeCollected= clients.filter(c => julgaeVal(pKey2,c.id).s).reduce((a,c) => a + _jFeeSum(c), 0);
   const total = clients.length;
   const pct = total ? Math.round(doneCount / total * 100) : 0;
 
@@ -1806,7 +1838,8 @@ function renderJulgae() {
   const isIncomeType = ['corp','income','seongsi'].includes(rt);
   const isVatType = ['vat','vat_hak_1','vat_hak_2','vat_yej'].includes(rt);
   const isSajupType = rt === 'sajup';
-  const totalCols = isIncomeType ? 15 : isVatType ? 11 : isSajupType ? 10 : 11;
+  const isSeongsiType = rt === 'seongsi';
+  const totalCols = isSeongsiType ? 16 : isIncomeType ? 15 : isVatType ? 11 : isSajupType ? 10 : 11;
   const feeFieldKey = REPORT_FEE_FIELD[rt] || 'fee';
   const niInput = (cid, field, val, extraStyle='') =>
     `<input type="number" class="julgae-num-input" value="${val||''}" placeholder="0"
@@ -1894,7 +1927,7 @@ function renderJulgae() {
   <div class="filter-bar">
     <div class="search-box">
       <span>🔍</span>
-      <input placeholder="거래처명·대표자 검색" value="${esc(G.julgaeSearch)}" oninput="G.julgaeSearch=this.value;renderJulgae()">
+      <input id="julgae-search-input" placeholder="거래처명·대표자 검색" value="${esc(G.julgaeSearch)}" oninput="onJulgaeSearch(this.value)">
     </div>
     ${filterPopupBtn('julgaeManagers','담당자')}
     <select onchange="G.julgaeFeeFilter=this.value;renderJulgae()">
@@ -1938,7 +1971,7 @@ function renderJulgae() {
         <th style="width:110px;text-align:right">소득금액</th>
         <th style="width:110px;text-align:right">과세표준</th>
       `}
-      <th style="width:110px;text-align:right">수수료청구</th>
+      ${isSeongsiType?`<th style="width:110px;text-align:right">조정료</th><th style="width:110px;text-align:right">성실신고료</th>`:`<th style="width:110px;text-align:right">수수료청구</th>`}
       <th style="width:60px;text-align:center">수금</th>
     </tr></thead>
     <tbody>
@@ -1956,7 +1989,8 @@ function renderJulgae() {
         prev1?.fee ? `<div style="font-size:10px;color:#aaa">전년:${prev1.fee.toLocaleString()}</div>` : '',
         prev2?.fee ? `<div style="font-size:10px;color:#aaa">전전년:${prev2.fee.toLocaleString()}</div>` : ''
       ].join('');
-      const autoFee = v.fee || (c[feeFieldKey] || 0);
+      const autoFee  = v.fee       || (c[feeFieldKey]   || 0);
+      const autoFee2 = v.feeSeongsi || (c.feeSeongsi     || 0);
       const rowBg = v.s?'#e8f5e9':v.a?'#f1f8e9':'#fff';
       const margin = (v.revenue&&v.income) ? (v.income/v.revenue*100).toFixed(1) : null;
       return `<tr id="jr-${pKey2}-${c.id}" style="background:${rowBg}">
@@ -1992,10 +2026,20 @@ function renderJulgae() {
           <td style="text-align:right;padding:4px 8px">${niInput(c.id,'income',v.income)}</td>
           <td style="text-align:right;padding:4px 8px">${niInput(c.id,'taxBase',v.taxBase)}</td>
         `}
-        <td style="text-align:right;padding:4px 8px">
-          ${niInput(c.id,'fee',autoFee,autoFee?'font-weight:700;color:#7b1fa2':'')}
-          ${prevFeeTxt}
-        </td>
+        ${isSeongsiType?`
+          <td style="text-align:right;padding:4px 8px">
+            ${niInput(c.id,'fee',autoFee,autoFee?'font-weight:700;color:#7b1fa2':'')}
+            ${prevFeeTxt}
+          </td>
+          <td style="text-align:right;padding:4px 8px">
+            ${niInput(c.id,'feeSeongsi',autoFee2,autoFee2?'font-weight:700;color:#7b1fa2':'')}
+          </td>
+        `:`
+          <td style="text-align:right;padding:4px 8px">
+            ${niInput(c.id,'fee',autoFee,autoFee?'font-weight:700;color:#7b1fa2':'')}
+            ${prevFeeTxt}
+          </td>
+        `}
         <td style="text-align:center" onclick="toggleJulgaeField('${pKey2}',${c.id},'s')">
           <div class="chk ${v.s?'on':''}" style="margin:0 auto;width:24px;height:24px;${v.s?'background:#c8e6c9;border-color:#2e7d32;color:#2e7d32':''}">${v.s?'💰':''}</div>
         </td>
@@ -2023,12 +2067,16 @@ function updateJulgaeNum(pKey, clientId, field, rawVal) {
   const cur = julgaeVal(pKey, clientId);
   cur[field] = Number(rawVal) || 0;
   G.julgae[pKey][clientId] = cur;
-  if (field === 'fee') {
+  if (field === 'fee' || field === 'feeSeongsi') {
     const period = G.periods.find(p => p.id === pKey);
-    const feeField = period && REPORT_FEE_FIELD[period.reportType];
-    if (feeField) {
-      const client = G.clients.find(c => c.id === clientId);
-      if (client) client[feeField] = Number(rawVal) || 0;
+    const client = G.clients.find(c => c.id === clientId);
+    if (client && period) {
+      if (field === 'feeSeongsi') {
+        client.feeSeongsi = Number(rawVal) || 0;
+      } else {
+        const feeField = REPORT_FEE_FIELD[period.reportType];
+        if (feeField) client[feeField] = Number(rawVal) || 0;
+      }
     }
   }
   saveToLS();
@@ -3318,10 +3366,11 @@ function migrateJulgae() {
         G.julgae[pKey][cId] = {d:false, b:false, a:G.julgae[pKey][cId], s:false, revenue:0, income:0, taxBase:0, fee:0};
       } else if (G.julgae[pKey][cId] && G.julgae[pKey][cId].s === undefined) {
         G.julgae[pKey][cId].s = false;
-        G.julgae[pKey][cId].revenue = G.julgae[pKey][cId].revenue || 0;
-        G.julgae[pKey][cId].income  = G.julgae[pKey][cId].income  || 0;
-        G.julgae[pKey][cId].taxBase = G.julgae[pKey][cId].taxBase || 0;
-        G.julgae[pKey][cId].fee     = G.julgae[pKey][cId].fee     || 0;
+        G.julgae[pKey][cId].revenue    = G.julgae[pKey][cId].revenue    || 0;
+        G.julgae[pKey][cId].income     = G.julgae[pKey][cId].income     || 0;
+        G.julgae[pKey][cId].taxBase    = G.julgae[pKey][cId].taxBase    || 0;
+        G.julgae[pKey][cId].fee        = G.julgae[pKey][cId].fee        || 0;
+        G.julgae[pKey][cId].feeSeongsi = G.julgae[pKey][cId].feeSeongsi || 0;
       }
     }
   }
