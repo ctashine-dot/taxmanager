@@ -258,7 +258,7 @@ async function decompressB64(b64) {
 
 function expandClients(mini) {
   return mini.map(m => ({
-    id: m.i, name: m.n, rep: m.r, bizNo: '', phone: m.p || '', email: '',
+    id: m.i, name: m.n, rep: m.r, bizNo: '', jumin: '', phone: m.p || '', email: '',
     taxType: m.t, vatType: m.v, bizType: m.b || '', taxOffice: m.o || '',
     manager: m.m || '', fee: m.f || 0,
     feeStatus: '청구완료', contracts: m.c || [],
@@ -446,12 +446,19 @@ function getStats() {
 // ══════════════════════════════════════════════════════
 // 필터링
 // ══════════════════════════════════════════════════════
+const DEAL_SORT_ORDER = ['기장','성실','신고대리','종소세대리','고문'];
+function dealSortRank(dt) {
+  const i = DEAL_SORT_ORDER.indexOf(dt);
+  return i >= 0 ? i : DEAL_SORT_ORDER.length;
+}
+
 function filteredClients() {
   return G.clients.filter(c => {
     if (!G.showTerminated && (c.status==='해지'||c.status==='폐업')) return false;
     if (G.searchText) {
       const q = G.searchText;
-      if (!c.name.includes(q) && !c.rep.includes(q) && !c.phone.includes(q) && !c.bizType.includes(q)) return false;
+      if (!c.name.includes(q) && !c.rep.includes(q) && !(c.phone||'').includes(q) &&
+          !(c.bizType||'').includes(q) && !(c.bizNo||'').includes(q) && !(c.jumin||'').includes(q)) return false;
     }
     if (G.filterManager === '(없음)') { if (c.manager) return false; }
     else if (G.filterManager !== '전체' && c.manager !== G.filterManager) return false;
@@ -460,6 +467,11 @@ function filteredClients() {
     if (G.filterFeeStatus !== '전체' && c.feeStatus !== G.filterFeeStatus) return false;
     if (G.filterDealType !== '전체' && c.dealType !== G.filterDealType) return false;
     return true;
+  }).sort((a, b) => {
+    const da = dealSortRank(a.dealType);
+    const db = dealSortRank(b.dealType);
+    if (da !== db) return da - db;
+    return (a.name || '').localeCompare(b.name || '', 'ko');
   });
 }
 
@@ -510,7 +522,7 @@ function renderDashboard() {
   const feeActive = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업');
 
   // 월정 수수료 (이달 기준)
-  const monthlyClients = feeActive.filter(c=>['기장','고문','성실'].includes(c.dealType)&&(!c.startDate||c.startDate.slice(0,7)<=thisYM));
+  const monthlyClients = feeActive.filter(c=>['기장','고문','성실'].includes(c.dealType)&&(!c.contractDate||c.contractDate.slice(0,7)<=thisYM));
   const monthlyTotal     = monthlyClients.reduce((a,c)=>a+(c.fee||0),0);
   const monthlyCollected = monthlyClients.filter(c=>G.monthlyFees[c.id]?.[thisYM]).reduce((a,c)=>a+(c.fee||0),0);
 
@@ -733,6 +745,8 @@ function renderClients() {
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">연락처</div>${em?iInput('phone',c.phone,'placeholder="전화번호" style="width:140px"'):`<div style="font-weight:600">${esc(c.phone||'-')}</div>`}</div>
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">관할세무서</div>${em?iInput('taxOffice',c.taxOffice,'list="taxoffice-list" placeholder="세무서 선택·입력" style="width:150px"'):`<div style="font-weight:600">${esc(c.taxOffice||'-')}</div>`}</div>
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">수임일자</div>${em?iInput('contractDate',c.contractDate,'type="date"'):`<div style="font-weight:600">${esc(c.contractDate||'-')}</div>`}</div>
+            <div><div style="font-size:11px;color:#888;margin-bottom:3px">사업자번호</div>${em?iInput('bizNo',c.bizNo,'placeholder="000-00-00000" style="width:130px"'):`<div style="font-weight:600;font-family:monospace">${esc(c.bizNo||'-')}</div>`}</div>
+            <div><div style="font-size:11px;color:#888;margin-bottom:3px">주민번호 (개인)</div>${em?iInput('jumin',c.jumin,'placeholder="000000-0000000" style="width:150px"'):`<div style="font-weight:600;font-family:monospace">${c.jumin?esc(c.jumin.slice(0,6)+'-'+c.jumin.slice(6,7)+'••••••'):'-'}</div>`}</div>
             ${c.status==='해지'||c.status==='폐업'?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">해지/폐업일</div><div style="font-weight:600;color:#c62828">${esc(c.terminationDate||'-')}</div></div>`:''}
             ${contracts?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">수임항목</div><div style="font-size:12px;color:#555">${esc(contracts)}</div></div>`:''}
             ${c.memo?`<div style="max-width:240px"><div style="font-size:11px;color:#888;margin-bottom:3px">메모</div><div style="font-size:12px;color:#555">${esc(c.memo)}</div></div>`:''}
@@ -908,7 +922,7 @@ function openDetail(id) {
 function openForm(id) {
   const isEdit = id !== null;
   const c = isEdit ? G.clients.find(x=>x.id===id) : {
-    name:'',rep:'',bizNo:'',phone:'',email:'',
+    name:'',rep:'',bizNo:'',jumin:'',phone:'',email:'',
     taxType:'개인',vatType:'일반',bizType:'',taxOffice:'',
     manager:'이슬빈',fee:0,feeStatus:'청구완료',dealType:'기장',
     contracts:[],status:'정상',dataReceived:false,bookkeeping:false,approved:false,
@@ -955,6 +969,11 @@ function openForm(id) {
       const [k,l]=x.split(':');
       return `<div><label class="flabel">${l}</label><input class="finput" id="f-${k}" value="${esc(c[k]||'')}" oninput="window._formData['${k}']=this.value"></div>`;
     }).join('')}
+
+    <div class="form-grid">
+      <div><label class="flabel">사업자등록번호</label><input class="finput" id="f-bizNo" value="${esc(c.bizNo||'')}" placeholder="000-00-00000" oninput="window._formData.bizNo=this.value"></div>
+      <div><label class="flabel">주민등록번호 (개인)</label><input class="finput" id="f-jumin" value="${esc(c.jumin||'')}" placeholder="000000-0000000" oninput="window._formData.jumin=this.value"></div>
+    </div>
 
     <div class="form-grid">
       ${[['taxType','과세유형',TAX_TYPES.slice(1)],['vatType','부가세유형',VAT_TYPES.slice(1)],['manager','담당자',MANAGERS.slice(1)],['dealType','거래유형',DEAL_TYPES.slice(1)],['feeStatus','수금상태',FEE_STATUSES.slice(1)]].map(([k,l,opts])=>`
@@ -1056,6 +1075,35 @@ window.saveForm = function(id) {
   const d = window._formData;
   if (!d.name?.trim()) return alert('거래처명은 필수입니다');
   if (!d.rep?.trim()) return alert('대표자명은 필수입니다');
+
+  // 상호+대표자 중복 검사
+  const nameDup = G.clients.find(c =>
+    c.id !== id &&
+    c.name.trim() === d.name.trim() &&
+    c.rep.trim() === d.rep.trim()
+  );
+  if (nameDup) {
+    if (!confirm(`동일한 상호(${d.name})와 대표자명(${d.rep})의 거래처가 이미 있습니다.\n중복 업체입니까?\n\n[확인] 계속 추가  [취소] 돌아가기`)) return;
+  }
+
+  // 사업자번호 중복 검사
+  const bn = (d.bizNo||'').replace(/[-\s]/g,'');
+  if (bn) {
+    const bizDup = G.clients.find(c => c.id !== id && c.bizNo && c.bizNo.replace(/[-\s]/g,'') === bn);
+    if (bizDup) {
+      if (!confirm(`사업자번호(${d.bizNo})가 이미 등록된 거래처(${bizDup.name})와 중복됩니다.\n부가세는 사업장별로 신고하므로 결재리스트에서 중복될 수 있습니다.\n\n[확인] 계속 추가  [취소] 돌아가기`)) return;
+    }
+  }
+
+  // 주민번호 중복 검사
+  const jn = (d.jumin||'').replace(/[-\s]/g,'');
+  if (jn) {
+    const juminDup = G.clients.find(c => c.id !== id && c.jumin && c.jumin.replace(/[-\s]/g,'') === jn);
+    if (juminDup) {
+      if (!confirm(`주민번호가 이미 등록된 거래처(${juminDup.name})와 중복됩니다.\n소득세는 개인별로 신고하므로 중복 신고가 발생할 수 있습니다.\n\n[확인] 계속 추가  [취소] 돌아가기`)) return;
+    }
+  }
+
   if (id === null) {
     G.clients.push({...d, id: Date.now()});
   } else {
@@ -1641,9 +1689,55 @@ function updateEnrollCount() {
 function saveEnrollment(pKey) {
   const idx = G.periods.findIndex(p => p.id === pKey);
   if (idx < 0) return;
+  const period = G.periods[idx];
   const all = document.querySelectorAll('#enroll_list .enroll-chk');
   const total = all.length;
-  const checked = [...all].filter(c => c.checked).map(c => Number(c.dataset.id));
+  let checked = [...all].filter(c => c.checked).map(c => Number(c.dataset.id));
+
+  const enrolledClients = checked.map(cid => G.clients.find(c => c.id === cid)).filter(Boolean);
+
+  // 부가세 신고: 사업자번호 중복 감지
+  const isVat = period.reportType === 'vat' || period.type === '부가세';
+  const isIncome = ['income','seongsi','sajup'].includes(period.reportType) || period.type === '소득세';
+
+  if (isVat) {
+    const bizGroups = {};
+    enrolledClients.forEach(c => {
+      const key = (c.bizNo||'').replace(/[-\s]/g,'');
+      if (!key) return;
+      if (!bizGroups[key]) bizGroups[key] = [];
+      bizGroups[key].push(c);
+    });
+    const dups = Object.values(bizGroups).filter(g => g.length > 1);
+    if (dups.length > 0) {
+      const dupMsg = dups.map(g => `  · ${g.map(c=>c.name).join(', ')} (사업자번호: ${g[0].bizNo})`).join('\n');
+      if (confirm(`부가세는 사업장별로 신고합니다. 동일 사업자번호 중복이 있습니다:\n${dupMsg}\n\n[확인] 각 사업자번호 중 첫 번째만 남기고 제거  [취소] 그대로 유지`)) {
+        const seen = new Set();
+        const toKeep = new Set();
+        enrolledClients.forEach(c => {
+          const key = (c.bizNo||'').replace(/[-\s]/g,'');
+          if (!key || !seen.has(key)) { toKeep.add(c.id); if (key) seen.add(key); }
+        });
+        checked = checked.filter(id => toKeep.has(id));
+      }
+    }
+  }
+
+  if (isIncome) {
+    const juminGroups = {};
+    enrolledClients.forEach(c => {
+      const key = (c.jumin||'').replace(/[-\s]/g,'');
+      if (!key) return;
+      if (!juminGroups[key]) juminGroups[key] = [];
+      juminGroups[key].push(c);
+    });
+    const dups = Object.values(juminGroups).filter(g => g.length > 1);
+    if (dups.length > 0) {
+      const dupMsg = dups.map(g => `  · ${g.map(c=>c.name).join(', ')}`).join('\n');
+      alert(`소득세는 개인별로 신고합니다. 동일 주민번호 중복이 있습니다:\n${dupMsg}\n\n중복 여부를 직접 확인하고 제거해 주세요.`);
+    }
+  }
+
   // 전체 선택 시 enrolled를 비워서 "자동 분류" 상태로 복귀
   G.periods[idx].enrolled = checked.length === total ? [] : checked;
   saveToLS();
@@ -1665,8 +1759,8 @@ function ymLabel(ym) {
 }
 
 function clientMonths(c) {
-  if (!c.startDate) return [];
-  const start = new Date(c.startDate);
+  if (!c.contractDate) return [];
+  const start = new Date(c.contractDate);
   if (isNaN(start)) return [];
   const now = new Date();
   const months = [];
@@ -1698,8 +1792,8 @@ function renderFees() {
 
   // 이 달 수임 이후인 거래처만
   const feeClients = monthlyClients.filter(c => {
-    if (!c.startDate) return true; // 수임일 없으면 포함
-    const s = c.startDate.slice(0,7); // YYYY-MM
+    if (!c.contractDate) return true; // 수임일 없으면 포함
+    const s = c.contractDate.slice(0,7); // YYYY-MM
     return s <= ym;
   });
 
@@ -1748,7 +1842,7 @@ function renderFees() {
       <td><div style="font-weight:600;font-size:13px">${esc(c.name)}</div><div style="font-size:11px;color:#888">${esc(c.rep)}</div></td>
       <td>${esc(c.dealType||'-')}</td>
       <td style="color:#555;font-size:12px">${esc(c.manager||'-')}</td>
-      <td style="font-size:11px;color:#888">${c.startDate?c.startDate.slice(0,7):'-'}</td>
+      <td style="font-size:11px;color:#888">${c.contractDate?c.contractDate.slice(0,7):'-'}</td>
       <td style="text-align:right;font-weight:700;color:#7b1fa2">${(c.fee||0).toLocaleString()}원</td>
       <td style="text-align:center" onclick="toggleMonthlyFee(${c.id},'${ym}')">
         <div class="chk ${collected?'on':''}" style="margin:0 auto;width:26px;height:26px;${collected?'background:#c8e6c9;border-color:#2e7d32;color:#2e7d32':''}">${collected?'💰':''}</div>
