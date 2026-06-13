@@ -801,10 +801,10 @@ function renderClients() {
       const groupSub = inGroup ? `<span style="font-size:10px;color:${gc};font-weight:600;margin-left:4px">👥 ${esc(groupLabel)}</span>` : '';
       return `<tr class="client-row" onclick="toggleExpand(${c.id})" style="${inGroup?`border-left:3px solid ${gc}`:''}" >
         <td><div class="td-name">${groupDot}${esc(c.name)}</div><div class="td-sub">${esc(c.rep)}${c.bizType?' · '+esc(c.bizType):''}${groupSub}</div></td>
-        <td>${em?`<div style="display:flex;flex-wrap:wrap;gap:2px">${DEAL_TYPES.slice(1).map(v=>`<button onclick="event.stopPropagation();toggleInlineDealType(${c.id},'${v}')" style="padding:1px 5px;border-radius:10px;font-size:9px;cursor:pointer;font-family:inherit;border:1.5px solid ${getDealTypes(c).includes(v)?'#4f8ef7':'#ddd'};background:${getDealTypes(c).includes(v)?'#e8f0fe':'#f9f9f9'};color:${getDealTypes(c).includes(v)?'#1565c0':'#aaa'}">${v}</button>`).join('')}</div>`:getDealTypes(c).map(d=>dealBadge(d)).join('')}</td>
+        <td>${em?iSel('dealType',DEAL_TYPES.slice(1),getDealTypes(c)[0]):getDealTypes(c).map(d=>dealBadge(d)).join('')}</td>
         <td>${em?iSel('taxType',TAX_TYPES.slice(1),c.taxType):badge(c.taxType,c.taxType==='법인'?'blue':'gray')}</td>
         <td>${em?iSel('vatType',VAT_TYPES.slice(1),c.vatType):badge(c.vatType,c.vatType==='일반'?'blue':c.vatType==='간이'?'orange':'gray')}</td>
-        <td style="color:#555;font-size:12px">${em?`<div style="display:flex;flex-wrap:wrap;gap:2px">${MANAGERS.slice(1).map(v=>`<button onclick="event.stopPropagation();toggleInlineManager(${c.id},'${v}')" style="padding:1px 5px;border-radius:10px;font-size:9px;cursor:pointer;font-family:inherit;border:1.5px solid ${getManagers(c).includes(v)?'#4f8ef7':'#ddd'};background:${getManagers(c).includes(v)?'#e8f0fe':'#f9f9f9'};color:${getManagers(c).includes(v)?'#1565c0':'#aaa'}">${v}</button>`).join('')}</div>`:getManagers(c).join(', ')||'-'}</td>
+        <td style="color:#555;font-size:12px">${em?iSel('manager',MANAGERS.slice(1),getManagers(c)[0]||''):getManagers(c).join(', ')||'-'}</td>
         <td style="font-weight:600">${em?`<input type="number" onclick="event.stopPropagation()" onchange="event.stopPropagation();updateClientField(${c.id},'fee',this.value)" value="${c.fee||0}" class="inline-edit" style="width:90px">`:(c.status==='정상'||c.status==='주의'?c.fee.toLocaleString()+'원':'-')}</td>
         <td onclick="event.stopPropagation();cycleStatus(${c.id})" style="cursor:pointer">${badge(c.status,c.status==='정상'?'green':c.status==='주의'?'orange':'gray')}</td>
         <td onclick="event.stopPropagation();cycleFeeStatus(${c.id})" style="cursor:pointer">${badge(c.feeStatus,c.feeStatus==='수금완료'?'green':c.feeStatus==='청구완료'?'blue':'red')}</td>
@@ -936,7 +936,9 @@ function toggleEditMode() { G.editMode=!G.editMode; renderClients(); }
 function updateClientField(id, field, value) {
   const c = G.clients.find(x=>x.id===id); if(!c) return;
   if (field==='fee') value = Number(value)||0;
-  c[field] = value;
+  if (field==='dealType') { c.dealType=value; c.dealTypes=[value]; }
+  else if (field==='manager') { c.manager=value; c.managers=value?[value]:[]; }
+  else c[field] = value;
   saveToLS();
 }
 
