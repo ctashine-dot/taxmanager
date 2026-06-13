@@ -3325,6 +3325,26 @@ function migrateJulgae() {
       }
     }
   }
+  // 수수료 4종 필드 마이그레이션: feeSingo가 미정의인 거래처에 한해 deal type 기준으로 이동
+  const bookingTypes = ['기장', '고문', '성실'];
+  let feesMigrated = false;
+  G.clients.forEach(c => {
+    if (c.feeSingo === undefined) {
+      feesMigrated = true;
+      c.feeSingo   = 0;
+      c.feeJojung  = 0;
+      c.feeSeongsi = 0;
+      const dt = getDealTypes(c);
+      const hasBooking = dt.some(d => bookingTypes.includes(d));
+      const hasSingo   = dt.includes('신고대리');
+      if (hasSingo && !hasBooking && c.fee > 0) {
+        // 신고대리 전용 거래처: 기존 fee → feeSingo로 이동
+        c.feeSingo = c.fee;
+        c.fee = 0;
+      }
+    }
+  });
+  if (feesMigrated) saveToLS();
 }
 
 async function loadFromFirebase() {
