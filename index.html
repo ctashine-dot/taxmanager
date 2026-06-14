@@ -338,18 +338,19 @@ const REPORT_TYPE_FILTERS = {
   sajup:    c => c.vatType === '면세',
 };
 
-// ── 보수표 기본값 ──────────────────────────────────────────────────────────
-// 수입금액 기준: 기장료(월), 부가세신고료, 종소세료, 법인세료, 성실신고료(추가)
+// ── 보수표 기본값 (세무사보수기준표 2023 기준) ──────────────────────────────
+// 수입금액 기준: 기장료_개인(월), 기장료_법인(월), 부가세신고, 종소세신고, 법인세(세무조정), 성실신고(추가)
 const DEFAULT_BOSU_TABLE = [
-  { label:'4,800만 이하',  max:   48000000, jang: 100000, vat:  90000, income:  90000, corp:  90000, seongsi:       0 },
-  { label:'1억 이하',      max:  100000000, jang: 130000, vat: 120000, income: 120000, corp: 120000, seongsi:       0 },
-  { label:'2억 이하',      max:  200000000, jang: 160000, vat: 145000, income: 145000, corp: 145000, seongsi:  300000 },
-  { label:'3억 이하',      max:  300000000, jang: 200000, vat: 180000, income: 180000, corp: 180000, seongsi:  400000 },
-  { label:'5억 이하',      max:  500000000, jang: 250000, vat: 225000, income: 225000, corp: 225000, seongsi:  500000 },
-  { label:'7억 이하',      max:  700000000, jang: 300000, vat: 270000, income: 270000, corp: 270000, seongsi:  600000 },
-  { label:'10억 이하',     max: 1000000000, jang: 350000, vat: 315000, income: 315000, corp: 315000, seongsi:  700000 },
-  { label:'20억 이하',     max: 2000000000, jang: 430000, vat: 387000, income: 387000, corp: 387000, seongsi:  900000 },
-  { label:'20억 초과',     max: Infinity,   jang: 550000, vat: 495000, income: 495000, corp: 495000, seongsi: 1200000 },
+  { label:'1억 이하',   max:  100000000, jang:  80000, jangCorp: 150000, vat:  50000, income: 100000, corp:  300000, seongsi:       0 },
+  { label:'2억 이하',   max:  200000000, jang: 150000, jangCorp: 200000, vat:  60000, income: 150000, corp:  500000, seongsi:       0 },
+  { label:'3억 이하',   max:  300000000, jang: 200000, jangCorp: 300000, vat:  70000, income: 200000, corp:  700000, seongsi:  300000 },
+  { label:'5억 이하',   max:  500000000, jang: 300000, jangCorp: 400000, vat:  80000, income: 300000, corp: 1100000, seongsi:  500000 },
+  { label:'10억 이하',  max: 1000000000, jang: 400000, jangCorp: 550000, vat:  90000, income: 400000, corp: 2000000, seongsi:  700000 },
+  { label:'20억 이하',  max: 2000000000, jang: 450000, jangCorp: 650000, vat: 100000, income: 500000, corp: 3000000, seongsi:  900000 },
+  { label:'30억 이하',  max: 3000000000, jang: 500000, jangCorp: 750000, vat: 110000, income: 600000, corp: 4400000, seongsi: 1100000 },
+  { label:'50억 이하',  max: 5000000000, jang: 600000, jangCorp: 900000, vat: 130000, income: 700000, corp: 6500000, seongsi: 1300000 },
+  { label:'100억 이하', max:10000000000, jang: 800000, jangCorp:1200000, vat: 150000, income: 800000, corp:10000000, seongsi: 1500000 },
+  { label:'100억 초과', max: Infinity,   jang:1000000, jangCorp:1500000, vat: 200000, income:1000000, corp:14400000, seongsi: 2000000 },
 ];
 function getBosuTable() { return G.settings.bosuTable || DEFAULT_BOSU_TABLE; }
 function getBosuTier(revenue) {
@@ -371,9 +372,10 @@ function getBosuFeeRec(revenue, reportType) {
   };
   return map[reportType] || null;
 }
-function getJangRyo(revenue) {
+function getJangRyo(revenue, taxType) {
   if (!revenue || revenue <= 0) return null;
-  return getBosuTier(revenue).jang;
+  const tier = getBosuTier(revenue);
+  return (taxType === '법인') ? (tier.jangCorp || tier.jang) : tier.jang;
 }
 // 신고유형별 거래처 수수료 필드 매핑
 const REPORT_FEE_FIELD = {
@@ -3732,8 +3734,8 @@ function saveSettings() {
 
 function openBosuTable() {
   const tbl = getBosuTable();
-  const cols = [{key:'jang',label:'기장료(월)'},{key:'vat',label:'부가세신고'},{key:'income',label:'종소세신고'},{key:'corp',label:'법인세신고'},{key:'seongsi',label:'성실신고(추가)'}];
-  showModal(`<div style="max-width:700px;width:min(700px,97vw)">
+  const cols = [{key:'jang',label:'기장료·개인(월)'},{key:'jangCorp',label:'기장료·법인(월)'},{key:'vat',label:'부가세신고'},{key:'income',label:'종소세신고'},{key:'corp',label:'법인세(세무조정)'},{key:'seongsi',label:'성실신고(추가)'}];
+  showModal(`<div style="max-width:860px;width:min(860px,97vw)">
   <div class="modal-header"><h3>📋 보수기준표</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
   <div class="modal-body">
     <div style="font-size:12px;color:#888;margin-bottom:10px">수입금액 기준 보수표입니다. 셀을 직접 수정할 수 있습니다. (단위: 원)</div>
