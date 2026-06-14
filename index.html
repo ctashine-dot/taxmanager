@@ -3515,12 +3515,17 @@ init();
     if (G.currentTab !== 'clients') return;
     const dx = _sx - e.changedTouches[0].clientX;
     const dy = _sy - e.changedTouches[0].clientY;
-    if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx)) return; // 수직 스크롤이면 무시
+    if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx)) return;
+    const wrap = document.querySelector('.tbl-wrap');
+    const atRight = !wrap || wrap.scrollLeft >= wrap.scrollWidth - wrap.clientWidth - 4;
+    const atLeft  = !wrap || wrap.scrollLeft <= 4;
     const totalPages = Math.ceil(filteredClients().length / 50) || 1;
-    if (dx > 0) {
+    if (dx > 0) { // 왼쪽으로 스와이프 → 오른쪽 끝일 때만 다음 페이지
+      if (!atRight) return;
       if (G.clientPage < totalPages - 1) { G.clientPage++; renderClients(); showPageFlash('다음 페이지 ▶'); }
       else showPageFlash('마지막 페이지');
-    } else {
+    } else { // 오른쪽으로 스와이프 → 왼쪽 끝일 때만 이전 페이지
+      if (!atLeft) return;
       if (G.clientPage > 0) { G.clientPage--; renderClients(); showPageFlash('◀ 이전 페이지'); }
       else showPageFlash('첫 번째 페이지');
     }
