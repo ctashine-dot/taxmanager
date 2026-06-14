@@ -1245,13 +1245,83 @@ function geSetMain(clientId) {
 
 function geAddMember(clientId) {
   window._geGroupName = document.getElementById('ge-name')?.value ?? window._geGroupName;
-  if (!window._geMembers.includes(clientId)) {
-    window._geMembers.push(clientId);
-    if (!window._geGroupName) {
-      const cl = G.clients.find(x=>x.id===clientId);
-      const c0 = G.clients.find(x=>x.id===window._geClientId);
-      window._geGroupName = c0?.rep || c0?.name || cl?.rep || '';
-    }
+  if (window._geMembers.includes(clientId)) { renderGroupEditModal(); return; }
+  const cl = G.clients.find(x=>x.id===clientId);
+  if (!cl) return;
+  // 추가하려는 업체가 다른 그룹에 속해있으면 선택 팝업
+  if (cl.relatedGroup && cl.relatedGroup !== (window._geGroupName||'')) {
+    window._geConflictId = clientId;
+    window._geConflictGroup = cl.relatedGroup;
+    geShowConflictDialog();
+    return;
+  }
+  window._geMembers.push(clientId);
+  if (!window._geGroupName) {
+    const c0 = G.clients.find(x=>x.id===window._geClientId);
+    window._geGroupName = c0?.rep || c0?.name || cl?.rep || '';
+  }
+  renderGroupEditModal();
+}
+
+function geShowConflictDialog() {
+  const clientId = window._geConflictId;
+  const otherGroupName = window._geConflictGroup;
+  const cl = G.clients.find(x=>x.id===clientId);
+  const otherMembers = G.clients.filter(c=>c.relatedGroup===otherGroupName);
+  const curGroupName = window._geGroupName || G.clients.find(x=>x.id===window._geClientId)?.name || '현재 그룹';
+  showModal(`<div style="max-width:460px;width:min(460px,95vw)">
+  <div class="modal-header"><h3>⚠ 그룹 충돌</h3><button class="close-btn" onclick="renderGroupEditModal()">✕</button></div>
+  <div class="modal-body">
+    <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px">
+      <b>${esc(cl?.name||'')}</b>은(는) 이미 <b style="color:#4f8ef7">👥 ${esc(otherGroupName)}</b> 그룹의 멤버입니다.<br>
+      <span style="font-size:11px;color:#888">멤버: ${otherMembers.map(m=>esc(m.name)).join(', ')}</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button onclick="geConflictJoinOther()" style="padding:12px 14px;border-radius:10px;border:1.5px solid #4f8ef7;background:#f0f4ff;color:#1565c0;cursor:pointer;font-family:inherit;font-size:13px;text-align:left">
+        <div style="font-weight:700">👉 <b>${esc(otherGroupName)}</b> 그룹에 합류</div>
+        <div style="font-size:11px;color:#888;margin-top:2px">현재 편집 중인 멤버들이 '${esc(otherGroupName)}' 그룹으로 이동합니다</div>
+      </button>
+      <button onclick="geConflictTakeOne()" style="padding:12px 14px;border-radius:10px;border:1.5px solid #ff7043;background:#fff3e0;color:#e65100;cursor:pointer;font-family:inherit;font-size:13px;text-align:left">
+        <div style="font-weight:700">✋ <b>${esc(cl?.name||'')}</b>만 현재 그룹으로 추가</div>
+        <div style="font-size:11px;color:#888;margin-top:2px">나머지 멤버는 기존 그룹(${esc(otherGroupName)})에 유지</div>
+      </button>
+      <button onclick="geConflictTakeAll()" style="padding:12px 14px;border-radius:10px;border:1.5px solid #2e7d32;background:#e8f5e9;color:#1b5e20;cursor:pointer;font-family:inherit;font-size:13px;text-align:left">
+        <div style="font-weight:700">➕ <b>${esc(otherGroupName)}</b> 그룹 전체를 현재 그룹으로</div>
+        <div style="font-size:11px;color:#888;margin-top:2px">${otherMembers.map(m=>esc(m.name)).join(', ')} 모두 합류</div>
+      </button>
+      <button onclick="renderGroupEditModal()" style="padding:10px;border-radius:10px;border:1px solid #e0e0e0;background:#fff;color:#555;cursor:pointer;font-family:inherit;font-size:13px">취소</button>
+    </div>
+  </div></div>`);
+}
+
+function geConflictJoinOther() {
+  const otherGroupName = window._geConflictGroup;
+  const otherMemberIds = G.clients.filter(c=>c.relatedGroup===otherGroupName).map(c=>c.id);
+  window._geGroupName = otherGroupName;
+  window._geMembers = [...new Set([...window._geMembers, ...otherMemberIds])];
+  const otherMain = G.clients.find(c=>c.relatedGroup===otherGroupName&&c.groupMain);
+  if (otherMain) window._geMainId = otherMain.id;
+  renderGroupEditModal();
+}
+
+function geConflictTakeOne() {
+  const clientId = window._geConflictId;
+  const cl = G.clients.find(x=>x.id===clientId);
+  window._geMembers.push(clientId);
+  if (!window._geGroupName) {
+    const c0 = G.clients.find(x=>x.id===window._geClientId);
+    window._geGroupName = c0?.rep || c0?.name || cl?.rep || '';
+  }
+  renderGroupEditModal();
+}
+
+function geConflictTakeAll() {
+  const otherGroupName = window._geConflictGroup;
+  const otherMemberIds = G.clients.filter(c=>c.relatedGroup===otherGroupName).map(c=>c.id);
+  window._geMembers = [...new Set([...window._geMembers, ...otherMemberIds])];
+  if (!window._geGroupName) {
+    const c0 = G.clients.find(x=>x.id===window._geClientId);
+    window._geGroupName = c0?.rep || c0?.name || '';
   }
   renderGroupEditModal();
 }
