@@ -289,6 +289,9 @@ let G = {
   julgaeManagers: [],
   julgaePeriodIdx: 0,
   julgaeFeeFilter: '전체',
+  julgaeDataFilter: '전체',
+  julgaeBookFilter: '전체',
+  julgaeDoneFilter: '전체',
   dashMonthlyView: null,
   dashFilingView: null,
   clientPage: 0,
@@ -507,9 +510,7 @@ function filteredClients() {
   const list = G.clients.filter(c => {
     if (!G.showTerminated && (c.status==='해지'||c.status==='폐업')) return false;
     if (G.searchText) {
-      const q = G.searchText;
-      if (!c.name.includes(q) && !c.rep.includes(q) && !(c.phone||'').includes(q) &&
-          !(c.bizType||'').includes(q) && !(c.bizNo||'').includes(q) && !(c.jumin||'').includes(q)) return false;
+      if (!c.name.includes(G.searchText)) return false;
     }
     if (G.filterManagers.length > 0) {
       const hasNone = G.filterManagers.includes('(없음)');
@@ -879,7 +880,7 @@ function renderClients() {
 
   <div class="search-box" style="margin-bottom:10px;background:#fff;border:1px solid #e0e0e0;border-radius:10px;padding:8px 14px">
     <span>🔍</span>
-    <input id="search-input" placeholder="거래처명, 대표자, 연락처, 업종 검색" value="${esc(G.searchText)}" oninput="onSearch(this.value)">
+    <input id="search-input" placeholder="거래처명 검색" value="${esc(G.searchText)}" oninput="onSearch(this.value)">
   </div>
 
   <div style="font-size:12px;color:#888;margin-bottom:8px">총 ${list.length}개 거래처 (${G.clientPage+1}/${totalPages} 페이지)</div>
@@ -971,8 +972,37 @@ function onSearch(v) {
 }
 function onJulgaeSearch(v) {
   G.julgaeSearch = v; renderJulgae();
-  const inp = document.getElementById('julgae-search-input');
-  if (inp) { inp.focus(); const l=v.length; inp.setSelectionRange(l,l); }
+}
+function openJulgaeNameSearch(btnEl) {
+  const existing = document.getElementById('filter-popup');
+  if (existing) { existing.remove(); document.removeEventListener('click', _fpOutside); if (_fpField==='__jns') { _fpField=null; return; } }
+  _fpField = '__jns';
+  const pop = document.createElement('div');
+  pop.id = 'filter-popup';
+  pop.style.cssText = 'position:fixed;z-index:9999;background:#fff;border:1.5px solid #e0e0e0;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);padding:14px;min-width:200px;';
+  const rect = btnEl.getBoundingClientRect();
+  pop.style.top = Math.min(rect.bottom+6, window.innerHeight-130)+'px';
+  pop.style.left = Math.max(8, Math.min(rect.left, window.innerWidth-220))+'px';
+  pop.innerHTML = `<div style="font-size:12px;font-weight:800;color:#333;margin-bottom:8px">거래처명 검색</div>
+    <input id="jns-inp" type="text" value="${G.julgaeSearch.replace(/"/g,'&quot;')}" placeholder="거래처명 입력"
+      oninput="G.julgaeSearch=this.value;renderJulgae()"
+      style="width:100%;padding:8px 10px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:14px;font-family:inherit;box-sizing:border-box">
+    <div style="display:flex;gap:6px;margin-top:10px">
+      <button onclick="G.julgaeSearch='';renderJulgae();document.getElementById('filter-popup')?.remove();document.removeEventListener('click',_fpOutside);_fpField=null" style="flex:1;padding:7px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:13px;cursor:pointer;font-family:inherit">초기화</button>
+      <button onclick="document.getElementById('filter-popup')?.remove();document.removeEventListener('click',_fpOutside);_fpField=null" style="flex:2;padding:7px;border-radius:8px;border:none;background:#4f8ef7;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">확인</button>
+    </div>`;
+  document.body.appendChild(pop);
+  setTimeout(()=>{ const i=document.getElementById('jns-inp'); if(i){i.focus();const l=G.julgaeSearch.length;i.setSelectionRange(l,l);} document.addEventListener('click',_fpOutside); },50);
+}
+function julgaeCycleBtn(field, label, states) {
+  if (!states) states = ['전체','완료','미완료'];
+  const val = G[field] || states[0];
+  const idx = states.indexOf(val);
+  const next = states[(idx+1)%states.length];
+  const active = idx > 0;
+  const pos = idx === 1;
+  const s = active ? (pos?'border:1.5px solid #2e7d32;background:#e8f5e9;color:#2e7d32':'border:1.5px solid #e53935;background:#fdecea;color:#c62828') : 'border:1.5px solid #ddd;background:#fff;color:#555';
+  return `<button onclick="event.stopPropagation();G['${field}']='${next}';renderJulgae()" style="width:100%;padding:3px 5px;border-radius:6px;font-size:10px;cursor:pointer;font-family:inherit;${s};text-align:center">${val===states[0]?label:val}</button>`;
 }
 function onClosureSearch(v) {
   G.closureSearch = v; renderClosure();
@@ -2102,6 +2132,12 @@ function renderJulgae() {
   const ff = G.julgaeFeeFilter;
   if (ff === '수금') clients = clients.filter(c => julgaeVal(pKey2, c.id).s);
   else if (ff === '미수금') clients = clients.filter(c => { const v=julgaeVal(pKey2,c.id); return v.fee>0 && !v.s; });
+  if (G.julgaeDataFilter==='완료') clients = clients.filter(c=>julgaeVal(pKey2,c.id).d);
+  else if (G.julgaeDataFilter==='미완료') clients = clients.filter(c=>!julgaeVal(pKey2,c.id).d);
+  if (G.julgaeBookFilter==='완료') clients = clients.filter(c=>julgaeVal(pKey2,c.id).b);
+  else if (G.julgaeBookFilter==='미완료') clients = clients.filter(c=>!julgaeVal(pKey2,c.id).b);
+  if (G.julgaeDoneFilter==='완료') clients = clients.filter(c=>julgaeVal(pKey2,c.id).a);
+  else if (G.julgaeDoneFilter==='미완료') clients = clients.filter(c=>!julgaeVal(pKey2,c.id).a);
 
   const dataCount   = clients.filter(c => julgaeVal(pKey2, c.id).d).length;
   const bookCount   = clients.filter(c => julgaeVal(pKey2, c.id).b).length;
@@ -2197,7 +2233,7 @@ function renderJulgae() {
             ${byYear[yr].map(({p,i})=>{
               const pEnroll = p.enrolled && p.enrolled.length > 0;
               return `<div style="display:flex;align-items:center;gap:3px">
-                <button onclick="G.julgaePeriodIdx=${i};G.julgaeSearch='';renderJulgae()"
+                <button onclick="G.julgaePeriodIdx=${i};G.julgaeSearch='';G.julgaeManagers=[];G.julgaeDataFilter='전체';G.julgaeBookFilter='전체';G.julgaeDoneFilter='전체';G.julgaeFeeFilter='전체';renderJulgae()"
                   style="padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;border:2px solid ${i===idx?'#4f8ef7':'#e0e0e0'};background:${i===idx?'#e8f0fe':'#fff'};color:${i===idx?'#4f8ef7':'#555'}">
                   ${esc(p.label)}${pEnroll?` <span style="font-size:10px;background:#4f8ef7;color:#fff;border-radius:10px;padding:1px 6px;margin-left:4px">${p.enrolled.length}</span>`:''}
                 </button>
@@ -2240,14 +2276,6 @@ function renderJulgae() {
   </div>
 
   <div class="filter-bar">
-    <div class="search-box">
-      <span>🔍</span>
-      <input id="julgae-search-input" placeholder="거래처명·대표자 검색" value="${esc(G.julgaeSearch)}" oninput="onJulgaeSearch(this.value)">
-    </div>
-    ${filterPopupBtn('julgaeManagers','담당자')}
-    <select onchange="G.julgaeFeeFilter=this.value;renderJulgae()">
-      ${['전체','수금','미수금'].map(v=>`<option${G.julgaeFeeFilter===v?' selected':''}>${v}</option>`).join('')}
-    </select>
     <button class="btn-sm" style="background:#e3f2fd;color:#1565c0;border:1.5px solid #90caf9" onclick="openEnrollModal('${pKey}')">
       ☑ 업체 선택${hasEnroll?` (${period.enrolled.length})`:' (자동)'}
     </button>
@@ -2262,11 +2290,11 @@ function renderJulgae() {
   <table>
     <thead><tr>
       <th style="width:28px">번</th>
-      <th>거래처명</th>
-      <th>담당자</th>
-      <th style="width:56px;text-align:center">자료</th>
-      <th style="width:56px;text-align:center">기장</th>
-      <th style="width:56px;text-align:center">결재</th>
+      <th style="padding:4px 6px">${(()=>{const a=G.julgaeSearch;return`<button onclick="openJulgaeNameSearch(this)" style="width:100%;padding:4px 7px;border-radius:7px;font-size:11px;cursor:pointer;font-family:inherit;border:1.5px solid ${a?'#4f8ef7':'#ddd'};background:${a?'#e8f0fe':'#fff'};color:${a?'#1565c0':'#555'};display:flex;justify-content:space-between;align-items:center;gap:4px;"><span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a?esc(a):'거래처명'}</span><span style="font-size:9px;opacity:.5;flex-shrink:0">🔍</span></button>`;})()}</th>
+      <th style="padding:4px 6px">${filterPopupBtn('julgaeManagers','담당자')}</th>
+      <th style="width:56px;text-align:center;padding:3px">${julgaeCycleBtn('julgaeDataFilter','자료')}</th>
+      <th style="width:56px;text-align:center;padding:3px">${julgaeCycleBtn('julgaeBookFilter','기장')}</th>
+      <th style="width:56px;text-align:center;padding:3px">${julgaeCycleBtn('julgaeDoneFilter','결재')}</th>
       ${isIncomeType?`
         <th style="width:100px;text-align:right">수입금액</th>
         <th style="width:100px;text-align:right">소득금액</th>
@@ -2288,7 +2316,7 @@ function renderJulgae() {
         <th style="width:110px;text-align:right">과세표준</th>
       `}
       ${isSeongsiType?`<th style="width:110px;text-align:right">조정료</th><th style="width:110px;text-align:right">성실신고료</th>`:`<th style="width:110px;text-align:right">수수료청구</th>`}
-      <th style="width:60px;text-align:center">수금</th>
+      <th style="width:70px;text-align:center;padding:3px">${julgaeCycleBtn('julgaeFeeFilter','수금',['전체','수금','미수금'])}</th>
     </tr></thead>
     <tbody>
     ${clients.map((c, i) => {
