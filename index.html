@@ -794,19 +794,19 @@ function renderClients() {
 
   <datalist id="taxoffice-list">${TAX_OFFICES.map(o=>`<option value="${esc(o)}">`).join('')}</datalist>
 
-  ${G.editMode?`<div style="background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#2e7d32">✏ <b>수정모드</b> — 거래유형·인격·부가세·담당자·수수료를 클릭해 바로 변경하세요. 행을 펼치면 전화번호·관할세무서·수임일자도 수정할 수 있습니다.</div>`:''}
+  ${G.editMode?`<div style="background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#2e7d32">✏ <b>수정모드</b> — 수임내용·인격·과세유형·담당자·수수료를 클릭해 바로 변경하세요. 행을 펼치면 전화번호·관할세무서·수임일자도 수정할 수 있습니다.</div>`:''}
 
   <div class="tbl-wrap">
-  <table style="min-width:720px">
+  <table>
     <thead>
     <tr>
-      <th>거래처명</th><th>거래유형</th><th>인격</th><th>부가세</th><th>담당자</th><th>수수료</th><th>상태</th><th>수금</th><th style="width:28px"></th>
+      <th>거래처명</th><th>수임내용</th><th>인격</th><th>과세유형</th><th>담당자</th><th>수수료</th><th>상태</th><th>수금</th><th style="width:28px"></th>
     </tr>
     <tr class="filter-row">
       <th style="padding:4px 6px;font-weight:normal"></th>
-      <th style="padding:4px 6px;font-weight:normal">${filterPopupBtn('filterDealTypes','거래유형')}</th>
+      <th style="padding:4px 6px;font-weight:normal">${filterPopupBtn('filterDealTypes','수임내용')}</th>
       <th style="padding:4px 6px;font-weight:normal">${filterPopupBtn('filterTaxTypes','인격')}</th>
-      <th style="padding:4px 6px;font-weight:normal">${filterPopupBtn('filterVatTypes','부가세')}</th>
+      <th style="padding:4px 6px;font-weight:normal">${filterPopupBtn('filterVatTypes','과세유형')}</th>
       <th style="padding:4px 6px;font-weight:normal">${filterPopupBtn('filterManagers','담당자')}</th>
       ${emptyTh}
       ${emptyTh}
@@ -903,8 +903,8 @@ const _FP_OPTIONS = {
   julgaeManagers:    () => [...MANAGERS.slice(1), '(없음)'],
 };
 const _FP_TITLES = {
-  filterDealTypes:'거래유형 필터', filterManagers:'담당자 필터',
-  filterTaxTypes:'인격 필터', filterVatTypes:'부가세 필터',
+  filterDealTypes:'수임내용 필터', filterManagers:'담당자 필터',
+  filterTaxTypes:'인격 필터', filterVatTypes:'과세유형 필터',
   filterFeeStatuses:'수금상태 필터', julgaeManagers:'담당자 필터',
 };
 let _fpField = null;
@@ -1204,7 +1204,7 @@ function openDetail(id) {
         <div class="detail-row"><span class="lbl">업종</span><span>${esc(c.bizType||'-')}</span></div>
         <div class="detail-row"><span class="lbl">관할세무서</span><span>${esc(c.taxOffice||'-')}</span></div>
         <div class="detail-row"><span class="lbl">담당자</span><span>${getManagers(c).join(', ')||'-'}</span></div>
-        <div class="detail-row"><span class="lbl">거래유형</span>${getDealTypes(c).map(d=>dealBadge(d)).join('')}</div>
+        <div class="detail-row"><span class="lbl">수임내용</span>${getDealTypes(c).map(d=>dealBadge(d)).join('')}</div>
         <div class="detail-row"><span class="lbl">과세유형</span><span>${badge(c.taxType,c.taxType==='법인'?'blue':'gray')} ${badge(c.vatType,'gray')}</span></div>
       </div>
     </div>
@@ -1327,7 +1327,7 @@ function openForm(id) {
       </select></div>
     </div>
     <div>
-      <label class="flabel">거래유형 <span style="font-weight:400;color:#aaa">(복수 선택 가능)</span></label>
+      <label class="flabel">수임내용 <span style="font-weight:400;color:#aaa">(복수 선택 가능)</span></label>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px" id="form-dealTypes">
         ${DEAL_TYPES.slice(1).map(v=>`<button type="button" onclick="toggleFormDealType('${v}')" class="contract-chip ${(window._formData.dealTypes||[]).includes(v)?'on':''}">${v}</button>`).join('')}
       </div>
@@ -1718,7 +1718,7 @@ function renderClosure() {
   </div>`:''}
 
   <div class="tbl-wrap">
-  <table style="min-width:760px">
+  <table>
     <thead><tr><th>거래처명</th><th>유형</th><th>상태</th><th>수임일</th><th>해지일</th><th>사유</th><th>폐업연도</th><th>신고접수</th><th>신고완료</th><th>담당</th></tr></thead>
     <tbody>
     ${terminated.length>0?terminated.map(c=>`<tr onclick="openDetail(${c.id})">
@@ -1943,7 +1943,7 @@ function renderJulgae() {
   ${prevPeriods.length>0?`<div style="font-size:12px;color:#888;background:#fffde7;padding:6px 12px;border-radius:8px;margin-bottom:10px">💡 과거 동기(${prevPeriods.map(p=>esc(p.label)).join(', ')}) 수입금액·수수료청구액이 참고로 표시됩니다. (전년·전전년)</div>`:''}
 
   <div class="tbl-wrap">
-  <table style="min-width:${isSeongsiType?1160:isIncomeType?1060:isVatType?820:isSajupType?760:820}px">
+  <table>
     <thead><tr>
       <th style="width:28px">번</th>
       <th>거래처명</th>
@@ -2159,13 +2159,13 @@ function openEnrollModal(pKey) {
     </div>
 
     <div style="display:flex;flex-wrap:wrap;gap:4px;padding:8px 10px;background:#f8f9ff;border-radius:10px;margin-bottom:10px;align-items:center">
-      <span style="font-size:10px;font-weight:700;color:#aaa;margin-right:2px">거래유형</span>
+      <span style="font-size:10px;font-weight:700;color:#aaa;margin-right:2px">수임내용</span>
       ${DEAL_TYPES.slice(1).map(v=>efChip('dealTypes',v)).join('')}
       <span style="display:inline-block;width:1px;height:14px;background:#ddd;margin:0 4px;align-self:center"></span>
       <span style="font-size:10px;font-weight:700;color:#aaa;margin-right:2px">인격</span>
       ${TAX_TYPES.slice(1).map(v=>efChip('taxTypes',v)).join('')}
       <span style="display:inline-block;width:1px;height:14px;background:#ddd;margin:0 4px;align-self:center"></span>
-      <span style="font-size:10px;font-weight:700;color:#aaa;margin-right:2px">부가세</span>
+      <span style="font-size:10px;font-weight:700;color:#aaa;margin-right:2px">과세유형</span>
       ${VAT_TYPES.slice(1).map(v=>efChip('vatTypes',v)).join('')}
     </div>
 
@@ -2465,7 +2465,7 @@ function renderFees() {
     <div class="tbl-wrap">
     <table>
       <thead><tr>
-        <th>거래처명</th><th>거래유형</th><th>담당자</th><th>수임일</th>
+        <th>거래처명</th><th>수임내용</th><th>담당자</th><th>수임일</th>
         <th style="text-align:right">월수수료</th>
         <th style="width:60px;text-align:center">수금</th>
       </tr></thead>
@@ -3482,71 +3482,41 @@ function init() {
 
 init();
 
-// ── 테이블 끝 도달 후 재스와이프 → 페이지 이동 ──────────────────
+// ── 좌우 스와이프 → 페이지 이동 ──────────────────────────────────
 (function() {
-  let _sx = 0, _ss = 0, _wrap = null, _edgeHit = false;
+  let _sx = 0, _sy = 0;
 
   function showPageFlash(msg) {
     let el = document.getElementById('_page-flash');
     if (!el) {
       el = document.createElement('div');
       el.id = '_page-flash';
-      el.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(30,30,60,.82);color:#fff;font-size:13px;font-weight:700;padding:8px 22px;border-radius:20px;z-index:9999;pointer-events:none;transition:opacity .3s';
+      el.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(30,30,60,.82);color:#fff;font-size:13px;font-weight:700;padding:8px 22px;border-radius:20px;z-index:9999;pointer-events:none;opacity:0;transition:opacity .15s';
       document.body.appendChild(el);
     }
     el.textContent = msg;
     el.style.opacity = '1';
     clearTimeout(el._t);
-    el._t = setTimeout(() => { el.style.opacity = '0'; }, 900);
+    el._t = setTimeout(() => { el.style.opacity = '0'; }, 800);
   }
 
   document.addEventListener('touchstart', e => {
-    const wrap = e.target.closest('.tbl-wrap');
-    if (!wrap) { _wrap = null; return; }
-    _wrap = wrap;
     _sx = e.touches[0].clientX;
-    _ss = wrap.scrollLeft;
-    _edgeHit = false;
+    _sy = e.touches[0].clientY;
   }, { passive: true });
 
   document.addEventListener('touchend', e => {
-    if (!_wrap || G.currentTab !== 'clients') return;
-    const wrap = _wrap;
-    const dx = _sx - e.changedTouches[0].clientX; // >0: 왼쪽으로 스와이프
-    if (Math.abs(dx) < 40) return;
-
-    const maxScroll = Math.max(0, wrap.scrollWidth - wrap.clientWidth - 4);
-    const atRight = _ss >= maxScroll;
-    const atLeft  = _ss <= 4;
-    const scrolled = Math.abs(wrap.scrollLeft - _ss) > 10;
-
-    if (scrolled) {
-      // 테이블 실제로 스크롤됨 → 다음 번에 끝에서 한 번 더 시도해야 함
-      _edgeHit = false;
-      return;
-    }
-
-    if (dx > 0 && atRight) {
-      // 오른쪽 끝에서 왼쪽 스와이프 → 다음 페이지
-      const totalPages = Math.ceil(filteredClients().length / 50) || 1;
-      if (G.clientPage < totalPages - 1) {
-        G.clientPage += 1;
-        renderClients();
-        showPageFlash('다음 페이지 ▶');
-        document.getElementById('page-clients')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      } else {
-        showPageFlash('마지막 페이지입니다');
-      }
-    } else if (dx < 0 && atLeft) {
-      // 왼쪽 끝에서 오른쪽 스와이프 → 이전 페이지
-      if (G.clientPage > 0) {
-        G.clientPage -= 1;
-        renderClients();
-        showPageFlash('◀ 이전 페이지');
-        document.getElementById('page-clients')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      } else {
-        showPageFlash('첫 번째 페이지입니다');
-      }
+    if (G.currentTab !== 'clients') return;
+    const dx = _sx - e.changedTouches[0].clientX;
+    const dy = _sy - e.changedTouches[0].clientY;
+    if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx)) return; // 수직 스크롤이면 무시
+    const totalPages = Math.ceil(filteredClients().length / 50) || 1;
+    if (dx > 0) {
+      if (G.clientPage < totalPages - 1) { G.clientPage++; renderClients(); showPageFlash('다음 페이지 ▶'); }
+      else showPageFlash('마지막 페이지');
+    } else {
+      if (G.clientPage > 0) { G.clientPage--; renderClients(); showPageFlash('◀ 이전 페이지'); }
+      else showPageFlash('첫 번째 페이지');
     }
   }, { passive: true });
 })();
