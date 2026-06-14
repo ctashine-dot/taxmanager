@@ -57,8 +57,7 @@ body{font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;background:#f0
 .filter-bar select{padding:7px 10px;border:1px solid #e0e0e0;border-radius:8px;font-size:12px;background:#fff;cursor:pointer;font-family:inherit;color:#333}
 
 /* ── 테이블 */
-.tbl-wrap{overflow-x:auto;border-radius:14px;box-shadow:0 1px 4px rgba(0,0,0,.07);-webkit-overflow-scrolling:touch}
-.tbl-wrap table{min-width:100%;width:max-content}
+.tbl-wrap{overflow-x:auto;border-radius:14px;box-shadow:0 1px 4px rgba(0,0,0,.07);-webkit-overflow-scrolling:touch;display:block}
 table{width:100%;border-collapse:collapse;font-size:13px;background:#fff}
 thead tr{background:#f8f9ff;border-bottom:2px solid #e8eaf6}
 th{padding:10px 12px;text-align:left;font-weight:700;color:#555;white-space:nowrap;font-size:12px}
@@ -798,7 +797,7 @@ function renderClients() {
   ${G.editMode?`<div style="background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#2e7d32">✏ <b>수정모드</b> — 거래유형·인격·부가세·담당자·수수료를 클릭해 바로 변경하세요. 행을 펼치면 전화번호·관할세무서·수임일자도 수정할 수 있습니다.</div>`:''}
 
   <div class="tbl-wrap">
-  <table>
+  <table style="min-width:720px">
     <thead>
     <tr>
       <th>거래처명</th><th>거래유형</th><th>인격</th><th>부가세</th><th>담당자</th><th>수수료</th><th>상태</th><th>수금</th><th style="width:28px"></th>
@@ -1719,7 +1718,7 @@ function renderClosure() {
   </div>`:''}
 
   <div class="tbl-wrap">
-  <table>
+  <table style="min-width:760px">
     <thead><tr><th>거래처명</th><th>유형</th><th>상태</th><th>수임일</th><th>해지일</th><th>사유</th><th>폐업연도</th><th>신고접수</th><th>신고완료</th><th>담당</th></tr></thead>
     <tbody>
     ${terminated.length>0?terminated.map(c=>`<tr onclick="openDetail(${c.id})">
@@ -1944,7 +1943,7 @@ function renderJulgae() {
   ${prevPeriods.length>0?`<div style="font-size:12px;color:#888;background:#fffde7;padding:6px 12px;border-radius:8px;margin-bottom:10px">💡 과거 동기(${prevPeriods.map(p=>esc(p.label)).join(', ')}) 수입금액·수수료청구액이 참고로 표시됩니다. (전년·전전년)</div>`:''}
 
   <div class="tbl-wrap">
-  <table>
+  <table style="min-width:${isSeongsiType?1160:isIncomeType?1060:isVatType?820:isSajupType?760:820}px">
     <thead><tr>
       <th style="width:28px">번</th>
       <th>거래처명</th>
