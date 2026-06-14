@@ -930,11 +930,7 @@ function renderClients() {
   const filterRowSel = `style="width:100%;font-size:11px;padding:3px 4px;border:1px solid #ddd;border-radius:6px"`;
 
   const hc = G.hiddenCols || {};
-  const colHideBtn = (col) => `<button onclick="event.stopPropagation();toggleClientCol('${col}')" title="컬럼 숨기기" style="padding:1px 4px;border-radius:4px;border:1px solid #e0e0e0;background:#f5f5f5;color:#bbb;font-size:10px;cursor:pointer;font-family:inherit;line-height:1.2;margin-left:3px">✕</button>`;
-  const hiddenChips = Object.keys(hc).filter(k=>hc[k]).map(k => {
-    const label = k==='taxType'?'인격':k==='vatType'?'과세유형':k;
-    return `<button onclick="toggleClientCol('${k}')" style="padding:3px 8px;border-radius:12px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;font-size:11px;cursor:pointer;font-family:inherit">+ ${label}</button>`;
-  }).join('');
+  const hiddenChips = _hcChips([['c_rep','대표자'],['c_dealType','수임내용'],['c_taxType','인격'],['c_vatType','과세유형'],['c_manager','담당자'],['c_fee','수수료'],['c_status','상태'],['c_cms','CMS']]);
 
   document.getElementById('page-clients').innerHTML = `
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -961,13 +957,14 @@ function renderClients() {
     <thead>
     <tr>
       <th style="padding:4px 6px">${(()=>{const a=G.searchText;return`<button onclick="openClientNameSearch(this)" style="width:100%;padding:4px 7px;border-radius:7px;font-size:11px;cursor:pointer;font-family:inherit;border:1.5px solid ${a?'#4f8ef7':'#ddd'};background:${a?'#e8f0fe':'#fff'};color:${a?'#1565c0':'#555'};display:flex;justify-content:space-between;align-items:center;gap:4px"><span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a?esc(a):'거래처명'}</span><span style="font-size:9px;opacity:.5">🔍</span></button>`;})()}</th>
-      <th style="width:72px;padding:3px 4px">${(()=>{const a=G.clientRepSearch;return`<button onclick="openClientRepSearch(this)" style="width:100%;padding:4px 6px;border-radius:7px;font-size:11px;cursor:pointer;font-family:inherit;border:1.5px solid ${a?'#4f8ef7':'#ddd'};background:${a?'#e8f0fe':'#fff'};color:${a?'#1565c0':'#555'};display:flex;justify-content:space-between;align-items:center;gap:3px"><span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a?esc(a):'대표자'}</span><span style="font-size:9px;opacity:.5">🔍</span></button>`;})()}</th>
-      <th style="padding:4px 6px">${filterPopupBtn('filterDealTypes','수임내용')}</th>
-      <th style="padding:4px 6px;${hc.taxType?'display:none':''}"><div style="display:flex;align-items:center">${filterPopupBtn('filterTaxTypes','인격')}${colHideBtn('taxType')}</div></th>
-      <th style="padding:4px 6px;${hc.vatType?'display:none':''}"><div style="display:flex;align-items:center">${filterPopupBtn('filterVatTypes','과세유형')}${colHideBtn('vatType')}</div></th>
-      <th style="padding:4px 6px">${filterPopupBtn('filterManagers','담당자')}</th>
-      <th>수수료</th><th>상태</th>
-      <th style="padding:4px 6px">${filterPopupBtn('filterCMS','CMS')}</th>
+      <th style="width:72px;padding:3px 4px;${_hcStyle('c_rep')}"><div style="display:flex;align-items:center">${(()=>{const a=G.clientRepSearch;return`<button onclick="openClientRepSearch(this)" style="width:100%;padding:4px 6px;border-radius:7px;font-size:11px;cursor:pointer;font-family:inherit;border:1.5px solid ${a?'#4f8ef7':'#ddd'};background:${a?'#e8f0fe':'#fff'};color:${a?'#1565c0':'#555'};display:flex;justify-content:space-between;align-items:center;gap:3px"><span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a?esc(a):'대표자'}</span><span style="font-size:9px;opacity:.5">🔍</span></button>`;})()}${_hcBtn('c_rep')}</div></th>
+      <th style="padding:4px 6px;${_hcStyle('c_dealType')}"><div style="display:flex;align-items:center">${filterPopupBtn('filterDealTypes','수임내용')}${_hcBtn('c_dealType')}</div></th>
+      <th style="padding:4px 6px;${_hcStyle('c_taxType')}"><div style="display:flex;align-items:center">${filterPopupBtn('filterTaxTypes','인격')}${_hcBtn('c_taxType')}</div></th>
+      <th style="padding:4px 6px;${_hcStyle('c_vatType')}"><div style="display:flex;align-items:center">${filterPopupBtn('filterVatTypes','과세유형')}${_hcBtn('c_vatType')}</div></th>
+      <th style="padding:4px 6px;${_hcStyle('c_manager')}"><div style="display:flex;align-items:center">${filterPopupBtn('filterManagers','담당자')}${_hcBtn('c_manager')}</div></th>
+      <th style="${_hcStyle('c_fee')}"><div style="display:flex;align-items:center;justify-content:center">수수료${_hcBtn('c_fee')}</div></th>
+      <th style="${_hcStyle('c_status')}"><div style="display:flex;align-items:center;justify-content:center">상태${_hcBtn('c_status')}</div></th>
+      <th style="padding:4px 6px;${_hcStyle('c_cms')}"><div style="display:flex;align-items:center">${filterPopupBtn('filterCMS','CMS')}${_hcBtn('c_cms')}</div></th>
       <th style="width:28px"></th>
     </tr>
     </thead>
@@ -989,18 +986,18 @@ function renderClients() {
       const groupSub = inGroup ? `<span style="font-size:10px;color:${gc};font-weight:600;margin-left:4px">👥 ${esc(groupLabel)}</span>` : '';
       return `<tr class="client-row" onclick="toggleExpand(${c.id})" style="${inGroup?`border-left:3px solid ${gc}`:''}" >
         <td><div class="td-name">${groupDot}${esc(c.name)}</div>${(c.bizType||groupSub)?`<div class="td-sub">${c.bizType?esc(c.bizType):''}${groupSub}</div>`:''}</td>
-        <td style="font-size:12px;color:#444">${esc(c.rep)||'-'}</td>
-        <td>${em?iSel('dealType',DEAL_TYPES.slice(1),getDealTypes(c)[0]):getDealTypes(c).map(d=>dealBadge(d)).join('')}</td>
-        <td style="${hc.taxType?'display:none':''}">${em?iSel('taxType',TAX_TYPES.slice(1),c.taxType):badge(c.taxType,c.taxType==='법인'?'blue':'gray')}</td>
-        <td style="${hc.vatType?'display:none':''}">${em?iSel('vatType',VAT_TYPES.slice(1),c.vatType):badge(c.vatType,c.vatType==='일반'?'blue':c.vatType==='간이'?'orange':'gray')}</td>
-        <td style="color:#555;font-size:12px">${em?iSel('manager',MANAGERS.slice(1),getManagers(c)[0]||''):getManagers(c).join(', ')||'-'}</td>
-        <td style="font-weight:600;font-size:11px">${em?`<div onclick="event.stopPropagation()" style="display:grid;grid-template-columns:auto 1fr;gap:2px 4px;align-items:center;font-size:10px"><span style="color:#888">기장</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'fee',this.value)" value="${c.fee||0}" class="inline-edit" style="width:65px"><span style="color:#888">신고</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeSingo',this.value)" value="${c.feeSingo||0}" class="inline-edit" style="width:65px"><span style="color:#888">조정</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeJojung',this.value)" value="${c.feeJojung||0}" class="inline-edit" style="width:65px"><span style="color:#888">성실</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeSeongsi',this.value)" value="${c.feeSeongsi||0}" class="inline-edit" style="width:65px"></div>`:(c.status==='정상'||c.status==='주의'?(()=>{const p=[];if(c.fee)p.push('<span style="color:#aaa;font-size:10px">기장</span> '+c.fee.toLocaleString());if(c.feeSingo)p.push('<span style="color:#aaa;font-size:10px">신고</span> '+c.feeSingo.toLocaleString());if(c.feeJojung)p.push('<span style="color:#aaa;font-size:10px">조정</span> '+c.feeJojung.toLocaleString());if(c.feeSeongsi)p.push('<span style="color:#aaa;font-size:10px">성실</span> '+c.feeSeongsi.toLocaleString());return p.length?p.join('<br>'):'-';})():'-')}</td>
-        <td onclick="event.stopPropagation();cycleStatus(${c.id})" style="cursor:pointer">${badge(c.status,c.status==='정상'?'green':c.status==='주의'?'orange':'gray')}</td>
-        <td onclick="event.stopPropagation();toggleCMS(${c.id})" style="cursor:pointer">${badge(c.cms?'가입':'미가입',c.cms?'green':'gray')}</td>
+        <td style="font-size:12px;color:#444;${hc['c_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
+        <td style="${hc['c_dealType']?'display:none':''}">${em?iSel('dealType',DEAL_TYPES.slice(1),getDealTypes(c)[0]):getDealTypes(c).map(d=>dealBadge(d)).join('')}</td>
+        <td style="${hc['c_taxType']?'display:none':''}">${em?iSel('taxType',TAX_TYPES.slice(1),c.taxType):badge(c.taxType,c.taxType==='법인'?'blue':'gray')}</td>
+        <td style="${hc['c_vatType']?'display:none':''}">${em?iSel('vatType',VAT_TYPES.slice(1),c.vatType):badge(c.vatType,c.vatType==='일반'?'blue':c.vatType==='간이'?'orange':'gray')}</td>
+        <td style="color:#555;font-size:12px;${hc['c_manager']?'display:none':''}">${em?iSel('manager',MANAGERS.slice(1),getManagers(c)[0]||''):getManagers(c).join(', ')||'-'}</td>
+        <td style="font-weight:600;font-size:11px;${hc['c_fee']?'display:none':''}">${em?`<div onclick="event.stopPropagation()" style="display:grid;grid-template-columns:auto 1fr;gap:2px 4px;align-items:center;font-size:10px"><span style="color:#888">기장</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'fee',this.value)" value="${c.fee||0}" class="inline-edit" style="width:65px"><span style="color:#888">신고</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeSingo',this.value)" value="${c.feeSingo||0}" class="inline-edit" style="width:65px"><span style="color:#888">조정</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeJojung',this.value)" value="${c.feeJojung||0}" class="inline-edit" style="width:65px"><span style="color:#888">성실</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeSeongsi',this.value)" value="${c.feeSeongsi||0}" class="inline-edit" style="width:65px"></div>`:(c.status==='정상'||c.status==='주의'?(()=>{const p=[];if(c.fee)p.push('<span style="color:#aaa;font-size:10px">기장</span> '+c.fee.toLocaleString());if(c.feeSingo)p.push('<span style="color:#aaa;font-size:10px">신고</span> '+c.feeSingo.toLocaleString());if(c.feeJojung)p.push('<span style="color:#aaa;font-size:10px">조정</span> '+c.feeJojung.toLocaleString());if(c.feeSeongsi)p.push('<span style="color:#aaa;font-size:10px">성실</span> '+c.feeSeongsi.toLocaleString());return p.length?p.join('<br>'):'-';})():'-')}</td>
+        <td onclick="event.stopPropagation();cycleStatus(${c.id})" style="cursor:pointer;${hc['c_status']?'display:none':''}">${badge(c.status,c.status==='정상'?'green':c.status==='주의'?'orange':'gray')}</td>
+        <td onclick="event.stopPropagation();toggleCMS(${c.id})" style="cursor:pointer;${hc['c_cms']?'display:none':''}">${badge(c.cms?'가입':'미가입',c.cms?'green':'gray')}</td>
         <td style="text-align:center;color:#aaa;font-size:11px" id="expand-arrow-${c.id}">▼</td>
       </tr>
       <tr class="expand-row" id="expand-${c.id}" style="display:none">
-        <td colspan="${10-(hc.taxType?1:0)-(hc.vatType?1:0)}">
+        <td colspan="${10-['c_rep','c_dealType','c_taxType','c_vatType','c_manager','c_fee','c_status','c_cms'].filter(k=>hc[k]).length}">
           <div class="expand-inner">
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">연락처</div>${em?iInput('phone',c.phone,'placeholder="전화번호" style="width:140px"'):`<div style="font-weight:600">${esc(c.phone||'-')}</div>`}</div>
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">관할세무서</div>${em?iInput('taxOffice',c.taxOffice,'list="taxoffice-list" placeholder="세무서 선택·입력" style="width:150px"'):`<div style="font-weight:600">${esc(c.taxOffice||'-')}</div>`}</div>
@@ -1732,6 +1729,25 @@ function sectionToggleBtn(key) {
   return `<button onclick="toggleSection('${key}')" title="${collapsed?'펼치기':'접기'}" style="padding:2px 8px;border-radius:6px;border:1.5px solid #e0e0e0;background:${collapsed?'#f5f5f5':'#fff'};color:#888;font-size:12px;cursor:pointer;font-family:inherit;line-height:1.4">${collapsed?'▶':'▼'}</button>`;
 }
 
+function _toggleHiddenCol(key) {
+  if (!G.hiddenCols) G.hiddenCols = {};
+  G.hiddenCols[key] = !G.hiddenCols[key];
+  if (key.startsWith('c_')) renderClients();
+  else if (key.startsWith('cl_')) renderClosure();
+  else if (key.startsWith('j_')) renderJulgae();
+  else renderFees();
+}
+function _hcStyle(key) {
+  return (G.hiddenCols||{})[key] ? 'display:none' : '';
+}
+function _hcBtn(key) {
+  return `<button onclick="event.stopPropagation();_toggleHiddenCol('${key}')" title="컬럼 숨기기" style="padding:1px 4px;border-radius:4px;border:1px solid #e0e0e0;background:#f5f5f5;color:#bbb;font-size:10px;cursor:pointer;font-family:inherit;line-height:1.2;margin-left:3px;flex-shrink:0">✕</button>`;
+}
+function _hcChips(pairs) {
+  const hc = G.hiddenCols || {};
+  return pairs.filter(([k])=>hc[k]).map(([k,l])=>`<button onclick="_toggleHiddenCol('${k}')" style="padding:3px 8px;border-radius:12px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;font-size:11px;cursor:pointer;font-family:inherit">+ ${l}</button>`).join('');
+}
+
 function toggleExpand(id) {
   const row = document.getElementById('expand-'+id);
   if (!row) return;
@@ -2341,11 +2357,15 @@ function renderClosure() {
   const nameActive = !!G.closureNameSearch;
   const repActive  = !!G.closureRepSearch;
 
+  const hc = G.hiddenCols || {};
+  const clChips = _hcChips([['cl_rep','대표자'],['cl_taxType','유형'],['cl_status','상태'],['cl_contractDate','수임일'],['cl_terminationDate','해지일'],['cl_reason','사유'],['cl_closureYear','폐업연도'],['cl_filed','신고접수'],['cl_approved','신고완료'],['cl_manager','담당자']]);
+
   document.getElementById('page-closure').innerHTML = `
   <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
     <h2 style="font-size:20px;font-weight:800;margin:0">해지·폐업 관리</h2>
     ${sectionToggleBtn('closure-list')}
   </div>
+  ${clChips?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${clChips}</div>`:''}
   <div class="stat-grid" style="margin-bottom:16px">
     <div class="stat-card" style="border-left:4px solid #757575"><div class="stat-label">해지 거래처</div><div class="stat-value" style="color:#757575">${G.clients.filter(c=>c.status==='해지').length}<span style="font-size:12px">개</span></div></div>
     <div class="stat-card" style="border-left:4px solid #c62828"><div class="stat-label">폐업 거래처</div><div class="stat-value" style="color:#c62828">${G.clients.filter(c=>c.status==='폐업').length}<span style="font-size:12px">개</span></div></div>
@@ -2371,25 +2391,30 @@ function renderClosure() {
   <table>
     <thead><tr>
       <th style="padding:4px 6px"><button onclick="openClosureNameSearch(this)" style="width:100%;padding:3px 5px;border-radius:6px;font-size:10px;cursor:pointer;font-family:inherit;${nameActive?'border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7':'border:1.5px solid #ddd;background:#fff;color:#555'};text-align:left">거래처명 🔍</button></th>
-      <th style="width:72px;padding:3px 4px"><button onclick="openClosureRepSearch(this)" style="width:100%;padding:3px 5px;border-radius:6px;font-size:10px;cursor:pointer;font-family:inherit;${repActive?'border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7':'border:1.5px solid #ddd;background:#fff;color:#555'};text-align:left">대표자 🔍</button></th>
-      <th>유형</th>
-      <th style="width:56px;text-align:center;padding:3px">${closureCycleBtn('closureStatusFilter','상태',['전체','해지','폐업'])}</th>
-      <th>수임일</th><th>해지일</th><th>사유</th><th>폐업연도</th><th>신고접수</th><th>신고완료</th>
-      <th style="padding:4px 6px">${filterPopupBtn('closureManagerFilter','담당자')}</th>
+      <th style="width:72px;padding:3px 4px;${_hcStyle('cl_rep')}"><div style="display:flex;align-items:center"><button onclick="openClosureRepSearch(this)" style="width:100%;padding:3px 5px;border-radius:6px;font-size:10px;cursor:pointer;font-family:inherit;${repActive?'border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7':'border:1.5px solid #ddd;background:#fff;color:#555'};text-align:left">대표자 🔍</button>${_hcBtn('cl_rep')}</div></th>
+      <th style="${_hcStyle('cl_taxType')}"><div style="display:flex;align-items:center;justify-content:center">유형${_hcBtn('cl_taxType')}</div></th>
+      <th style="width:56px;text-align:center;padding:3px;${_hcStyle('cl_status')}"><div style="display:flex;align-items:center;justify-content:center">${closureCycleBtn('closureStatusFilter','상태',['전체','해지','폐업'])}${_hcBtn('cl_status')}</div></th>
+      <th style="${_hcStyle('cl_contractDate')}"><div style="display:flex;align-items:center;justify-content:center">수임일${_hcBtn('cl_contractDate')}</div></th>
+      <th style="${_hcStyle('cl_terminationDate')}"><div style="display:flex;align-items:center;justify-content:center">해지일${_hcBtn('cl_terminationDate')}</div></th>
+      <th style="${_hcStyle('cl_reason')}"><div style="display:flex;align-items:center;justify-content:center">사유${_hcBtn('cl_reason')}</div></th>
+      <th style="${_hcStyle('cl_closureYear')}"><div style="display:flex;align-items:center;justify-content:center">폐업연도${_hcBtn('cl_closureYear')}</div></th>
+      <th style="${_hcStyle('cl_filed')}"><div style="display:flex;align-items:center;justify-content:center">신고접수${_hcBtn('cl_filed')}</div></th>
+      <th style="${_hcStyle('cl_approved')}"><div style="display:flex;align-items:center;justify-content:center">신고완료${_hcBtn('cl_approved')}</div></th>
+      <th style="padding:4px 6px;${_hcStyle('cl_manager')}"><div style="display:flex;align-items:center">${filterPopupBtn('closureManagerFilter','담당자')}${_hcBtn('cl_manager')}</div></th>
     </tr></thead>
     <tbody>
     ${terminated.length>0?terminated.map(c=>`<tr onclick="openDetail(${c.id})">
       <td><div class="td-name">${esc(c.name)}</div></td>
-      <td style="font-size:12px;color:#444">${esc(c.rep)||'-'}</td>
-      <td>${badge(c.taxType,c.taxType==='법인'?'blue':'gray')}</td>
-      <td>${badge(c.status,c.status==='폐업'?'red':'gray')}</td>
-      <td style="font-size:12px;color:#666">${esc(c.contractDate||'-')}</td>
-      <td style="font-size:12px;color:#666">${esc(c.terminationDate||'-')}</td>
-      <td style="font-size:12px">${rLabel(c.terminationReason)}</td>
-      <td style="font-size:12px">${c.status==='폐업'?(c.closureYear?c.closureYear+'년':'-'):'-'}</td>
-      <td onclick="event.stopPropagation();c.status==='폐업'&&toggleField(${c.id},'closureTaxFiled')&&renderClosure()">${c.status==='폐업'?chk(c.closureTaxFiled):'<span style="color:#ccc;font-size:12px">-</span>'}</td>
-      <td onclick="event.stopPropagation();c.status==='폐업'&&toggleField(${c.id},'closureTaxApproved')&&renderClosure()">${c.status==='폐업'?chk(c.closureTaxApproved):'<span style="color:#ccc;font-size:12px">-</span>'}</td>
-      <td style="color:#555;font-size:12px">${getManagers(c).join(', ')||'-'}</td>
+      <td style="font-size:12px;color:#444;${hc['cl_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
+      <td style="${hc['cl_taxType']?'display:none':''}">${badge(c.taxType,c.taxType==='법인'?'blue':'gray')}</td>
+      <td style="${hc['cl_status']?'display:none':''}">${badge(c.status,c.status==='폐업'?'red':'gray')}</td>
+      <td style="font-size:12px;color:#666;${hc['cl_contractDate']?'display:none':''}">${esc(c.contractDate||'-')}</td>
+      <td style="font-size:12px;color:#666;${hc['cl_terminationDate']?'display:none':''}">${esc(c.terminationDate||'-')}</td>
+      <td style="font-size:12px;${hc['cl_reason']?'display:none':''}">${rLabel(c.terminationReason)}</td>
+      <td style="font-size:12px;${hc['cl_closureYear']?'display:none':''}">${c.status==='폐업'?(c.closureYear?c.closureYear+'년':'-'):'-'}</td>
+      <td style="${hc['cl_filed']?'display:none':''}" onclick="event.stopPropagation();c.status==='폐업'&&toggleField(${c.id},'closureTaxFiled')&&renderClosure()">${c.status==='폐업'?chk(c.closureTaxFiled):'<span style="color:#ccc;font-size:12px">-</span>'}</td>
+      <td style="${hc['cl_approved']?'display:none':''}" onclick="event.stopPropagation();c.status==='폐업'&&toggleField(${c.id},'closureTaxApproved')&&renderClosure()">${c.status==='폐업'?chk(c.closureTaxApproved):'<span style="color:#ccc;font-size:12px">-</span>'}</td>
+      <td style="color:#555;font-size:12px;${hc['cl_manager']?'display:none':''}">${getManagers(c).join(', ')||'-'}</td>
     </tr>`).join(''):
     '<tr><td colspan="11" style="text-align:center;padding:40px;color:#aaa">해지·폐업 거래처가 없습니다</td></tr>'}
     </tbody>
