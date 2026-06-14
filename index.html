@@ -3481,6 +3481,75 @@ function init() {
 }
 
 init();
+
+// ── 테이블 끝 도달 후 재스와이프 → 페이지 이동 ──────────────────
+(function() {
+  let _sx = 0, _ss = 0, _wrap = null, _edgeHit = false;
+
+  function showPageFlash(msg) {
+    let el = document.getElementById('_page-flash');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = '_page-flash';
+      el.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(30,30,60,.82);color:#fff;font-size:13px;font-weight:700;padding:8px 22px;border-radius:20px;z-index:9999;pointer-events:none;transition:opacity .3s';
+      document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.style.opacity = '1';
+    clearTimeout(el._t);
+    el._t = setTimeout(() => { el.style.opacity = '0'; }, 900);
+  }
+
+  document.addEventListener('touchstart', e => {
+    const wrap = e.target.closest('.tbl-wrap');
+    if (!wrap) { _wrap = null; return; }
+    _wrap = wrap;
+    _sx = e.touches[0].clientX;
+    _ss = wrap.scrollLeft;
+    _edgeHit = false;
+  }, { passive: true });
+
+  document.addEventListener('touchend', e => {
+    if (!_wrap || G.currentTab !== 'clients') return;
+    const wrap = _wrap;
+    const dx = _sx - e.changedTouches[0].clientX; // >0: 왼쪽으로 스와이프
+    if (Math.abs(dx) < 40) return;
+
+    const maxScroll = Math.max(0, wrap.scrollWidth - wrap.clientWidth - 4);
+    const atRight = _ss >= maxScroll;
+    const atLeft  = _ss <= 4;
+    const scrolled = Math.abs(wrap.scrollLeft - _ss) > 10;
+
+    if (scrolled) {
+      // 테이블 실제로 스크롤됨 → 다음 번에 끝에서 한 번 더 시도해야 함
+      _edgeHit = false;
+      return;
+    }
+
+    if (dx > 0 && atRight) {
+      // 오른쪽 끝에서 왼쪽 스와이프 → 다음 페이지
+      const totalPages = Math.ceil(filteredClients().length / 50) || 1;
+      if (G.clientPage < totalPages - 1) {
+        G.clientPage += 1;
+        renderClients();
+        showPageFlash('다음 페이지 ▶');
+        document.getElementById('page-clients')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        showPageFlash('마지막 페이지입니다');
+      }
+    } else if (dx < 0 && atLeft) {
+      // 왼쪽 끝에서 오른쪽 스와이프 → 이전 페이지
+      if (G.clientPage > 0) {
+        G.clientPage -= 1;
+        renderClients();
+        showPageFlash('◀ 이전 페이지');
+        document.getElementById('page-clients')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        showPageFlash('첫 번째 페이지입니다');
+      }
+    }
+  }, { passive: true });
+})();
 </script>
 </body>
 </html>
