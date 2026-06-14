@@ -312,6 +312,10 @@ let G = {
   filingSearch: '',
   filingManagerFilter: [],
   filingCollectFilter: '전체',
+  closureNameSearch: '',
+  closureRepSearch: '',
+  closureManagerFilter: [],
+  closureStatusFilter: '전체',
   settings: {
     name: '○○세무회계사무소', rep: '홍세무',
     phone: '02-1234-5678', fax: '02-1234-5679',
@@ -1162,6 +1166,59 @@ function onClosureSearch(v) {
   const inp = document.getElementById('closure-search-input');
   if (inp) { inp.focus(); const l=v.length; inp.setSelectionRange(l,l); }
 }
+function closureCycleBtn(field, label, states) {
+  if (!states) states = ['전체','해지','폐업'];
+  const val = G[field] || states[0];
+  const idx = states.indexOf(val);
+  const next = states[(idx+1)%states.length];
+  const active = idx > 0;
+  const s = active ? 'border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7' : 'border:1.5px solid #ddd;background:#fff;color:#555';
+  return `<button onclick="event.stopPropagation();G['${field}']='${next}';renderClosure()" style="width:100%;padding:3px 5px;border-radius:6px;font-size:10px;cursor:pointer;font-family:inherit;${s};text-align:center">${val===states[0]?label:val}</button>`;
+}
+function openClosureNameSearch(btnEl) {
+  const FLD='closureNameSearch', ID='cln-inp';
+  const existing=document.getElementById('filter-popup');
+  if(existing){existing.remove();document.removeEventListener('click',_fpOutside);if(_fpField==='__'+ID){_fpField=null;return;}}
+  _fpField='__'+ID;
+  const cur=G[FLD]||'';
+  const pop=document.createElement('div'); pop.id='filter-popup';
+  pop.style.cssText='position:fixed;z-index:9999;background:#fff;border:1.5px solid #e0e0e0;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);padding:14px;min-width:200px;';
+  const rect=btnEl.getBoundingClientRect();
+  pop.style.top=Math.min(rect.bottom+6,window.innerHeight-130)+'px';
+  pop.style.left=Math.max(8,Math.min(rect.left,window.innerWidth-220))+'px';
+  pop.innerHTML=`<div style="font-size:12px;font-weight:800;color:#333;margin-bottom:8px">거래처명 검색</div>
+    <input id="${ID}" type="text" value="${cur.replace(/"/g,'&quot;')}" placeholder="거래처명"
+      oninput="G['${FLD}']=this.value;renderClosure()"
+      style="width:100%;padding:8px 10px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:14px;font-family:inherit;box-sizing:border-box">
+    <div style="display:flex;gap:6px;margin-top:10px">
+      <button onclick="G['${FLD}']='';renderClosure();document.getElementById('filter-popup')?.remove();document.removeEventListener('click',_fpOutside);_fpField=null" style="flex:1;padding:7px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:13px;cursor:pointer;font-family:inherit">초기화</button>
+      <button onclick="document.getElementById('filter-popup')?.remove();document.removeEventListener('click',_fpOutside);_fpField=null" style="flex:2;padding:7px;border-radius:8px;border:none;background:#4f8ef7;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">확인</button>
+    </div>`;
+  document.body.appendChild(pop);
+  setTimeout(()=>{const i=document.getElementById(ID);if(i){i.focus();const l=cur.length;i.setSelectionRange(l,l);}document.addEventListener('click',_fpOutside);},50);
+}
+function openClosureRepSearch(btnEl) {
+  const FLD='closureRepSearch', ID='clr-inp';
+  const existing=document.getElementById('filter-popup');
+  if(existing){existing.remove();document.removeEventListener('click',_fpOutside);if(_fpField==='__'+ID){_fpField=null;return;}}
+  _fpField='__'+ID;
+  const cur=G[FLD]||'';
+  const pop=document.createElement('div'); pop.id='filter-popup';
+  pop.style.cssText='position:fixed;z-index:9999;background:#fff;border:1.5px solid #e0e0e0;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);padding:14px;min-width:200px;';
+  const rect=btnEl.getBoundingClientRect();
+  pop.style.top=Math.min(rect.bottom+6,window.innerHeight-130)+'px';
+  pop.style.left=Math.max(8,Math.min(rect.left,window.innerWidth-220))+'px';
+  pop.innerHTML=`<div style="font-size:12px;font-weight:800;color:#333;margin-bottom:8px">대표자명 검색</div>
+    <input id="${ID}" type="text" value="${cur.replace(/"/g,'&quot;')}" placeholder="대표자명"
+      oninput="G['${FLD}']=this.value;renderClosure()"
+      style="width:100%;padding:8px 10px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:14px;font-family:inherit;box-sizing:border-box">
+    <div style="display:flex;gap:6px;margin-top:10px">
+      <button onclick="G['${FLD}']='';renderClosure();document.getElementById('filter-popup')?.remove();document.removeEventListener('click',_fpOutside);_fpField=null" style="flex:1;padding:7px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:13px;cursor:pointer;font-family:inherit">초기화</button>
+      <button onclick="document.getElementById('filter-popup')?.remove();document.removeEventListener('click',_fpOutside);_fpField=null" style="flex:2;padding:7px;border-radius:8px;border:none;background:#4f8ef7;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">확인</button>
+    </div>`;
+  document.body.appendChild(pop);
+  setTimeout(()=>{const i=document.getElementById(ID);if(i){i.focus();const l=cur.length;i.setSelectionRange(l,l);}document.addEventListener('click',_fpOutside);},50);
+}
 function onFilter(field,v) { G[field]=v; G.clientPage=0; renderClients(); }
 
 // ── 필터 팝업 ──────────────────────────────────────────
@@ -1175,13 +1232,15 @@ const _FP_OPTIONS = {
   julgaeManagers:    () => [...MANAGERS.slice(1), '(없음)'],
   feesDealFilter:    () => ['기장','고문','성실'],
   feesManagerFilter: () => [...MANAGERS.slice(1), '(없음)'],
-  filingManagerFilter:() => [...MANAGERS.slice(1), '(없음)'],
+  filingManagerFilter: () => [...MANAGERS.slice(1), '(없음)'],
+  closureManagerFilter:() => [...MANAGERS.slice(1), '(없음)'],
 };
 const _FP_TITLES = {
   filterDealTypes:'수임내용 필터', filterManagers:'담당자 필터',
   filterTaxTypes:'인격 필터', filterVatTypes:'과세유형 필터',
   filterFeeStatuses:'수금상태 필터', filterCMS:'CMS 가입 필터', julgaeManagers:'담당자 필터',
   feesDealFilter:'수임내용 필터', feesManagerFilter:'담당자 필터', filingManagerFilter:'담당자 필터',
+  closureManagerFilter:'담당자 필터',
 };
 let _fpField = null;
 function openFilterPopup(field, btnEl) {
@@ -1226,6 +1285,7 @@ function fpConfirm() {
   const f = _fpField; _fpField = null;
   if (f==='julgaeManagers') renderJulgae();
   else if (['feesManagerFilter','feesDealFilter','filingManagerFilter'].includes(f)) renderFees();
+  else if (f==='closureManagerFilter') renderClosure();
   else if (G.currentTab==='clients') renderClients();
 }
 
@@ -2186,29 +2246,32 @@ function registerToPeriod(label, type) {
 // 해지·폐업
 // ══════════════════════════════════════════════════════
 function renderClosure() {
-  const q = G.closureSearch.toLowerCase();
   const all = G.clients.filter(c=>c.status==='해지'||c.status==='폐업');
-  const terminated = q ? all.filter(c=>c.name.toLowerCase().includes(q)||c.rep.toLowerCase().includes(q)||getManagers(c).join(' ').toLowerCase().includes(q)) : all;
-  const closurePending = terminated.filter(c=>c.status==='폐업'&&!c.closureTaxApproved);
+  const closurePendingAll = all.filter(c=>c.status==='폐업'&&!c.closureTaxApproved);
   const rLabel = r=>r==='폐업'?'폐업':r==='타회계사무소이전'?'타 사무소 이전':r||'-';
 
+  // 필터 적용
+  let terminated = all;
+  if (G.closureNameSearch) terminated = terminated.filter(c=>c.name.includes(G.closureNameSearch));
+  if (G.closureRepSearch)  terminated = terminated.filter(c=>(c.rep||'').includes(G.closureRepSearch));
+  if ((G.closureManagerFilter||[]).length>0) terminated = terminated.filter(c=>{const ms=getManagers(c);return G.closureManagerFilter.some(m=>m==='(없음)'?ms.length===0:ms.includes(m));});
+  if (G.closureStatusFilter==='해지') terminated = terminated.filter(c=>c.status==='해지');
+  else if (G.closureStatusFilter==='폐업') terminated = terminated.filter(c=>c.status==='폐업');
+
+  const nameActive = !!G.closureNameSearch;
+  const repActive  = !!G.closureRepSearch;
+
   document.getElementById('page-closure').innerHTML = `
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
-    <h2 style="font-size:20px;font-weight:800;margin:0">해지·폐업 관리</h2>
-    <div class="search-box" style="max-width:260px">
-      <span>🔍</span>
-      <input id="closure-search-input" placeholder="거래처명·대표자·담당자 검색" value="${esc(G.closureSearch)}" oninput="onClosureSearch(this.value)">
-    </div>
-  </div>
+  <div style="margin-bottom:16px"><h2 style="font-size:20px;font-weight:800;margin:0">해지·폐업 관리</h2></div>
   <div class="stat-grid" style="margin-bottom:16px">
     <div class="stat-card" style="border-left:4px solid #757575"><div class="stat-label">해지 거래처</div><div class="stat-value" style="color:#757575">${G.clients.filter(c=>c.status==='해지').length}<span style="font-size:12px">개</span></div></div>
     <div class="stat-card" style="border-left:4px solid #c62828"><div class="stat-label">폐업 거래처</div><div class="stat-value" style="color:#c62828">${G.clients.filter(c=>c.status==='폐업').length}<span style="font-size:12px">개</span></div></div>
-    <div class="stat-card" style="border-left:4px solid #e65100"><div class="stat-label">폐업 신고 미완료</div><div class="stat-value" style="color:#e65100">${closurePending.length}<span style="font-size:12px">건</span></div></div>
+    <div class="stat-card" style="border-left:4px solid #e65100"><div class="stat-label">폐업 신고 미완료</div><div class="stat-value" style="color:#e65100">${closurePendingAll.length}<span style="font-size:12px">건</span></div></div>
   </div>
 
-  ${closurePending.length>0?`<div class="card" style="border:2px solid #ffcc02;margin-bottom:16px">
-    <div class="card-title" style="color:#e65100">⚠ 폐업 신고 처리 필요 (${closurePending.length}건)</div>
-    ${closurePending.map(c=>`<div style="background:#fffde7;border-radius:10px;padding:12px 14px;margin-bottom:8px">
+  ${closurePendingAll.length>0?`<div class="card" style="border:2px solid #ffcc02;margin-bottom:16px">
+    <div class="card-title" style="color:#e65100">⚠ 폐업 신고 처리 필요 (${closurePendingAll.length}건)</div>
+    ${closurePendingAll.map(c=>`<div style="background:#fffde7;border-radius:10px;padding:12px 14px;margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;margin-bottom:10px">
         <div><div style="font-weight:700">${esc(c.name)}</div>
         <div style="font-size:12px;color:#888">${esc(c.rep)} · ${esc(c.taxType)} · 폐업 <b>${esc(c.closureYear||'미입력')}년</b> · ${getManagers(c).join(', ')||'-'}</div></div>
@@ -2223,21 +2286,29 @@ function renderClosure() {
 
   <div class="tbl-wrap">
   <table>
-    <thead><tr><th>거래처명</th><th>유형</th><th>상태</th><th>수임일</th><th>해지일</th><th>사유</th><th>폐업연도</th><th>신고접수</th><th>신고완료</th><th>담당</th></tr></thead>
+    <thead><tr>
+      <th style="padding:4px 6px"><button onclick="openClosureNameSearch(this)" style="width:100%;padding:3px 5px;border-radius:6px;font-size:10px;cursor:pointer;font-family:inherit;${nameActive?'border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7':'border:1.5px solid #ddd;background:#fff;color:#555'};text-align:left">거래처명 🔍</button></th>
+      <th style="width:72px;padding:3px 4px"><button onclick="openClosureRepSearch(this)" style="width:100%;padding:3px 5px;border-radius:6px;font-size:10px;cursor:pointer;font-family:inherit;${repActive?'border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7':'border:1.5px solid #ddd;background:#fff;color:#555'};text-align:left">대표자 🔍</button></th>
+      <th>유형</th>
+      <th style="width:56px;text-align:center;padding:3px">${closureCycleBtn('closureStatusFilter','상태',['전체','해지','폐업'])}</th>
+      <th>수임일</th><th>해지일</th><th>사유</th><th>폐업연도</th><th>신고접수</th><th>신고완료</th>
+      <th style="padding:4px 6px">${filterPopupBtn('closureManagerFilter','담당자')}</th>
+    </tr></thead>
     <tbody>
     ${terminated.length>0?terminated.map(c=>`<tr onclick="openDetail(${c.id})">
-      <td><div class="td-name">${esc(c.name)}</div><div class="td-sub">${esc(c.rep)}</div></td>
+      <td><div class="td-name">${esc(c.name)}</div></td>
+      <td style="font-size:12px;color:#444">${esc(c.rep)||'-'}</td>
       <td>${badge(c.taxType,c.taxType==='법인'?'blue':'gray')}</td>
       <td>${badge(c.status,c.status==='폐업'?'red':'gray')}</td>
       <td style="font-size:12px;color:#666">${esc(c.contractDate||'-')}</td>
       <td style="font-size:12px;color:#666">${esc(c.terminationDate||'-')}</td>
       <td style="font-size:12px">${rLabel(c.terminationReason)}</td>
       <td style="font-size:12px">${c.status==='폐업'?(c.closureYear?c.closureYear+'년':'-'):'-'}</td>
-      <td onclick="event.stopPropagation();c.status==='폐업'&&toggleField(${c.id},'closureTaxFiled')&&renderClosure()">${c.status==='폐업'?chk(c.closureTaxFiled):'<span style="color:#ccc;font-size:12px">해당없음</span>'}</td>
-      <td onclick="event.stopPropagation();c.status==='폐업'&&toggleField(${c.id},'closureTaxApproved')&&renderClosure()">${c.status==='폐업'?chk(c.closureTaxApproved):'<span style="color:#ccc;font-size:12px">해당없음</span>'}</td>
+      <td onclick="event.stopPropagation();c.status==='폐업'&&toggleField(${c.id},'closureTaxFiled')&&renderClosure()">${c.status==='폐업'?chk(c.closureTaxFiled):'<span style="color:#ccc;font-size:12px">-</span>'}</td>
+      <td onclick="event.stopPropagation();c.status==='폐업'&&toggleField(${c.id},'closureTaxApproved')&&renderClosure()">${c.status==='폐업'?chk(c.closureTaxApproved):'<span style="color:#ccc;font-size:12px">-</span>'}</td>
       <td style="color:#555;font-size:12px">${getManagers(c).join(', ')||'-'}</td>
     </tr>`).join(''):
-    '<tr><td colspan="10" style="text-align:center;padding:40px;color:#aaa">해지·폐업 거래처가 없습니다</td></tr>'}
+    '<tr><td colspan="11" style="text-align:center;padding:40px;color:#aaa">해지·폐업 거래처가 없습니다</td></tr>'}
     </tbody>
   </table>
   </div>`;
@@ -2934,7 +3005,8 @@ function renderFees() {
   const monthlyRows = filteredFeeClients.map(c => {
     const collected = G.monthlyFees[c.id]?.[ym] || false;
     return `<tr style="background:${collected?'#e8f5e9':'#fff'}">
-      <td><div style="font-weight:600;font-size:13px">${esc(c.name)}</div><div style="font-size:11px;color:#888">${esc(c.rep)}</div></td>
+      <td><div style="font-weight:600;font-size:13px">${esc(c.name)}</div></td>
+      <td style="font-size:12px;color:#444">${esc(c.rep)||'-'}</td>
       <td>${getDealTypes(c).map(d=>dealBadge(d)).join('')}</td>
       <td style="color:#555;font-size:12px">${getManagers(c).join(', ')||'-'}</td>
       <td style="font-size:11px;color:#888">${c.contractDate?c.contractDate.slice(0,7):'-'}</td>
@@ -2948,7 +3020,8 @@ function renderFees() {
   const filingRows = filteredFilingFees.map(x => `
     <tr style="background:${x.collected?'#e8f5e9':'#fff'}">
       <td><div style="font-weight:600;font-size:12px">${esc(x.period.label)}</div></td>
-      <td><div style="font-weight:600;font-size:13px">${esc(x.client.name)}</div><div style="font-size:11px;color:#888">${esc(x.client.rep)}</div></td>
+      <td><div style="font-weight:600;font-size:13px">${esc(x.client.name)}</div></td>
+      <td style="font-size:12px;color:#444">${esc(x.client.rep)||'-'}</td>
       <td style="color:#555;font-size:12px">${getManagers(x.client).join(', ')||'-'}</td>
       <td style="text-align:right;font-weight:700;color:#7b1fa2">${x.fee.toLocaleString()}원</td>
       <td style="text-align:center" onclick="toggleJulgaeField('${x.pKey}',${x.cid},'s');renderFees()">
@@ -2997,6 +3070,7 @@ function renderFees() {
     <table>
       <thead><tr>
         <th style="padding:4px 6px"><button onclick="openFeesNameSearch(this)" style="width:100%;padding:3px 5px;border-radius:6px;font-size:10px;cursor:pointer;font-family:inherit;${feesSearchActive?'border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7':'border:1.5px solid #ddd;background:#fff;color:#555'};text-align:left">거래처명${feesSearchActive?' 🔍':' 🔍'}</button></th>
+        <th style="width:72px;padding:3px 4px;font-size:11px">대표자</th>
         <th style="padding:4px 6px">${filterPopupBtn('feesDealFilter','수임내용')}</th>
         <th style="padding:4px 6px">${filterPopupBtn('feesManagerFilter','담당자')}</th>
         <th>수임일</th>
@@ -3021,6 +3095,7 @@ function renderFees() {
       <thead><tr>
         <th>신고기간</th>
         <th style="padding:4px 6px"><button onclick="openFilingNameSearch(this)" style="width:100%;padding:3px 5px;border-radius:6px;font-size:10px;cursor:pointer;font-family:inherit;${filingSearchActive?'border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7':'border:1.5px solid #ddd;background:#fff;color:#555'};text-align:left">거래처명 🔍</button></th>
+        <th style="width:72px;padding:3px 4px;font-size:11px">대표자</th>
         <th style="padding:4px 6px">${filterPopupBtn('filingManagerFilter','담당자')}</th>
         <th style="text-align:right">청구액</th>
         <th style="width:60px;text-align:center;padding:3px">${feesCycleBtn('filingCollectFilter','수금',['전체','수금','미수금'])}</th>
