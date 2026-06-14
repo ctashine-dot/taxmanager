@@ -258,7 +258,7 @@ async function decompressB64(b64) {
 
 function expandClients(mini) {
   return mini.map(m => ({
-    id: m.i, name: m.n, rep: m.r, bizNo: '', jumin: '', relatedGroup: '', phone: m.p || '', email: '',
+    id: m.i, name: m.n, rep: m.r, bizNo: '', jumin: '', relatedGroup: '', groupMain: false, phone: m.p || '', email: '',
     taxType: m.t, vatType: m.v, bizType: m.b || '', taxOffice: m.o || '',
     manager: m.m || '', fee: m.f || 0, feeSingo: m.fs || 0, feeJojung: m.fj || 0, feeSeongsi: m.fse || 0,
     feeStatus: '청구완료', contracts: m.c || [],
@@ -289,6 +289,8 @@ let G = {
   julgaeManagers: [],
   julgaePeriodIdx: 0,
   julgaeFeeFilter: '전체',
+  dashMonthlyView: null,
+  dashFilingView: null,
   clientPage: 0,
   editMode: false,
   periods: [],
@@ -523,6 +525,9 @@ function filteredClients() {
     return true;
   });
 
+  // 수임일자 정렬키: 없으면 뒤로
+  const csk = c => c.contractDate || 'ZZZZ-ZZ-ZZ';
+
   const groupBuckets = {};
   list.forEach(c => {
     const k = getGroupKey(c);
@@ -531,9 +536,10 @@ function filteredClients() {
   });
   const groupSortKeys = {};
   Object.entries(groupBuckets).forEach(([k, members]) => {
-    const minRank = Math.min(...members.map(c => dealSortRankForClient(c)));
-    const lead = [...members].sort((a,b) => a.name.localeCompare(b.name,'ko'))[0].name;
-    groupSortKeys[k] = {rank: minRank, lead};
+    // 대표업체: groupMain=true 인 멤버, 없으면 수임일자 가장 빠른 멤버
+    const lead = members.find(m=>m.groupMain) ||
+      [...members].sort((a,b)=>csk(a).localeCompare(csk(b))||a.name.localeCompare(b.name,'ko'))[0];
+    groupSortKeys[k] = { dateKey: csk(lead), lead: lead.name, mainId: lead.id };
   });
 
   // 검색 중일 때는 일치도 높은 순으로 정렬
@@ -557,12 +563,13 @@ function filteredClients() {
     const ka = getGroupKey(a), kb = getGroupKey(b);
     if (ka !== kb) {
       const ga = groupSortKeys[ka], gb = groupSortKeys[kb];
-      if (ga.rank !== gb.rank) return ga.rank - gb.rank;
-      return ga.lead.localeCompare(gb.lead, 'ko');
+      return ga.dateKey.localeCompare(gb.dateKey) || ga.lead.localeCompare(gb.lead, 'ko');
     }
-    const da = dealSortRankForClient(a), db = dealSortRankForClient(b);
-    if (da !== db) return da - db;
-    return a.name.localeCompare(b.name, 'ko');
+    // 같은 그룹 내: 대표업체 먼저, 나머지는 수임일자 → 이름
+    const mainId = groupSortKeys[ka].mainId;
+    if (a.id === mainId) return -1;
+    if (b.id === mainId) return 1;
+    return csk(a).localeCompare(csk(b)) || a.name.localeCompare(b.name, 'ko');
   });
 }
 
@@ -600,12 +607,54 @@ function switchTab(tab) {
 // ══════════════════════════════════════════════════════
 // 대시보드
 // ══════════════════════════════════════════════════════
+function getMissingFields(c) {
+  const f = [];
+  if (!c.rep) f.push({field:'rep', label:'대표자'});
+  if (!c.taxType) f.push({field:'taxType', label:'인격'});
+  if (!c.vatType || c.vatType==='선택') f.push({field:'vatType', label:'과세유형'});
+  if (!c.bizNo) f.push({field:'bizNo', label:'사업자번호'});
+  if (!c.contractDate) f.push({field:'contractDate', label:'수임일자'});
+  if (!getDealTypes(c).length) f.push({field:'dealTypes', label:'수임내용'});
+  return f;
+}
+
+function showMissingClientsModal() {
+  const list = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&getMissingFields(c).length>0);
+  if (!list.length) { alert('기재사항 누락 업체가 없습니다.'); return; }
+  const TAX_TYPES = ['개인','법인'];
+  const VAT_TYPES = ['일반','간이','면세','비과세'];
+  showModal(`<div style="max-width:580px;width:min(580px,97vw)">
+  <div class="modal-header"><h3>📋 기재사항 누락 업체 (${list.length}개)</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+  <div class="modal-body" style="padding:0">
+  <div style="max-height:70vh;overflow-y:auto">
+  ${list.map(c=>{
+    const mf = getMissingFields(c);
+    return `<div style="padding:14px 16px;border-bottom:1px solid #f0f0f0">
+      <div style="font-weight:700;font-size:14px;margin-bottom:8px;color:#1a1a2e">${esc(c.name)} <span style="font-size:11px;color:#ff7043;font-weight:400">${mf.map(x=>x.label).join(', ')} 누락</span></div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+      ${mf.map(({field,label})=>{
+        if (field==='taxType') return `<div style="display:flex;align-items:center;gap:4px"><span style="font-size:12px;color:#888;min-width:60px">${label}</span><select onchange="updateClientField(${c.id},'taxType',this.value);this.closest('.modal-body').parentElement.querySelector('.close-btn').click();showMissingClientsModal()" class="inline-edit" style="font-size:12px;padding:3px 6px">${TAX_TYPES.map(v=>`<option${c.taxType===v?' selected':''}>${v}</option>`).join('')}</select></div>`;
+        if (field==='vatType') return `<div style="display:flex;align-items:center;gap:4px"><span style="font-size:12px;color:#888;min-width:60px">${label}</span><select onchange="updateClientField(${c.id},'vatType',this.value);this.closest('.modal-body').parentElement.querySelector('.close-btn').click();showMissingClientsModal()" class="inline-edit" style="font-size:12px;padding:3px 6px">${VAT_TYPES.map(v=>`<option${c.vatType===v?' selected':''}>${v}</option>`).join('')}</select></div>`;
+        if (field==='contractDate') return `<div style="display:flex;align-items:center;gap:4px"><span style="font-size:12px;color:#888;min-width:60px">${label}</span><input type="date" value="${esc(c.contractDate||'')}" onchange="updateClientField(${c.id},'contractDate',this.value);this.closest('.modal-body').parentElement.querySelector('.close-btn').click();showMissingClientsModal()" class="inline-edit" style="font-size:12px;padding:3px 6px"></div>`;
+        return `<div style="display:flex;align-items:center;gap:4px"><span style="font-size:12px;color:#888;min-width:60px">${label}</span><input value="${esc(c[field]||'')}" placeholder="${label} 입력" onchange="updateClientField(${c.id},'${field}',this.value)" onblur="updateClientField(${c.id},'${field}',this.value)" class="inline-edit" style="font-size:12px;padding:3px 6px;min-width:120px"></div>`;
+      }).join('')}
+      </div>
+    </div>`;
+  }).join('')}
+  </div>
+  <div style="padding:12px 16px;border-top:1px solid #f0f0f0;display:flex;justify-content:flex-end">
+    <button class="btn-secondary" onclick="closeModal()">닫기</button>
+  </div>
+  </div></div>`);
+}
+
 function renderDashboard() {
   const s = getStats();
   const alertClients = G.clients.filter(c=>
     c.status!=='해지'&&c.status!=='폐업'&&(!c.dataReceived||c.feeStatus==='미수금'||c.status==='주의')
   );
   const closurePending = G.clients.filter(c=>c.status==='폐업'&&!c.closureTaxApproved);
+  const missingClients = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&getMissingFields(c).length>0);
   const pct = s.totalFee>0?Math.round(s.collected/s.totalFee*100):0;
 
   // 수수료 현황 (월정 + 신고 통합)
@@ -697,6 +746,11 @@ function renderDashboard() {
       <div class="stat-value" style="color:#546e7a">${s.closurePending}</div>
       <div class="stat-sub">처리 필요</div>
     </div>
+    <div class="stat-card" style="border-left:4px solid #ff7043;cursor:pointer" onclick="showMissingClientsModal()">
+      <div class="stat-label">기재사항 누락</div>
+      <div class="stat-value" style="color:#ff7043">${missingClients.length}</div>
+      <div class="stat-sub">클릭해서 확인·입력</div>
+    </div>
   </div>
 
   <div class="stat-grid">${managerCards}</div>
@@ -721,38 +775,49 @@ function renderDashboard() {
     <div class="card" style="margin-bottom:0;border-top:3px solid #4f8ef7">
       <div class="card-title" style="font-size:13px">이달 월정 수수료 (기장·고문·성실)</div>
       <div style="font-size:20px;font-weight:800;color:#4f8ef7;margin-bottom:4px">${monthlyTotal.toLocaleString()}원</div>
-      <div style="font-size:12px;color:#2e7d32">수금 완료: ${monthlyCollected.toLocaleString()}원</div>
-      <div style="font-size:12px;color:#e53935">미수금: ${(monthlyTotal-monthlyCollected).toLocaleString()}원</div>
       <div style="font-size:12px;color:#aaa">${monthlyClients.length}개 업체</div>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <button onclick="G.dashMonthlyView=G.dashMonthlyView==='paid'?null:'paid';renderDashboard()" style="flex:1;padding:5px;border-radius:7px;border:1.5px solid ${G.dashMonthlyView==='paid'?'#2e7d32':'#e0e0e0'};background:${G.dashMonthlyView==='paid'?'#e8f5e9':'#fff'};color:${G.dashMonthlyView==='paid'?'#2e7d32':'#555'};font-size:11px;cursor:pointer;font-family:inherit">✅ 수금 ${monthlyClients.filter(c=>G.monthlyFees[c.id]?.[thisYM]).length}</button>
+        <button onclick="G.dashMonthlyView=G.dashMonthlyView==='unpaid'?null:'unpaid';renderDashboard()" style="flex:1;padding:5px;border-radius:7px;border:1.5px solid ${G.dashMonthlyView==='unpaid'?'#e53935':'#e0e0e0'};background:${G.dashMonthlyView==='unpaid'?'#fdecea':'#fff'};color:${G.dashMonthlyView==='unpaid'?'#e53935':'#555'};font-size:11px;cursor:pointer;font-family:inherit">❌ 미수금 ${monthlyUnpaid.length}</button>
+      </div>
     </div>
     <div class="card" style="margin-bottom:0;border-top:3px solid #a259ff">
       <div class="card-title" style="font-size:13px">신고 수수료 (신고및결재 청구액 합계)</div>
       <div style="font-size:20px;font-weight:800;color:#a259ff;margin-bottom:4px">${filingTotal.toLocaleString()}원</div>
-      <div style="font-size:12px;color:#2e7d32">수금 완료: ${filingCollected.toLocaleString()}원</div>
-      <div style="font-size:12px;color:#e53935">미수금: ${(filingTotal-filingCollected).toLocaleString()}원</div>
+      <div style="font-size:12px;color:#aaa">청구 ${filingTotal.toLocaleString()}원</div>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <button onclick="G.dashFilingView=G.dashFilingView==='paid'?null:'paid';renderDashboard()" style="flex:1;padding:5px;border-radius:7px;border:1.5px solid ${G.dashFilingView==='paid'?'#2e7d32':'#e0e0e0'};background:${G.dashFilingView==='paid'?'#e8f5e9':'#fff'};color:${G.dashFilingView==='paid'?'#2e7d32':'#555'};font-size:11px;cursor:pointer;font-family:inherit">✅ 수금 ${filingTotal-grandUnpaid>0?(filingTotal-(filingTotal-filingCollected)).toLocaleString()+'원':'없음'}</button>
+        <button onclick="G.dashFilingView=G.dashFilingView==='unpaid'?null:'unpaid';renderDashboard()" style="flex:1;padding:5px;border-radius:7px;border:1.5px solid ${G.dashFilingView==='unpaid'?'#a259ff':'#e0e0e0'};background:${G.dashFilingView==='unpaid'?'#f3e5f5':'#fff'};color:${G.dashFilingView==='unpaid'?'#7b1fa2':'#555'};font-size:11px;cursor:pointer;font-family:inherit">❌ 미수금 ${filingUnpaidClients.length}건</button>
+      </div>
     </div>
   </div>
 
-  <div class="card"><div class="card-title">이달 담당자별 월정수수료 현황</div>${feeByManager||'<div style="color:#aaa">월정 수수료 거래처 없음</div>'}</div>
-
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:0">
-  <div class="card" style="border-top:3px solid #e53935;margin-bottom:0">
-    <div class="card-title" style="color:#e53935">이달 월정 미수금 (${monthlyUnpaid.length})</div>
-    ${monthlyUnpaid.length>0?monthlyUnpaid.map(c=>`
+  ${G.dashMonthlyView?`
+  <div class="card" style="border-top:3px solid ${G.dashMonthlyView==='paid'?'#2e7d32':'#e53935'};margin-bottom:16px">
+    <div class="card-title" style="color:${G.dashMonthlyView==='paid'?'#2e7d32':'#e53935'}">${G.dashMonthlyView==='paid'?'✅ 월정 수금 업체':'❌ 월정 미수금 업체'}</div>
+    ${(G.dashMonthlyView==='paid'?monthlyClients.filter(c=>G.monthlyFees[c.id]?.[thisYM]):monthlyUnpaid).map(c=>`
     <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f5f5f5">
       <div><div style="font-weight:600;font-size:13px">${esc(c.name)}</div><div style="font-size:11px;color:#888">${getManagers(c).join(', ')||'-'}</div></div>
-      <div style="font-weight:700;color:#e53935;font-size:13px">${(c.fee||0).toLocaleString()}원</div>
-    </div>`).join(''):'<div style="color:#aaa;font-size:13px">미수금 없음</div>'}
-  </div>
-  <div class="card" style="border-top:3px solid #7b1fa2;margin-bottom:0">
-    <div class="card-title" style="color:#7b1fa2">신고 미수금 (${filingUnpaidClients.length})</div>
-    ${filingUnpaidClients.length>0?filingUnpaidClients.slice(0,10).map(x=>`
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f5f5f5">
-      <div><div style="font-weight:600;font-size:13px">${esc(x.client.name)}</div><div style="font-size:11px;color:#888">${x.period?esc(x.period.label):''}</div></div>
-      <div style="font-weight:700;color:#7b1fa2;font-size:13px">${x.fee.toLocaleString()}원</div>
-    </div>`).join(''):'<div style="color:#aaa;font-size:13px">미수금 없음</div>'}
-  </div>
-  </div>
+      <div style="font-weight:700;color:${G.dashMonthlyView==='paid'?'#2e7d32':'#e53935'};font-size:13px">${(c.fee||0).toLocaleString()}원</div>
+    </div>`).join('')||'<div style="color:#aaa;font-size:13px">없음</div>'}
+  </div>`:''}
+
+  ${G.dashFilingView?`
+  <div class="card" style="border-top:3px solid ${G.dashFilingView==='paid'?'#2e7d32':'#7b1fa2'};margin-bottom:16px">
+    <div class="card-title" style="color:${G.dashFilingView==='paid'?'#2e7d32':'#7b1fa2'}">${G.dashFilingView==='paid'?'✅ 신고 수금 업체':'❌ 신고 미수금 업체'}</div>
+    ${(()=>{
+      const items = G.dashFilingView==='paid'
+        ? Object.entries(G.julgae).flatMap(([pKey,pData])=>Object.entries(pData).filter(([,v])=>v&&v.fee&&v.s).map(([cid,v])=>({client:G.clients.find(c=>c.id===Number(cid)),fee:v.fee,period:G.periods.find(p=>p.id===pKey)})))
+        : filingUnpaidClients;
+      return items.filter(x=>x.client).slice(0,20).map(x=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f5f5f5">
+        <div><div style="font-weight:600;font-size:13px">${esc(x.client.name)}</div><div style="font-size:11px;color:#888">${x.period?esc(x.period.label):''}</div></div>
+        <div style="font-weight:700;color:${G.dashFilingView==='paid'?'#2e7d32':'#7b1fa2'};font-size:13px">${x.fee.toLocaleString()}원</div>
+      </div>`).join('')||'<div style="color:#aaa;font-size:13px">없음</div>';
+    })()}
+  </div>`:''}
+
+  <div class="card"><div class="card-title">이달 담당자별 월정수수료 현황</div>${feeByManager||'<div style="color:#aaa">월정 수수료 거래처 없음</div>'}</div>
 
   `;
 }
@@ -1104,6 +1169,11 @@ function openGroupEditModal(id) {
   window._geOrigGroupName = c.relatedGroup || '';
   window._geMembers = [...memberIds];
   window._geGroupName = c.relatedGroup || (inGrp ? (c.rep||'') : '');
+  // 대표업체: groupMain=true 인 멤버 우선, 없으면 수임일자 가장 빠른 멤버
+  const csk2 = x => x.contractDate || 'ZZZZ';
+  const byDate = [...memberIds].map(mid=>G.clients.find(x=>x.id===mid)).filter(Boolean)
+    .sort((a,b)=>csk2(a).localeCompare(csk2(b))||a.name.localeCompare(b.name,'ko'));
+  window._geMainId = (byDate.find(m=>m.groupMain)||byDate[0]||c).id;
   renderGroupEditModal();
 }
 
@@ -1122,12 +1192,18 @@ function renderGroupEditModal() {
     <label class="flabel">그룹 멤버 <span style="font-weight:400;color:#aaa">(${members.length}개 업체)</span></label>
     <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:14px;max-height:200px;overflow-y:auto">
       ${members.length===0?`<div style="color:#aaa;font-size:13px;padding:8px">멤버 없음</div>`:
-        members.map(m=>`
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border:1px solid ${m.id===id?'#c0d4ff':'#e8e8e8'};border-radius:8px;background:${m.id===id?'#f0f4ff':'#fff'}">
-          <div><div style="font-weight:600;font-size:13px">${esc(m.name)}${m.id===id?'<span style="font-size:11px;color:#4f8ef7;margin-left:6px">(현재 업체)</span>':''}</div>
-          <div style="font-size:11px;color:#888">대표자: ${esc(m.rep||'-')}</div></div>
-          ${m.id!==id?`<button onclick="geRemoveMember(${m.id})" style="padding:3px 9px;border-radius:6px;font-size:12px;border:1px solid #ef9a9a;background:#fdecea;color:#c62828;cursor:pointer;font-family:inherit;flex-shrink:0">✕ 제거</button>`:''}
-        </div>`).join('')}
+        members.map(m=>{
+          const isMain = m.id===window._geMainId;
+          const isCur = m.id===id;
+          return `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border:1px solid ${isCur?'#c0d4ff':isMain?'#ffe082':'#e8e8e8'};border-radius:8px;background:${isCur?'#f0f4ff':isMain?'#fffde7':'#fff'}">
+          <div><div style="font-weight:600;font-size:13px">${isMain?'👑 ':''}${esc(m.name)}${isCur?'<span style="font-size:11px;color:#4f8ef7;margin-left:6px">(현재)</span>':''}${isMain?'<span style="font-size:10px;color:#f57c00;margin-left:6px;font-weight:700">대표</span>':''}</div>
+          <div style="font-size:11px;color:#888">대표자: ${esc(m.rep||'-')} ${m.contractDate?`· 수임: ${esc(m.contractDate)}`:''}</div></div>
+          <div style="display:flex;gap:5px;flex-shrink:0">
+            ${!isMain?`<button onclick="geSetMain(${m.id})" style="padding:3px 8px;border-radius:6px;font-size:11px;border:1px solid #ffe082;background:#fffde7;color:#f57c00;cursor:pointer;font-family:inherit">👑 대표</button>`:''}
+            <button onclick="geRemoveMember(${m.id})" style="padding:3px 8px;border-radius:6px;font-size:12px;border:1px solid #ef9a9a;background:#fdecea;color:#c62828;cursor:pointer;font-family:inherit">✕</button>
+          </div>
+        </div>`}).join('')}
     </div>
     <label class="flabel">업체 추가</label>
     <div class="search-box" style="margin-bottom:6px;background:#fff;border:1px solid #e0e0e0;border-radius:10px;padding:8px 12px">
@@ -1161,6 +1237,12 @@ function geSearch(q) {
     </div>`).join('');
 }
 
+function geSetMain(clientId) {
+  window._geGroupName = document.getElementById('ge-name')?.value ?? window._geGroupName;
+  window._geMainId = clientId;
+  renderGroupEditModal();
+}
+
 function geAddMember(clientId) {
   window._geGroupName = document.getElementById('ge-name')?.value ?? window._geGroupName;
   if (!window._geMembers.includes(clientId)) {
@@ -1177,6 +1259,7 @@ function geAddMember(clientId) {
 function geRemoveMember(clientId) {
   window._geGroupName = document.getElementById('ge-name')?.value ?? window._geGroupName;
   window._geMembers = window._geMembers.filter(id=>id!==clientId);
+  if (window._geMainId === clientId) window._geMainId = window._geMembers[0] || window._geClientId;
   renderGroupEditModal();
 }
 
@@ -1203,7 +1286,7 @@ function doGroupEdit() {
     if (!name) return alert('그룹명을 입력해주세요');
     window._geMembers.forEach(id=>{
       const cl=G.clients.find(x=>x.id===id);
-      if (cl) { cl.relatedGroup=name; cl.soloGroup=false; }
+      if (cl) { cl.relatedGroup=name; cl.soloGroup=false; cl.groupMain=(id===window._geMainId); }
     });
     if (origName) {
       G.clients.forEach(cl=>{
