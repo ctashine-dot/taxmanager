@@ -2623,10 +2623,11 @@ function renderFees() {
     getDealTypes(c).some(d => ['기장','고문','성실'].includes(d))
   );
 
-  // 이 달 수임 이후인 거래처만
+  // 이 달 수임 이후인 거래처만 + 수수료 0원 제외
   const feeClients = monthlyClients.filter(c => {
-    if (!c.contractDate) return true; // 수임일 없으면 포함
-    const s = c.contractDate.slice(0,7); // YYYY-MM
+    if (!c.fee) return false; // 수수료 0원 제외
+    if (!c.contractDate) return true;
+    const s = c.contractDate.slice(0,7);
     return s <= ym;
   });
 
