@@ -800,18 +800,14 @@ function renderClients() {
   <table>
     <thead>
     <tr>
-      <th>거래처명</th><th>수임내용</th><th>인격</th><th>과세유형</th><th>담당자</th><th>수수료</th><th>상태</th><th>수금</th><th style="width:28px"></th>
-    </tr>
-    <tr class="filter-row">
-      <th style="padding:4px 6px;font-weight:normal"></th>
-      <th style="padding:4px 6px;font-weight:normal">${filterPopupBtn('filterDealTypes','수임내용')}</th>
-      <th style="padding:4px 6px;font-weight:normal">${filterPopupBtn('filterTaxTypes','인격')}</th>
-      <th style="padding:4px 6px;font-weight:normal">${filterPopupBtn('filterVatTypes','과세유형')}</th>
-      <th style="padding:4px 6px;font-weight:normal">${filterPopupBtn('filterManagers','담당자')}</th>
-      ${emptyTh}
-      ${emptyTh}
-      <th style="padding:4px 6px;font-weight:normal">${filterPopupBtn('filterFeeStatuses','수금상태')}</th>
-      ${emptyTh}
+      <th>거래처명</th>
+      <th style="padding:4px 6px">${filterPopupBtn('filterDealTypes','수임내용')}</th>
+      <th style="padding:4px 6px">${filterPopupBtn('filterTaxTypes','인격')}</th>
+      <th style="padding:4px 6px">${filterPopupBtn('filterVatTypes','과세유형')}</th>
+      <th style="padding:4px 6px">${filterPopupBtn('filterManagers','담당자')}</th>
+      <th>수수료</th><th>상태</th>
+      <th style="padding:4px 6px">${filterPopupBtn('filterFeeStatuses','수금상태')}</th>
+      <th style="width:28px"></th>
     </tr>
     </thead>
     <tbody>
@@ -1509,7 +1505,15 @@ window.saveForm = function(id) {
   if (d.relatedGroup && d.relatedGroup.trim()) d.soloGroup = false;
 
   if (id === null) {
-    G.clients.push({...d, id: Date.now()});
+    const newId = Date.now();
+    G.clients.push({...d, id: newId});
+    if (window._julgaeAddToPeriod) {
+      const addPeriod = G.periods.find(p => p.id === window._julgaeAddToPeriod);
+      if (addPeriod && addPeriod.enrolled && addPeriod.enrolled.length > 0) {
+        addPeriod.enrolled.push(newId);
+      }
+      window._julgaeAddToPeriod = null;
+    }
   } else {
     const idx = G.clients.findIndex(c=>c.id===id);
     if (idx>=0) G.clients[idx] = {...G.clients[idx],...d};
@@ -1519,6 +1523,7 @@ window.saveForm = function(id) {
   if (G.currentTab==='clients') renderClients();
   else if (G.currentTab==='dashboard') renderDashboard();
   else if (G.currentTab==='closure') renderClosure();
+  else if (G.currentTab==='julgae') renderJulgae();
 };
 
 // ══════════════════════════════════════════════════════
@@ -1938,6 +1943,7 @@ function renderJulgae() {
     </button>
     <button class="btn-sm" style="background:#e8f5e9;color:#2e7d32;border:1.5px solid #a5d6a7" onclick="bulkJulgae('${pKey}',true)">전체 완료</button>
     <button class="btn-sm" style="background:#fdecea;color:#c62828;border:1.5px solid #ef9a9a" onclick="bulkJulgae('${pKey}',false)">전체 해제</button>
+    <button class="btn-sm" style="background:#fff3e0;color:#e65100;border:1.5px solid #ffcc80" onclick="window._julgaeAddToPeriod='${pKey}';openForm(null)">+ 업체 추가</button>
   </div>
 
   ${prevPeriods.length>0?`<div style="font-size:12px;color:#888;background:#fffde7;padding:6px 12px;border-radius:8px;margin-bottom:10px">💡 과거 동기(${prevPeriods.map(p=>esc(p.label)).join(', ')}) 수입금액·수수료청구액이 참고로 표시됩니다. (전년·전전년)</div>`:''}
