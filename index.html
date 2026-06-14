@@ -3488,48 +3488,48 @@ function init() {
 
 init();
 
-// ── 좌우 스와이프 → 페이지 이동 ──────────────────────────────────
+// ── 리스트 가장자리 스크롤 시 페이지 이동 버튼 ──────────────────────────
 (function() {
-  let _sx = 0, _sy = 0;
-
-  function showPageFlash(msg) {
-    let el = document.getElementById('_page-flash');
-    if (!el) {
-      el = document.createElement('div');
-      el.id = '_page-flash';
-      el.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(30,30,60,.82);color:#fff;font-size:13px;font-weight:700;padding:8px 22px;border-radius:20px;z-index:9999;pointer-events:none;opacity:0;transition:opacity .15s';
-      document.body.appendChild(el);
+  function getOrCreateBtn(id, side) {
+    let btn = document.getElementById(id);
+    if (!btn) {
+      btn = document.createElement('button');
+      btn.id = id;
+      const r = side === 'left' ? '0 14px 14px 0' : '14px 0 0 14px';
+      btn.style.cssText = `position:fixed;top:50%;${side}:0;transform:translateY(-50%);z-index:9999;background:rgba(30,30,60,.82);color:#fff;border:none;border-radius:${r};padding:22px 10px;font-size:22px;font-weight:900;cursor:pointer;display:none;box-shadow:0 2px 12px rgba(0,0,0,.4);touch-action:manipulation;-webkit-tap-highlight-color:transparent;line-height:1`;
+      document.body.appendChild(btn);
     }
-    el.textContent = msg;
-    el.style.opacity = '1';
-    clearTimeout(el._t);
-    el._t = setTimeout(() => { el.style.opacity = '0'; }, 800);
+    return btn;
   }
 
-  document.addEventListener('touchstart', e => {
-    _sx = e.touches[0].clientX;
-    _sy = e.touches[0].clientY;
-  }, { passive: true });
-
-  document.addEventListener('touchend', e => {
-    if (G.currentTab !== 'clients') return;
-    const dx = _sx - e.changedTouches[0].clientX;
-    const dy = _sy - e.changedTouches[0].clientY;
-    if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx)) return;
+  function updateNav() {
     const wrap = document.querySelector('.tbl-wrap');
-    const atRight = !wrap || wrap.scrollLeft >= wrap.scrollWidth - wrap.clientWidth - 4;
+    const isClients = G.currentTab === 'clients';
+    const totalPages = isClients ? (Math.ceil(filteredClients().length / 50) || 1) : 1;
     const atLeft  = !wrap || wrap.scrollLeft <= 4;
-    const totalPages = Math.ceil(filteredClients().length / 50) || 1;
-    if (dx > 0) { // 왼쪽으로 스와이프 → 오른쪽 끝일 때만 다음 페이지
-      if (!atRight) return;
-      if (G.clientPage < totalPages - 1) { G.clientPage++; renderClients(); showPageFlash('다음 페이지 ▶'); }
-      else showPageFlash('마지막 페이지');
-    } else { // 오른쪽으로 스와이프 → 왼쪽 끝일 때만 이전 페이지
-      if (!atLeft) return;
-      if (G.clientPage > 0) { G.clientPage--; renderClients(); showPageFlash('◀ 이전 페이지'); }
-      else showPageFlash('첫 번째 페이지');
+    const atRight = !wrap || wrap.scrollLeft >= wrap.scrollWidth - wrap.clientWidth - 4;
+
+    const lb = getOrCreateBtn('_prev-page-btn', 'left');
+    lb.textContent = '◀';
+    lb.style.display = (isClients && atLeft && G.clientPage > 0) ? '' : 'none';
+    lb.onclick = () => { G.clientPage--; renderClients(); };
+
+    const rb = getOrCreateBtn('_next-page-btn', 'right');
+    rb.textContent = '▶';
+    rb.style.display = (isClients && atRight && G.clientPage < totalPages - 1) ? '' : 'none';
+    rb.onclick = () => { G.clientPage++; renderClients(); };
+  }
+
+  // 스크롤 이벤트는 버블되지 않으므로 capture 단계에서 감지
+  document.addEventListener('scroll', e => {
+    if (e.target && e.target.classList && e.target.classList.contains('tbl-wrap')) {
+      updateNav();
     }
-  }, { passive: true });
+  }, true);
+
+  // renderClients 후 DOM 재구성 시 버튼 상태 갱신
+  const _rc = renderClients;
+  renderClients = function() { _rc.apply(this, arguments); requestAnimationFrame(updateNav); };
 })();
 </script>
 </body>
