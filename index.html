@@ -339,19 +339,49 @@ const REPORT_TYPE_FILTERS = {
 };
 
 // ── 보수표 기본값 (세무사보수기준표 2023 기준) ──────────────────────────────
-// 수입금액 기준: 기장료_개인(월), 기장료_법인(월), 부가세신고, 종소세신고, 법인세(세무조정), 성실신고(추가)
+// 신고수수료(부가세/종소세/성실신고추가)는 사용자 편집 가능한 구간 테이블.
+// 기장대행·세무조정은 보수표 수식으로 직접 계산 (아래 함수 참고).
 const DEFAULT_BOSU_TABLE = [
-  { label:'1억 이하',   max:  100000000, jang:  80000, jangCorp: 150000, vat:  50000, income: 100000, corp:  300000, seongsi:       0 },
-  { label:'2억 이하',   max:  200000000, jang: 150000, jangCorp: 200000, vat:  60000, income: 150000, corp:  500000, seongsi:       0 },
-  { label:'3억 이하',   max:  300000000, jang: 200000, jangCorp: 300000, vat:  70000, income: 200000, corp:  700000, seongsi:  300000 },
-  { label:'5억 이하',   max:  500000000, jang: 300000, jangCorp: 400000, vat:  80000, income: 300000, corp: 1100000, seongsi:  500000 },
-  { label:'10억 이하',  max: 1000000000, jang: 400000, jangCorp: 550000, vat:  90000, income: 400000, corp: 2000000, seongsi:  700000 },
-  { label:'20억 이하',  max: 2000000000, jang: 450000, jangCorp: 650000, vat: 100000, income: 500000, corp: 3000000, seongsi:  900000 },
-  { label:'30억 이하',  max: 3000000000, jang: 500000, jangCorp: 750000, vat: 110000, income: 600000, corp: 4400000, seongsi: 1100000 },
-  { label:'50억 이하',  max: 5000000000, jang: 600000, jangCorp: 900000, vat: 130000, income: 700000, corp: 6500000, seongsi: 1300000 },
-  { label:'100억 이하', max:10000000000, jang: 800000, jangCorp:1200000, vat: 150000, income: 800000, corp:10000000, seongsi: 1500000 },
-  { label:'100억 초과', max: Infinity,   jang:1000000, jangCorp:1500000, vat: 200000, income:1000000, corp:14400000, seongsi: 2000000 },
+  { label:'1억 미만',      max:  99999999, vat:  50000, income: 100000, seongsi:       0 },
+  { label:'1억~3억 미만',  max: 299999999, vat:  60000, income: 150000, seongsi:       0 },
+  { label:'3억~5억 미만',  max: 499999999, vat:  70000, income: 200000, seongsi:  300000 },
+  { label:'5억~10억 미만', max: 999999999, vat:  80000, income: 300000, seongsi:  500000 },
+  { label:'10억~20억 미만',max:1999999999, vat:  90000, income: 400000, seongsi:  700000 },
+  { label:'20억~30억 미만',max:2999999999, vat: 100000, income: 500000, seongsi:  900000 },
+  { label:'30억~40억 미만',max:3999999999, vat: 110000, income: 600000, seongsi: 1100000 },
+  { label:'40억~50억 미만',max:4999999999, vat: 120000, income: 700000, seongsi: 1300000 },
+  { label:'50억 이상',     max: Infinity,  vat: 150000, income:1000000, seongsi: 2000000 },
 ];
+// 기장대행 보수표 2023 – 개인/법인 구분
+function getJangRyo(revenue, taxType) {
+  const corp = taxType === '법인';
+  if (!revenue || revenue <= 0) return corp ? 150000 : 80000;
+  const r = revenue;
+  if (r < 1e8)  return corp ? 150000 :  80000;
+  if (r < 3e8)  return corp ? 200000 : 100000;
+  if (r < 5e8)  return corp ? 250000 : 150000;
+  if (r < 1e9)  return corp ? 300000 : 200000;
+  if (r < 2e9)  return corp ? 400000 : 300000;
+  if (r < 3e9)  return corp ? 500000 : 400000;
+  if (r < 4e9)  return corp ? 600000 : 500000;
+  if (r < 5e9)  return corp ? 700000 : 600000;
+  // 50억 이상: 각 10억마다 5만(법인 7만) 추가
+  const extra = Math.floor((r - 5e9) / 1e9);
+  return corp ? 700000 + extra * 70000 : 600000 + extra * 50000;
+}
+// 세무조정계산서 작성 보수표 2023 – 공식 기반
+function calcCorpFee(revenue) {
+  if (!revenue || revenue <= 0) return 0;
+  const r = revenue;
+  if (r < 1e8)   return 300000;
+  if (r < 5e8)   return Math.round(300000  + (r - 1e8)  * 0.001);
+  if (r < 1e9)   return Math.round(700000  + (r - 5e8)  * 0.0008);
+  if (r < 3e9)   return Math.round(1100000 + (r - 1e9)  * 0.0005);
+  if (r < 5e9)   return Math.round(2100000 + (r - 3e9)  * 0.0004);
+  if (r < 1e10)  return Math.round(2900000 + (r - 5e9)  * 0.0003);
+  if (r < 5e10)  return Math.round(4400000 + (r - 1e10) * 0.00025);
+  return Math.round(14400000 + (r - 5e10) * 0.00015);
+}
 function getBosuTable() { return G.settings.bosuTable || DEFAULT_BOSU_TABLE; }
 function getBosuTier(revenue) {
   const t = getBosuTable();
@@ -361,21 +391,16 @@ function getBosuFeeRec(revenue, reportType) {
   if (!revenue || revenue <= 0) return null;
   const tier = getBosuTier(revenue);
   const map = {
-    vat:     {field:'fee',       label:'부가세신고', fee:tier.vat},
-    vat_hak_1:{field:'fee',     label:'부가세신고', fee:tier.vat},
-    vat_hak_2:{field:'fee',     label:'부가세신고', fee:tier.vat},
-    vat_yej: {field:'fee',       label:'부가세예정', fee:tier.vat},
-    sajup:   {field:'fee',       label:'사업장현황', fee:tier.vat},
-    income:  {field:'fee',       label:'종소세신고', fee:tier.income},
-    corp:    {field:'fee',       label:'법인세신고', fee:tier.corp},
-    seongsi: {field:'feeSeongsi',label:'성실신고료', fee:tier.seongsi},
+    vat:      {field:'fee',       label:'부가세신고', fee: tier.vat},
+    vat_hak_1:{field:'fee',       label:'부가세신고', fee: tier.vat},
+    vat_hak_2:{field:'fee',       label:'부가세신고', fee: tier.vat},
+    vat_yej:  {field:'fee',       label:'부가세예정', fee: tier.vat},
+    sajup:    {field:'fee',       label:'사업장현황', fee: tier.vat},
+    income:   {field:'fee',       label:'종소세신고', fee: tier.income},
+    corp:     {field:'fee',       label:'법인세신고', fee: calcCorpFee(revenue)},
+    seongsi:  {field:'feeSeongsi',label:'성실신고료', fee: tier.seongsi},
   };
   return map[reportType] || null;
-}
-function getJangRyo(revenue, taxType) {
-  if (!revenue || revenue <= 0) return null;
-  const tier = getBosuTier(revenue);
-  return (taxType === '법인') ? (tier.jangCorp || tier.jang) : tier.jang;
 }
 // 신고유형별 거래처 수수료 필드 매핑
 const REPORT_FEE_FIELD = {
@@ -3734,11 +3759,58 @@ function saveSettings() {
 
 function openBosuTable() {
   const tbl = getBosuTable();
-  const cols = [{key:'jang',label:'기장료·개인(월)'},{key:'jangCorp',label:'기장료·법인(월)'},{key:'vat',label:'부가세신고'},{key:'income',label:'종소세신고'},{key:'corp',label:'법인세(세무조정)'},{key:'seongsi',label:'성실신고(추가)'}];
-  showModal(`<div style="max-width:860px;width:min(860px,97vw)">
-  <div class="modal-header"><h3>📋 보수기준표</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+  const cols = [{key:'vat',label:'부가세신고'},{key:'income',label:'종소세신고'},{key:'seongsi',label:'성실신고(추가)'}];
+  const jangRows = [
+    {r:'1억 미만',    indiv:80000,  corp:150000},
+    {r:'1억~3억 미만',indiv:100000, corp:200000},
+    {r:'3억~5억 미만',indiv:150000, corp:250000},
+    {r:'5억~10억 미만',indiv:200000,corp:300000},
+    {r:'10억~20억 미만',indiv:300000,corp:400000},
+    {r:'20억~30억 미만',indiv:400000,corp:500000},
+    {r:'30억~40억 미만',indiv:500000,corp:600000},
+    {r:'40억~50억 미만',indiv:600000,corp:700000},
+    {r:'50억 이상',   indiv:'+5만/10억',corp:'+7만/10억'},
+  ];
+  showModal(`<div style="max-width:760px;width:min(760px,97vw)">
+  <div class="modal-header"><h3>📋 보수기준표 (세무사보수기준표 2023)</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
   <div class="modal-body">
-    <div style="font-size:12px;color:#888;margin-bottom:10px">수입금액 기준 보수표입니다. 셀을 직접 수정할 수 있습니다. (단위: 원)</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+      <div>
+        <div style="font-size:11px;font-weight:700;color:#444;margin-bottom:6px">1. 기장대행 (월, 원) — 자동계산</div>
+        <table style="width:100%;border-collapse:collapse;font-size:11px">
+          <thead><tr style="background:#f5f5f5">
+            <th style="padding:4px 6px;border:1px solid #e0e0e0">수입금액</th>
+            <th style="padding:4px 6px;border:1px solid #e0e0e0">개인</th>
+            <th style="padding:4px 6px;border:1px solid #e0e0e0">법인</th>
+          </tr></thead>
+          <tbody>${jangRows.map(r=>`<tr>
+            <td style="padding:3px 6px;border:1px solid #e0e0e0;white-space:nowrap">${r.r}</td>
+            <td style="padding:3px 6px;border:1px solid #e0e0e0;text-align:right">${typeof r.indiv==='number'?r.indiv.toLocaleString():r.indiv}</td>
+            <td style="padding:3px 6px;border:1px solid #e0e0e0;text-align:right">${typeof r.corp==='number'?r.corp.toLocaleString():r.corp}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:700;color:#444;margin-bottom:6px">2. 세무조정계산서 (법인세) — 자동계산</div>
+        <table style="width:100%;border-collapse:collapse;font-size:11px">
+          <thead><tr style="background:#f5f5f5">
+            <th style="padding:4px 6px;border:1px solid #e0e0e0">수입금액</th>
+            <th style="padding:4px 6px;border:1px solid #e0e0e0">보수액(천원)</th>
+          </tr></thead>
+          <tbody>
+            <tr><td style="padding:3px 6px;border:1px solid #e0e0e0">1억 미만</td><td style="padding:3px 6px;border:1px solid #e0e0e0;text-align:right">300</td></tr>
+            <tr><td style="padding:3px 6px;border:1px solid #e0e0e0">1억~5억 미만</td><td style="padding:3px 6px;border:1px solid #e0e0e0;text-align:right">300 + 초과×0.1%</td></tr>
+            <tr><td style="padding:3px 6px;border:1px solid #e0e0e0">5억~10억 미만</td><td style="padding:3px 6px;border:1px solid #e0e0e0;text-align:right">700 + 초과×0.08%</td></tr>
+            <tr><td style="padding:3px 6px;border:1px solid #e0e0e0">10억~30억 미만</td><td style="padding:3px 6px;border:1px solid #e0e0e0;text-align:right">1,100 + 초과×0.05%</td></tr>
+            <tr><td style="padding:3px 6px;border:1px solid #e0e0e0">30억~50억 미만</td><td style="padding:3px 6px;border:1px solid #e0e0e0;text-align:right">2,100 + 초과×0.04%</td></tr>
+            <tr><td style="padding:3px 6px;border:1px solid #e0e0e0">50억~100억 미만</td><td style="padding:3px 6px;border:1px solid #e0e0e0;text-align:right">2,900 + 초과×0.03%</td></tr>
+            <tr><td style="padding:3px 6px;border:1px solid #e0e0e0">100억~500억 미만</td><td style="padding:3px 6px;border:1px solid #e0e0e0;text-align:right">4,400 + 초과×0.025%</td></tr>
+            <tr><td style="padding:3px 6px;border:1px solid #e0e0e0">500억 이상</td><td style="padding:3px 6px;border:1px solid #e0e0e0;text-align:right">14,400 + 초과×0.015%</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div style="font-size:11px;font-weight:700;color:#444;margin-bottom:6px">3. 신고수수료 (편집 가능, 단위: 원)</div>
     <div style="overflow-x:auto">
     <table id="bosu-tbl" style="width:100%;border-collapse:collapse;font-size:12px">
       <thead><tr style="background:#f5f5f5">
@@ -3755,8 +3827,8 @@ function openBosuTable() {
         </tr>`).join('')}
       </tbody>
     </table></div>
-    <div style="margin-top:12px;font-size:12px;color:#888;background:#f8f9ff;border-radius:8px;padding:8px 12px">
-      💡 <b>신고 및 결재</b> 탭에서 수입금액 입력 시 이 표를 기준으로 적정 수수료를 추천합니다.
+    <div style="margin-top:10px;font-size:11px;color:#888;background:#f8f9ff;border-radius:8px;padding:8px 12px">
+      💡 <b>신고 및 결재</b> 탭에서 수입금액 입력 시 신고수수료 추천 배지가 표시됩니다. 기장대행·세무조정은 보수표 공식으로 자동계산됩니다.
     </div>
     <div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end">
       <button onclick="resetBosuTable()" class="btn-secondary" style="padding:8px 16px">초기화</button>
