@@ -286,6 +286,7 @@ let G = {
   showTerminated: false,
   closureSearch: '',
   julgaeSearch: '',
+  julgaeRepSearch: '',
   julgaeManagers: [],
   julgaePeriodIdx: 0,
   julgaeFeeFilter: '전체',
@@ -874,6 +875,7 @@ function renderClients() {
     <thead>
     <tr>
       <th>거래처명</th>
+      <th style="width:72px">대표자</th>
       <th style="padding:4px 6px">${filterPopupBtn('filterDealTypes','수임내용')}</th>
       <th style="padding:4px 6px">${filterPopupBtn('filterTaxTypes','인격')}</th>
       <th style="padding:4px 6px">${filterPopupBtn('filterVatTypes','과세유형')}</th>
@@ -900,7 +902,8 @@ function renderClients() {
       const groupDot = inGroup ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${gc};margin-right:5px;vertical-align:middle"></span>` : '';
       const groupSub = inGroup ? `<span style="font-size:10px;color:${gc};font-weight:600;margin-left:4px">👥 ${esc(groupLabel)}</span>` : '';
       return `<tr class="client-row" onclick="toggleExpand(${c.id})" style="${inGroup?`border-left:3px solid ${gc}`:''}" >
-        <td><div class="td-name">${groupDot}${esc(c.name)}</div><div class="td-sub">${esc(c.rep)}${c.bizType?' · '+esc(c.bizType):''}${groupSub}</div></td>
+        <td><div class="td-name">${groupDot}${esc(c.name)}</div>${(c.bizType||groupSub)?`<div class="td-sub">${c.bizType?esc(c.bizType):''}${groupSub}</div>`:''}</td>
+        <td style="font-size:12px;color:#444">${esc(c.rep)||'-'}</td>
         <td>${em?iSel('dealType',DEAL_TYPES.slice(1),getDealTypes(c)[0]):getDealTypes(c).map(d=>dealBadge(d)).join('')}</td>
         <td>${em?iSel('taxType',TAX_TYPES.slice(1),c.taxType):badge(c.taxType,c.taxType==='법인'?'blue':'gray')}</td>
         <td>${em?iSel('vatType',VAT_TYPES.slice(1),c.vatType):badge(c.vatType,c.vatType==='일반'?'blue':c.vatType==='간이'?'orange':'gray')}</td>
@@ -973,6 +976,27 @@ function openJulgaeNameSearch(btnEl) {
     </div>`;
   document.body.appendChild(pop);
   setTimeout(()=>{ const i=document.getElementById('jns-inp'); if(i){i.focus();const l=G.julgaeSearch.length;i.setSelectionRange(l,l);} document.addEventListener('click',_fpOutside); },50);
+}
+function openJulgaeRepSearch(btnEl) {
+  const existing = document.getElementById('filter-popup');
+  if (existing) { existing.remove(); document.removeEventListener('click', _fpOutside); if (_fpField==='__jrs') { _fpField=null; return; } }
+  _fpField = '__jrs';
+  const pop = document.createElement('div');
+  pop.id = 'filter-popup';
+  pop.style.cssText = 'position:fixed;z-index:9999;background:#fff;border:1.5px solid #e0e0e0;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);padding:14px;min-width:200px;';
+  const rect = btnEl.getBoundingClientRect();
+  pop.style.top = Math.min(rect.bottom+6, window.innerHeight-130)+'px';
+  pop.style.left = Math.max(8, Math.min(rect.left, window.innerWidth-220))+'px';
+  pop.innerHTML = `<div style="font-size:12px;font-weight:800;color:#333;margin-bottom:8px">대표자명 검색</div>
+    <input id="jrs-inp" type="text" value="${G.julgaeRepSearch.replace(/"/g,'&quot;')}" placeholder="대표자명 입력"
+      oninput="G.julgaeRepSearch=this.value;renderJulgae()"
+      style="width:100%;padding:8px 10px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:14px;font-family:inherit;box-sizing:border-box">
+    <div style="display:flex;gap:6px;margin-top:10px">
+      <button onclick="G.julgaeRepSearch='';renderJulgae();document.getElementById('filter-popup')?.remove();document.removeEventListener('click',_fpOutside);_fpField=null" style="flex:1;padding:7px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:13px;cursor:pointer;font-family:inherit">초기화</button>
+      <button onclick="document.getElementById('filter-popup')?.remove();document.removeEventListener('click',_fpOutside);_fpField=null" style="flex:2;padding:7px;border-radius:8px;border:none;background:#4f8ef7;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">확인</button>
+    </div>`;
+  document.body.appendChild(pop);
+  setTimeout(()=>{ const i=document.getElementById('jrs-inp'); if(i){i.focus();const l=G.julgaeRepSearch.length;i.setSelectionRange(l,l);} document.addEventListener('click',_fpOutside); },50);
 }
 function julgaeCycleBtn(field, label, states) {
   if (!states) states = ['전체','완료','미완료'];
@@ -2106,7 +2130,9 @@ function renderJulgae() {
     const hasNone = mf.includes('(없음)');
     clients = clients.filter(c => (hasNone && getManagers(c).length===0) || getManagers(c).some(m=>mf.includes(m)));
   }
-  if (q) clients = clients.filter(c => c.name.toLowerCase().includes(q) || c.rep.toLowerCase().includes(q));
+  if (q) clients = clients.filter(c => c.name.toLowerCase().includes(q));
+  const rq = G.julgaeRepSearch.toLowerCase();
+  if (rq) clients = clients.filter(c => (c.rep||'').toLowerCase().includes(rq));
 
   const pKey2 = pKey || '';
   const ff = G.julgaeFeeFilter;
@@ -2213,7 +2239,7 @@ function renderJulgae() {
             ${byYear[yr].map(({p,i})=>{
               const pEnroll = p.enrolled && p.enrolled.length > 0;
               return `<div style="display:flex;align-items:center;gap:3px">
-                <button onclick="G.julgaePeriodIdx=${i};G.julgaeSearch='';G.julgaeManagers=[];G.julgaeDataFilter='전체';G.julgaeBookFilter='전체';G.julgaeDoneFilter='전체';G.julgaeFeeFilter='전체';renderJulgae()"
+                <button onclick="G.julgaePeriodIdx=${i};G.julgaeSearch='';G.julgaeRepSearch='';G.julgaeManagers=[];G.julgaeDataFilter='전체';G.julgaeBookFilter='전체';G.julgaeDoneFilter='전체';G.julgaeFeeFilter='전체';renderJulgae()"
                   style="padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;border:2px solid ${i===idx?'#4f8ef7':'#e0e0e0'};background:${i===idx?'#e8f0fe':'#fff'};color:${i===idx?'#4f8ef7':'#555'}">
                   ${esc(p.label)}${pEnroll?` <span style="font-size:10px;background:#4f8ef7;color:#fff;border-radius:10px;padding:1px 6px;margin-left:4px">${p.enrolled.length}</span>`:''}
                 </button>
@@ -2271,7 +2297,7 @@ function renderJulgae() {
     <thead><tr>
       <th style="width:28px">번</th>
       <th style="padding:4px 6px">${(()=>{const a=G.julgaeSearch;return`<button onclick="openJulgaeNameSearch(this)" style="width:100%;padding:4px 7px;border-radius:7px;font-size:11px;cursor:pointer;font-family:inherit;border:1.5px solid ${a?'#4f8ef7':'#ddd'};background:${a?'#e8f0fe':'#fff'};color:${a?'#1565c0':'#555'};display:flex;justify-content:space-between;align-items:center;gap:4px;"><span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a?esc(a):'거래처명'}</span><span style="font-size:9px;opacity:.5;flex-shrink:0">🔍</span></button>`;})()}</th>
-      <th style="width:70px">대표자</th>
+      <th style="width:80px;padding:3px 4px">${(()=>{const a=G.julgaeRepSearch;return`<button onclick="openJulgaeRepSearch(this)" style="width:100%;padding:4px 6px;border-radius:7px;font-size:11px;cursor:pointer;font-family:inherit;border:1.5px solid ${a?'#4f8ef7':'#ddd'};background:${a?'#e8f0fe':'#fff'};color:${a?'#1565c0':'#555'};display:flex;justify-content:space-between;align-items:center;gap:3px;"><span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a?esc(a):'대표자'}</span><span style="font-size:9px;opacity:.5;flex-shrink:0">🔍</span></button>`;})()}</th>
       <th style="padding:4px 6px">${filterPopupBtn('julgaeManagers','담당자')}</th>
       <th style="width:56px;text-align:center;padding:3px">${julgaeCycleBtn('julgaeDataFilter','자료')}</th>
       <th style="width:56px;text-align:center;padding:3px">${julgaeCycleBtn('julgaeBookFilter','기장')}</th>
