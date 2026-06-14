@@ -318,6 +318,7 @@ let G = {
   closureRepSearch: '',
   closureManagerFilter: [],
   closureStatusFilter: '전체',
+  sectionCollapsed: {},
   settings: {
     name: '○○세무회계사무소', rep: '홍세무',
     phone: '02-1234-5678', fax: '02-1234-5679',
@@ -938,13 +939,15 @@ function renderClients() {
     </div>
   </div>
 
-  <div style="font-size:12px;color:#888;margin-bottom:8px">총 ${list.length}개 거래처 (${G.clientPage+1}/${totalPages} 페이지)</div>
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+    ${sectionToggleBtn('clients-list')}
+    <div style="font-size:12px;color:#888">총 ${list.length}개 거래처 (${G.clientPage+1}/${totalPages} 페이지)</div>
+  </div>
 
   <datalist id="taxoffice-list">${TAX_OFFICES.map(o=>`<option value="${esc(o)}">`).join('')}</datalist>
 
   ${G.editMode?`<div style="background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#2e7d32">✏ <b>수정모드</b> — 수임내용·인격·과세유형·담당자·수수료를 클릭해 바로 변경하세요. 행을 펼치면 전화번호·관할세무서·수임일자도 수정할 수 있습니다.</div>`:''}
-
-  <div class="tbl-wrap">
+  <div class="tbl-wrap" style="${(G.sectionCollapsed||{})['clients-list']?'display:none':''}">
   <table>
     <thead>
     <tr>
@@ -1013,7 +1016,7 @@ function renderClients() {
     </tbody>
   </table>
   </div>
-  ${totalPages > 1 ? `<div style="display:flex;justify-content:center;gap:12px;margin-top:12px;align-items:center">
+  ${totalPages > 1 ? `<div style="display:flex;justify-content:center;gap:12px;margin-top:12px;align-items:center;${(G.sectionCollapsed||{})['clients-list']?'display:none':''}">
     <button class="btn-sm" style="background:#f5f5f5;color:#555" onclick="clientPageChange(-1)" ${G.clientPage===0?'disabled':''}>이전</button>
     <span style="font-size:13px;color:#555">${G.clientPage+1} / ${totalPages}</span>
     <button class="btn-sm" style="background:#f5f5f5;color:#555" onclick="clientPageChange(1)" ${G.clientPage===totalPages-1?'disabled':''}>다음</button>
@@ -1700,6 +1703,20 @@ function updateClientField(id, field, value) {
   saveToLS();
 }
 
+function toggleSection(key) {
+  if (!G.sectionCollapsed) G.sectionCollapsed = {};
+  G.sectionCollapsed[key] = !G.sectionCollapsed[key];
+  if (key.startsWith('fees') || key.startsWith('filing')) renderFees();
+  else if (key.startsWith('closure')) renderClosure();
+  else if (key.startsWith('julgae')) renderJulgae();
+  else if (key.startsWith('clients')) renderClients();
+}
+
+function sectionToggleBtn(key) {
+  const collapsed = !!(G.sectionCollapsed && G.sectionCollapsed[key]);
+  return `<button onclick="toggleSection('${key}')" title="${collapsed?'펼치기':'접기'}" style="padding:2px 8px;border-radius:6px;border:1.5px solid #e0e0e0;background:${collapsed?'#f5f5f5':'#fff'};color:#888;font-size:12px;cursor:pointer;font-family:inherit;line-height:1.4">${collapsed?'▶':'▼'}</button>`;
+}
+
 function toggleExpand(id) {
   const row = document.getElementById('expand-'+id);
   if (!row) return;
@@ -2310,7 +2327,10 @@ function renderClosure() {
   const repActive  = !!G.closureRepSearch;
 
   document.getElementById('page-closure').innerHTML = `
-  <div style="margin-bottom:16px"><h2 style="font-size:20px;font-weight:800;margin:0">해지·폐업 관리</h2></div>
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
+    <h2 style="font-size:20px;font-weight:800;margin:0">해지·폐업 관리</h2>
+    ${sectionToggleBtn('closure-list')}
+  </div>
   <div class="stat-grid" style="margin-bottom:16px">
     <div class="stat-card" style="border-left:4px solid #757575"><div class="stat-label">해지 거래처</div><div class="stat-value" style="color:#757575">${G.clients.filter(c=>c.status==='해지').length}<span style="font-size:12px">개</span></div></div>
     <div class="stat-card" style="border-left:4px solid #c62828"><div class="stat-label">폐업 거래처</div><div class="stat-value" style="color:#c62828">${G.clients.filter(c=>c.status==='폐업').length}<span style="font-size:12px">개</span></div></div>
@@ -2332,7 +2352,7 @@ function renderClosure() {
     </div>`).join('')}
   </div>`:''}
 
-  <div class="tbl-wrap">
+  <div class="tbl-wrap" style="${(G.sectionCollapsed||{})['closure-list']?'display:none':''}">
   <table>
     <thead><tr>
       <th style="padding:4px 6px"><button onclick="openClosureNameSearch(this)" style="width:100%;padding:3px 5px;border-radius:6px;font-size:10px;cursor:pointer;font-family:inherit;${nameActive?'border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7':'border:1.5px solid #ddd;background:#fff;color:#555'};text-align:left">거래처명 🔍</button></th>
@@ -2365,6 +2385,7 @@ function renderClosure() {
 // ══════════════════════════════════════════════════════
 // 신고 및 결재
 // ══════════════════════════════════════════════════════
+
 function prevYearPeriods(period) {
   if (!period || !period.reportType) return [];
   const m = (period.label||'').match(/^(\d{2})년/);
@@ -2566,7 +2587,12 @@ function renderJulgae() {
 
   ${prevPeriods.length>0?`<div style="font-size:12px;color:#888;background:#fffde7;padding:6px 12px;border-radius:8px;margin-bottom:10px">💡 과거 동기(${prevPeriods.map(p=>esc(p.label)).join(', ')}) 수입금액·수수료청구액이 참고로 표시됩니다. (전년·전전년)</div>`:''}
 
-  <div class="tbl-wrap">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+    ${sectionToggleBtn('julgae-list')}
+    <span style="font-size:12px;color:#888">목록 ${(G.sectionCollapsed||{})['julgae-list']?'(접힘)':''}</span>
+  </div>
+
+  <div class="tbl-wrap" style="${(G.sectionCollapsed||{})['julgae-list']?'display:none':''}">
   <table>
     <thead><tr>
       <th style="width:28px">번</th>
@@ -3093,7 +3119,10 @@ function renderFees() {
   <!-- 월정 수수료 -->
   <div class="card" style="margin-bottom:16px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-      <div class="card-title" style="margin-bottom:0">📅 월정 수수료 (기장·고문·성실)</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        ${sectionToggleBtn('fees-monthly')}
+        <div class="card-title" style="margin-bottom:0">📅 월정 수수료 (기장·고문·성실)</div>
+      </div>
       <div style="display:flex;align-items:center;gap:6px">
         <button onclick="G.feesYM='${prevYM}';renderFees()" style="padding:5px 10px;border-radius:7px;border:1px solid #e0e0e0;background:#fff;cursor:pointer;font-family:inherit">‹</button>
         <span style="font-size:14px;font-weight:700;min-width:90px;text-align:center">${ymLabel(ym)}</span>
@@ -3101,6 +3130,7 @@ function renderFees() {
         <button onclick="G.feesYM='${currentYM()}';renderFees()" style="padding:5px 10px;border-radius:7px;border:1px solid #e0e0e0;background:#f5f5f5;font-size:12px;cursor:pointer;font-family:inherit">이번달</button>
       </div>
     </div>
+    <div style="${(G.sectionCollapsed||{})['fees-monthly']?'display:none':''}">
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
       <div style="background:#f8f9ff;border-radius:10px;padding:10px 14px">
         <div style="font-size:11px;color:#888">청구액</div>
@@ -3133,14 +3163,19 @@ function renderFees() {
     </table></div>
     ${filteredFeeClients.length===0?'<div style="color:#aaa;text-align:center;padding:16px;font-size:13px">필터 조건에 맞는 거래처 없음</div>':''}
     ` : '<div style="color:#aaa;text-align:center;padding:20px">이 달 해당 거래처 없음</div>'}
+    </div>
   </div>
 
   <!-- 신고 수수료 -->
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <div class="card-title" style="margin-bottom:0">📋 신고 수수료 (신고·결재 항목 청구액)</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        ${sectionToggleBtn('fees-filing')}
+        <div class="card-title" style="margin-bottom:0">📋 신고 수수료 (신고·결재 항목 청구액)</div>
+      </div>
       <div style="font-size:13px;color:#555">청구 ${fTotal.toLocaleString()}원 · 수금 ${fCollected.toLocaleString()}원 · 미수금 ${fUnpaid.toLocaleString()}원</div>
     </div>
+    <div style="${(G.sectionCollapsed||{})['fees-filing']?'display:none':''}">
     ${filingFees.length > 0 ? `
     <div class="tbl-wrap">
     <table>
@@ -3156,6 +3191,7 @@ function renderFees() {
     </table></div>
     ${filteredFilingFees.length===0?'<div style="color:#aaa;text-align:center;padding:16px;font-size:13px">필터 조건에 맞는 항목 없음</div>':''}
     ` : '<div style="color:#aaa;text-align:center;padding:20px">신고 수수료 청구 내역 없음 (신고및결재 탭에서 수수료청구액 입력)</div>'}
+    </div>
   </div>
   `;
 }
