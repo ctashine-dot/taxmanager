@@ -649,6 +649,12 @@ function showMissingClientsModal() {
 }
 
 function renderDashboard() {
+  try { _renderDashboardInner(); } catch(e) {
+    console.error('renderDashboard error:', e);
+    document.getElementById('page-dashboard').innerHTML = `<div style="padding:20px;color:#c62828">대시보드 오류: ${String(e)}<br><button onclick="renderDashboard()" style="margin-top:10px;padding:6px 14px">새로고침</button></div>`;
+  }
+}
+function _renderDashboardInner() {
   const s = getStats();
   const alertClients = G.clients.filter(c=>
     c.status!=='해지'&&c.status!=='폐업'&&(!c.dataReceived||c.feeStatus==='미수금'||c.status==='주의')
@@ -759,8 +765,7 @@ function renderDashboard() {
     if (latestPeriod.enrolled && latestPeriod.enrolled.length>0) {
       targets = G.clients.filter(c=>latestPeriod.enrolled.includes(c.id));
     } else {
-      const {reportType} = latestPeriod;
-      targets = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&getDealTypes(c).some(d=>REPORT_TYPE_FILTERS[reportType]?.includes(d)));
+      targets = applyReportFilter(G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'), latestPeriod);
     }
     const total = targets.length;
     const done  = targets.filter(c=>{ const v=julgaeVal(pKey,c.id); return v.a||v.d||v.b; }).length;
