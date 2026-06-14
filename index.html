@@ -178,6 +178,7 @@ input.finput:focus,select.fsel:focus,textarea.ftarea:focus{border-color:#4f8ef7}
   </div>
   <div id="header-btns">
     <span id="badge-no-data" class="badge-alert" style="display:none"></span>
+    <button class="hbtn" onclick="openBosuTable()">📋 보수표</button>
     <button class="hbtn" onclick="openSettings()">⚙ 설정</button>
     <button class="hbtn blue" onclick="openExcel()">↓ 엑셀</button>
     <button class="hbtn" id="save-btn" onclick="manualSave()" style="background:rgba(46,125,50,.3);color:#81c784">💾 저장</button>
@@ -310,7 +311,8 @@ let G = {
     email: 'office@taxoffice.kr', address: '부산시 ○○구 ○○로 123',
     bank: '국민은행', account: '123-456-789012', accountHolder: '홍세무',
     regNo: '123-45-67890',
-    managers: ['이슬빈','이현주','정여주','최수이']
+    managers: ['이슬빈','이현주','정여주','최수이'],
+    bosuTable: null
   }
 };
 
@@ -336,6 +338,43 @@ const REPORT_TYPE_FILTERS = {
   sajup:    c => c.vatType === '면세',
 };
 
+// ── 보수표 기본값 ──────────────────────────────────────────────────────────
+// 수입금액 기준: 기장료(월), 부가세신고료, 종소세료, 법인세료, 성실신고료(추가)
+const DEFAULT_BOSU_TABLE = [
+  { label:'4,800만 이하',  max:   48000000, jang: 100000, vat:  90000, income:  90000, corp:  90000, seongsi:       0 },
+  { label:'1억 이하',      max:  100000000, jang: 130000, vat: 120000, income: 120000, corp: 120000, seongsi:       0 },
+  { label:'2억 이하',      max:  200000000, jang: 160000, vat: 145000, income: 145000, corp: 145000, seongsi:  300000 },
+  { label:'3억 이하',      max:  300000000, jang: 200000, vat: 180000, income: 180000, corp: 180000, seongsi:  400000 },
+  { label:'5억 이하',      max:  500000000, jang: 250000, vat: 225000, income: 225000, corp: 225000, seongsi:  500000 },
+  { label:'7억 이하',      max:  700000000, jang: 300000, vat: 270000, income: 270000, corp: 270000, seongsi:  600000 },
+  { label:'10억 이하',     max: 1000000000, jang: 350000, vat: 315000, income: 315000, corp: 315000, seongsi:  700000 },
+  { label:'20억 이하',     max: 2000000000, jang: 430000, vat: 387000, income: 387000, corp: 387000, seongsi:  900000 },
+  { label:'20억 초과',     max: Infinity,   jang: 550000, vat: 495000, income: 495000, corp: 495000, seongsi: 1200000 },
+];
+function getBosuTable() { return G.settings.bosuTable || DEFAULT_BOSU_TABLE; }
+function getBosuTier(revenue) {
+  const t = getBosuTable();
+  return t.find(r => revenue <= r.max) || t[t.length-1];
+}
+function getBosuFeeRec(revenue, reportType) {
+  if (!revenue || revenue <= 0) return null;
+  const tier = getBosuTier(revenue);
+  const map = {
+    vat:     {field:'fee',       label:'부가세신고', fee:tier.vat},
+    vat_hak_1:{field:'fee',     label:'부가세신고', fee:tier.vat},
+    vat_hak_2:{field:'fee',     label:'부가세신고', fee:tier.vat},
+    vat_yej: {field:'fee',       label:'부가세예정', fee:tier.vat},
+    sajup:   {field:'fee',       label:'사업장현황', fee:tier.vat},
+    income:  {field:'fee',       label:'종소세신고', fee:tier.income},
+    corp:    {field:'fee',       label:'법인세신고', fee:tier.corp},
+    seongsi: {field:'feeSeongsi',label:'성실신고료', fee:tier.seongsi},
+  };
+  return map[reportType] || null;
+}
+function getJangRyo(revenue) {
+  if (!revenue || revenue <= 0) return null;
+  return getBosuTier(revenue).jang;
+}
 // 신고유형별 거래처 수수료 필드 매핑
 const REPORT_FEE_FIELD = {
   vat:'feeSingo', vat_hak_1:'feeSingo', vat_hak_2:'feeSingo', vat_yej:'feeSingo',
@@ -2365,6 +2404,11 @@ function renderJulgae() {
       const autoFee2 = v.feeSeongsi || (c.feeSeongsi     || 0);
       const rowBg = v.s?'#e8f5e9':v.a?'#f1f8e9':'#fff';
       const margin = (v.revenue&&v.income) ? (v.income/v.revenue*100).toFixed(1) : null;
+      const _revVal4bosu = isVatType ? (v.salesAmount||0) : (v.revenue||0);
+      const _bosuRec = getBosuFeeRec(_revVal4bosu, period.reportType);
+      const bosuBadge = (_bosuRec && _bosuRec.fee > 0)
+        ? `<div onclick="applyBosuFee('${pKey2}',${c.id},'${_bosuRec.field}',${_bosuRec.fee})" style="font-size:9px;color:#7b1fa2;background:#f3e5f5;border-radius:4px;padding:2px 5px;cursor:pointer;margin-top:2px;text-align:right;white-space:nowrap" title="클릭하여 수수료 자동입력">💡 추천 ${_bosuRec.fee.toLocaleString()}원</div>`
+        : '';
       return `<tr id="jr-${pKey2}-${c.id}" style="background:${rowBg}">
         <td style="color:#aaa;font-size:11px">${i+1}</td>
         <td><div class="td-name">${esc(c.name)}</div></td>
@@ -2380,7 +2424,7 @@ function renderJulgae() {
           <div class="chk ${v.a?'on':''}" style="margin:0 auto;width:24px;height:24px">${v.a?'✓':''}</div>
         </td>
         ${isIncomeType?`
-          <td style="text-align:right;padding:4px 8px">${niInput(c.id,'revenue',v.revenue)}${prevRevTxt}</td>
+          <td style="text-align:right;padding:4px 8px">${niInput(c.id,'revenue',v.revenue)}${prevRevTxt}${bosuBadge}</td>
           <td style="text-align:right;padding:4px 8px">${niInput(c.id,'income',v.income)}</td>
           <td style="text-align:center;padding:4px;font-size:12px;font-weight:700;${margin!==null?(Number(margin)<0?'color:#e53935':'color:#2e7d32'):'color:#ccc'}">${margin!==null?margin+'%':'-'}</td>
           <td style="text-align:right;padding:4px 8px">${niInput(c.id,'taxBase',v.taxBase)}</td>
@@ -2388,14 +2432,14 @@ function renderJulgae() {
           <td style="text-align:right;padding:4px 8px">${niInput(c.id,'payTax',v.payTax)}</td>
           <td style="text-align:right;padding:4px 8px">${niInput(c.id,'residentTax',v.residentTax)}</td>
         `:isVatType?`
-          <td style="text-align:right;padding:4px 8px">${niInput(c.id,'salesAmount',v.salesAmount)}${prevRevTxt}</td>
+          <td style="text-align:right;padding:4px 8px">${niInput(c.id,'salesAmount',v.salesAmount)}${prevRevTxt}${bosuBadge}</td>
           <td style="text-align:right;padding:4px 8px">${niInput(c.id,'purchaseAmount',v.purchaseAmount)}</td>
           <td style="text-align:right;padding:4px 8px">${niInput(c.id,'vatAmount',v.vatAmount)}</td>
         `:isSajupType?`
-          <td style="text-align:right;padding:4px 8px">${niInput(c.id,'revenue',v.revenue)}${prevRevTxt}</td>
+          <td style="text-align:right;padding:4px 8px">${niInput(c.id,'revenue',v.revenue)}${prevRevTxt}${bosuBadge}</td>
           <td style="text-align:right;padding:4px 8px">${niInput(c.id,'expenses',v.expenses)}</td>
         `:`
-          <td style="text-align:right;padding:4px 8px">${niInput(c.id,'revenue',v.revenue)}${prevRevTxt}</td>
+          <td style="text-align:right;padding:4px 8px">${niInput(c.id,'revenue',v.revenue)}${prevRevTxt}${bosuBadge}</td>
           <td style="text-align:right;padding:4px 8px">${niInput(c.id,'income',v.income)}</td>
           <td style="text-align:right;padding:4px 8px">${niInput(c.id,'taxBase',v.taxBase)}</td>
         `}
@@ -3684,6 +3728,73 @@ function saveSettings() {
   MANAGERS = ['전체', ...G.settings.managers];
   saveToLS();
   closeModal();
+}
+
+function openBosuTable() {
+  const tbl = getBosuTable();
+  const cols = [{key:'jang',label:'기장료(월)'},{key:'vat',label:'부가세신고'},{key:'income',label:'종소세신고'},{key:'corp',label:'법인세신고'},{key:'seongsi',label:'성실신고(추가)'}];
+  showModal(`<div style="max-width:700px;width:min(700px,97vw)">
+  <div class="modal-header"><h3>📋 보수기준표</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+  <div class="modal-body">
+    <div style="font-size:12px;color:#888;margin-bottom:10px">수입금액 기준 보수표입니다. 셀을 직접 수정할 수 있습니다. (단위: 원)</div>
+    <div style="overflow-x:auto">
+    <table id="bosu-tbl" style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="background:#f5f5f5">
+        <th style="padding:8px;border:1px solid #e0e0e0;white-space:nowrap">수입금액</th>
+        ${cols.map(c=>`<th style="padding:8px;border:1px solid #e0e0e0;white-space:nowrap">${c.label}</th>`).join('')}
+      </tr></thead>
+      <tbody>
+        ${tbl.map((row,ri)=>`<tr>
+          <td style="padding:6px 8px;border:1px solid #e0e0e0;font-weight:600;white-space:nowrap">${esc(row.label)}</td>
+          ${cols.map(c=>`<td style="padding:3px 4px;border:1px solid #e0e0e0;text-align:right">
+            <input type="number" data-ri="${ri}" data-col="${c.key}" value="${row[c.key]||0}"
+              style="width:90px;text-align:right;border:1px solid #e0e0e0;border-radius:5px;padding:4px 6px;font-size:12px;font-family:inherit">
+          </td>`).join('')}
+        </tr>`).join('')}
+      </tbody>
+    </table></div>
+    <div style="margin-top:12px;font-size:12px;color:#888;background:#f8f9ff;border-radius:8px;padding:8px 12px">
+      💡 <b>신고 및 결재</b> 탭에서 수입금액 입력 시 이 표를 기준으로 적정 수수료를 추천합니다.
+    </div>
+    <div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end">
+      <button onclick="resetBosuTable()" class="btn-secondary" style="padding:8px 16px">초기화</button>
+      <button onclick="closeModal()" class="btn-secondary" style="padding:8px 16px">취소</button>
+      <button onclick="saveBosuTable()" class="btn-primary" style="padding:8px 16px">저장</button>
+    </div>
+  </div></div>`);
+}
+function saveBosuTable() {
+  const tbl = getBosuTable().map((row,ri) => {
+    const r = {...row};
+    document.querySelectorAll(`#bosu-tbl input[data-ri="${ri}"]`).forEach(inp => {
+      r[inp.dataset.col] = Number(inp.value) || 0;
+    });
+    return r;
+  });
+  G.settings.bosuTable = tbl;
+  saveToLS();
+  closeModal();
+  alert('보수표가 저장됐습니다.');
+}
+function resetBosuTable() {
+  if (!confirm('기본값으로 초기화할까요?')) return;
+  G.settings.bosuTable = null;
+  saveToLS();
+  openBosuTable();
+}
+function applyBosuFee(pKey, clientId, field, fee) {
+  if (!G.julgae[pKey]) G.julgae[pKey] = {};
+  const cur = julgaeVal(pKey, clientId);
+  cur[field] = fee;
+  G.julgae[pKey][clientId] = cur;
+  const period = G.periods.find(p=>p.id===pKey);
+  const client = G.clients.find(c=>c.id===clientId);
+  if (client && period) {
+    if (field==='feeSeongsi') client.feeSeongsi = fee;
+    else { const ff=REPORT_FEE_FIELD[period.reportType]; if(ff) client[ff]=fee; }
+  }
+  saveToLS();
+  renderJulgae();
 }
 
 // ══════════════════════════════════════════════════════
