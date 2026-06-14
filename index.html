@@ -261,7 +261,7 @@ function expandClients(mini) {
     id: m.i, name: m.n, rep: m.r, bizNo: '', jumin: '', relatedGroup: '', groupMain: false, phone: m.p || '', email: '',
     taxType: m.t, vatType: m.v, bizType: m.b || '', taxOffice: m.o || '',
     manager: m.m || '', fee: m.f || 0, feeSingo: m.fs || 0, feeJojung: m.fj || 0, feeSeongsi: m.fse || 0,
-    feeStatus: '청구완료', contracts: m.c || [],
+    feeStatus: '청구완료', cms: m.cms || false, contracts: m.c || [],
     status: '정상', dealType: m.d || '기장',
     dataReceived: false, bookkeeping: false, approved: false,
     memo: m.memo || '', contractDate: m.cd || '',
@@ -278,11 +278,13 @@ let G = {
   clients: [],
   currentTab: 'dashboard',
   searchText: '',
+  clientRepSearch: '',
   filterManagers: [],
   filterTaxTypes: [],
   filterVatTypes: [],
   filterFeeStatuses: [],
   filterDealTypes: [],
+  filterCMS: [],
   showTerminated: false,
   closureSearch: '',
   julgaeSearch: '',
@@ -510,9 +512,8 @@ function filteredClients() {
   const getGroupKey = buildClientGroupMap(G.clients);
   const list = G.clients.filter(c => {
     if (!G.showTerminated && (c.status==='해지'||c.status==='폐업')) return false;
-    if (G.searchText) {
-      if (!c.name.includes(G.searchText)) return false;
-    }
+    if (G.searchText && !c.name.includes(G.searchText)) return false;
+    if (G.clientRepSearch && !(c.rep||'').includes(G.clientRepSearch)) return false;
     if (G.filterManagers.length > 0) {
       const hasNone = G.filterManagers.includes('(없음)');
       const mgrs = getManagers(c);
@@ -521,9 +522,8 @@ function filteredClients() {
     if (G.filterTaxTypes.length > 0 && !G.filterTaxTypes.includes(c.taxType)) return false;
     if (G.filterVatTypes.length > 0 && !G.filterVatTypes.includes(c.vatType)) return false;
     if (G.filterFeeStatuses.length > 0 && !G.filterFeeStatuses.includes(c.feeStatus)) return false;
-    if (G.filterDealTypes.length > 0) {
-      if (!getDealTypes(c).some(d => G.filterDealTypes.includes(d))) return false;
-    }
+    if (G.filterDealTypes.length > 0 && !getDealTypes(c).some(d => G.filterDealTypes.includes(d))) return false;
+    if (G.filterCMS.length > 0 && !G.filterCMS.includes(c.cms ? '가입' : '미가입')) return false;
     return true;
   });
 
@@ -859,11 +859,6 @@ function renderClients() {
     </div>
   </div>
 
-  <div class="search-box" style="margin-bottom:10px;background:#fff;border:1px solid #e0e0e0;border-radius:10px;padding:8px 14px">
-    <span>🔍</span>
-    <input id="search-input" placeholder="거래처명 검색" value="${esc(G.searchText)}" oninput="onSearch(this.value)">
-  </div>
-
   <div style="font-size:12px;color:#888;margin-bottom:8px">총 ${list.length}개 거래처 (${G.clientPage+1}/${totalPages} 페이지)</div>
 
   <datalist id="taxoffice-list">${TAX_OFFICES.map(o=>`<option value="${esc(o)}">`).join('')}</datalist>
@@ -874,14 +869,14 @@ function renderClients() {
   <table>
     <thead>
     <tr>
-      <th>거래처명</th>
-      <th style="width:72px">대표자</th>
+      <th style="padding:4px 6px">${(()=>{const a=G.searchText;return`<button onclick="openClientNameSearch(this)" style="width:100%;padding:4px 7px;border-radius:7px;font-size:11px;cursor:pointer;font-family:inherit;border:1.5px solid ${a?'#4f8ef7':'#ddd'};background:${a?'#e8f0fe':'#fff'};color:${a?'#1565c0':'#555'};display:flex;justify-content:space-between;align-items:center;gap:4px"><span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a?esc(a):'거래처명'}</span><span style="font-size:9px;opacity:.5">🔍</span></button>`;})()}</th>
+      <th style="width:72px;padding:3px 4px">${(()=>{const a=G.clientRepSearch;return`<button onclick="openClientRepSearch(this)" style="width:100%;padding:4px 6px;border-radius:7px;font-size:11px;cursor:pointer;font-family:inherit;border:1.5px solid ${a?'#4f8ef7':'#ddd'};background:${a?'#e8f0fe':'#fff'};color:${a?'#1565c0':'#555'};display:flex;justify-content:space-between;align-items:center;gap:3px"><span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a?esc(a):'대표자'}</span><span style="font-size:9px;opacity:.5">🔍</span></button>`;})()}</th>
       <th style="padding:4px 6px">${filterPopupBtn('filterDealTypes','수임내용')}</th>
       <th style="padding:4px 6px">${filterPopupBtn('filterTaxTypes','인격')}</th>
       <th style="padding:4px 6px">${filterPopupBtn('filterVatTypes','과세유형')}</th>
       <th style="padding:4px 6px">${filterPopupBtn('filterManagers','담당자')}</th>
       <th>수수료</th><th>상태</th>
-      <th style="padding:4px 6px">${filterPopupBtn('filterFeeStatuses','수금상태')}</th>
+      <th style="padding:4px 6px">${filterPopupBtn('filterCMS','CMS')}</th>
       <th style="width:28px"></th>
     </tr>
     </thead>
@@ -910,7 +905,7 @@ function renderClients() {
         <td style="color:#555;font-size:12px">${em?iSel('manager',MANAGERS.slice(1),getManagers(c)[0]||''):getManagers(c).join(', ')||'-'}</td>
         <td style="font-weight:600;font-size:11px">${em?`<div onclick="event.stopPropagation()" style="display:grid;grid-template-columns:auto 1fr;gap:2px 4px;align-items:center;font-size:10px"><span style="color:#888">기장</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'fee',this.value)" value="${c.fee||0}" class="inline-edit" style="width:65px"><span style="color:#888">신고</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeSingo',this.value)" value="${c.feeSingo||0}" class="inline-edit" style="width:65px"><span style="color:#888">조정</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeJojung',this.value)" value="${c.feeJojung||0}" class="inline-edit" style="width:65px"><span style="color:#888">성실</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeSeongsi',this.value)" value="${c.feeSeongsi||0}" class="inline-edit" style="width:65px"></div>`:(c.status==='정상'||c.status==='주의'?(()=>{const p=[];if(c.fee)p.push('<span style="color:#aaa;font-size:10px">기장</span> '+c.fee.toLocaleString());if(c.feeSingo)p.push('<span style="color:#aaa;font-size:10px">신고</span> '+c.feeSingo.toLocaleString());if(c.feeJojung)p.push('<span style="color:#aaa;font-size:10px">조정</span> '+c.feeJojung.toLocaleString());if(c.feeSeongsi)p.push('<span style="color:#aaa;font-size:10px">성실</span> '+c.feeSeongsi.toLocaleString());return p.length?p.join('<br>'):'-';})():'-')}</td>
         <td onclick="event.stopPropagation();cycleStatus(${c.id})" style="cursor:pointer">${badge(c.status,c.status==='정상'?'green':c.status==='주의'?'orange':'gray')}</td>
-        <td onclick="event.stopPropagation();cycleFeeStatus(${c.id})" style="cursor:pointer">${badge(c.feeStatus,c.feeStatus==='수금완료'?'green':c.feeStatus==='청구완료'?'blue':'red')}</td>
+        <td onclick="event.stopPropagation();toggleCMS(${c.id})" style="cursor:pointer">${badge(c.cms?'가입':'미가입',c.cms?'green':'gray')}</td>
         <td style="text-align:center;color:#aaa;font-size:11px" id="expand-arrow-${c.id}">▼</td>
       </tr>
       <tr class="expand-row" id="expand-${c.id}" style="display:none">
@@ -948,10 +943,35 @@ function renderClients() {
 
 function clientPageChange(dir) { G.clientPage += dir; renderClients(); window.scrollTo({top:0,behavior:'instant'}); }
 function toggleTerminated() { G.showTerminated=!G.showTerminated; renderClients(); }
-function onSearch(v) {
-  G.searchText = v; G.clientPage = 0; renderClients();
-  const inp = document.getElementById('search-input');
-  if (inp) { inp.focus(); const l=v.length; inp.setSelectionRange(l,l); }
+function onSearch(v) { G.searchText = v; G.clientPage = 0; renderClients(); }
+function _openClientSearch(field, title, inputId, btnEl) {
+  const existing = document.getElementById('filter-popup');
+  if (existing) { existing.remove(); document.removeEventListener('click', _fpOutside); if (_fpField==='__'+inputId) { _fpField=null; return; } }
+  _fpField = '__'+inputId;
+  const cur = G[field] || '';
+  const pop = document.createElement('div');
+  pop.id = 'filter-popup';
+  pop.style.cssText = 'position:fixed;z-index:9999;background:#fff;border:1.5px solid #e0e0e0;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);padding:14px;min-width:200px;';
+  const rect = btnEl.getBoundingClientRect();
+  pop.style.top = Math.min(rect.bottom+6, window.innerHeight-130)+'px';
+  pop.style.left = Math.max(8, Math.min(rect.left, window.innerWidth-220))+'px';
+  pop.innerHTML = `<div style="font-size:12px;font-weight:800;color:#333;margin-bottom:8px">${title}</div>
+    <input id="${inputId}" type="text" value="${cur.replace(/"/g,'&quot;')}" placeholder="${title.replace(' 검색','')}"
+      oninput="G['${field}']=this.value;G.clientPage=0;renderClients()"
+      style="width:100%;padding:8px 10px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:14px;font-family:inherit;box-sizing:border-box">
+    <div style="display:flex;gap:6px;margin-top:10px">
+      <button onclick="G['${field}']='';G.clientPage=0;renderClients();document.getElementById('filter-popup')?.remove();document.removeEventListener('click',_fpOutside);_fpField=null" style="flex:1;padding:7px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:13px;cursor:pointer;font-family:inherit">초기화</button>
+      <button onclick="document.getElementById('filter-popup')?.remove();document.removeEventListener('click',_fpOutside);_fpField=null" style="flex:2;padding:7px;border-radius:8px;border:none;background:#4f8ef7;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">확인</button>
+    </div>`;
+  document.body.appendChild(pop);
+  setTimeout(()=>{ const i=document.getElementById(inputId); if(i){i.focus();const l=cur.length;i.setSelectionRange(l,l);} document.addEventListener('click',_fpOutside); },50);
+}
+function openClientNameSearch(btnEl) { _openClientSearch('searchText','거래처명 검색','cns-inp',btnEl); }
+function openClientRepSearch(btnEl)  { _openClientSearch('clientRepSearch','대표자명 검색','crs-inp',btnEl); }
+function toggleCMS(id) {
+  const c = G.clients.find(x=>x.id===id); if(!c) return;
+  c.cms = !c.cms;
+  saveToLS(); renderClients();
 }
 function onJulgaeSearch(v) {
   G.julgaeSearch = v; renderJulgae();
@@ -1022,12 +1042,13 @@ const _FP_OPTIONS = {
   filterTaxTypes:    () => TAX_TYPES.slice(1),
   filterVatTypes:    () => VAT_TYPES.slice(1),
   filterFeeStatuses: () => FEE_STATUSES.slice(1),
+  filterCMS: () => ['가입', '미가입'],
   julgaeManagers:    () => [...MANAGERS.slice(1), '(없음)'],
 };
 const _FP_TITLES = {
   filterDealTypes:'수임내용 필터', filterManagers:'담당자 필터',
   filterTaxTypes:'인격 필터', filterVatTypes:'과세유형 필터',
-  filterFeeStatuses:'수금상태 필터', julgaeManagers:'담당자 필터',
+  filterFeeStatuses:'수금상태 필터', filterCMS:'CMS 가입 필터', julgaeManagers:'담당자 필터',
 };
 let _fpField = null;
 function openFilterPopup(field, btnEl) {
