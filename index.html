@@ -2528,7 +2528,9 @@ function renderJulgae() {
   const isVatType = ['vat','vat_hak_1','vat_hak_2','vat_yej'].includes(rt);
   const isSajupType = rt === 'sajup';
   const isSeongsiType = rt === 'seongsi';
-  const totalCols = isSeongsiType ? 16 : isIncomeType ? 15 : isVatType ? 11 : isSajupType ? 10 : 11;
+  const hc = G.hiddenCols || {};
+  const jHideable = ['j_rep','j_manager','j_data','j_book','j_done','j_fee','j_collect'];
+  const totalCols = (isSeongsiType ? 16 : isIncomeType ? 15 : isVatType ? 11 : isSajupType ? 10 : 11) - jHideable.filter(k=>hc[k]).length;
   const feeFieldKey = REPORT_FEE_FIELD[rt] || 'fee';
   const _jFeeSum    = c => { const v=julgaeVal(pKey2,c.id); return (v.fee||0)+(isSeongsiType?(v.feeSeongsi||0):0); };
   const feeTotal    = clients.reduce((a,c) => a + _jFeeSum(c), 0);
@@ -2537,6 +2539,8 @@ function renderJulgae() {
     `<input type="number" class="julgae-num-input" value="${val||''}" placeholder="0"
       onchange="updateJulgaeNum('${pKey2}',${cid},'${field}',this.value)"
       style="width:100%;text-align:right;border:1px solid #e0e0e0;border-radius:5px;padding:3px 5px;font-size:12px;font-family:inherit;${extraStyle}">`;
+
+  const jChips = _hcChips([['j_rep','대표자'],['j_manager','담당자'],['j_data','자료'],['j_book','기장'],['j_done','결재'],['j_fee','수수료청구'],['j_collect','수금']]);
 
   document.getElementById('page-julgae').innerHTML = `
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
@@ -2627,6 +2631,8 @@ function renderJulgae() {
 
   ${prevPeriods.length>0?`<div style="font-size:12px;color:#888;background:#fffde7;padding:6px 12px;border-radius:8px;margin-bottom:10px">💡 과거 동기(${prevPeriods.map(p=>esc(p.label)).join(', ')}) 수입금액·수수료청구액이 참고로 표시됩니다. (전년·전전년)</div>`:''}
 
+  ${jChips?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">${jChips}</div>`:''}
+
   <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
     ${sectionToggleBtn('julgae-list')}
     <span style="font-size:12px;color:#888">목록 ${(G.sectionCollapsed||{})['julgae-list']?'(접힘)':''}</span>
@@ -2637,11 +2643,11 @@ function renderJulgae() {
     <thead><tr>
       <th style="width:28px">번</th>
       <th style="padding:4px 6px">${(()=>{const a=G.julgaeSearch;return`<button onclick="openJulgaeNameSearch(this)" style="width:100%;padding:4px 7px;border-radius:7px;font-size:11px;cursor:pointer;font-family:inherit;border:1.5px solid ${a?'#4f8ef7':'#ddd'};background:${a?'#e8f0fe':'#fff'};color:${a?'#1565c0':'#555'};display:flex;justify-content:space-between;align-items:center;gap:4px;"><span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a?esc(a):'거래처명'}</span><span style="font-size:9px;opacity:.5;flex-shrink:0">🔍</span></button>`;})()}</th>
-      <th style="width:80px;padding:3px 4px">${(()=>{const a=G.julgaeRepSearch;return`<button onclick="openJulgaeRepSearch(this)" style="width:100%;padding:4px 6px;border-radius:7px;font-size:11px;cursor:pointer;font-family:inherit;border:1.5px solid ${a?'#4f8ef7':'#ddd'};background:${a?'#e8f0fe':'#fff'};color:${a?'#1565c0':'#555'};display:flex;justify-content:space-between;align-items:center;gap:3px;"><span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a?esc(a):'대표자'}</span><span style="font-size:9px;opacity:.5;flex-shrink:0">🔍</span></button>`;})()}</th>
-      <th style="padding:4px 6px">${filterPopupBtn('julgaeManagers','담당자')}</th>
-      <th style="width:56px;text-align:center;padding:3px">${julgaeCycleBtn('julgaeDataFilter','자료')}</th>
-      <th style="width:56px;text-align:center;padding:3px">${julgaeCycleBtn('julgaeBookFilter','기장')}</th>
-      <th style="width:56px;text-align:center;padding:3px">${julgaeCycleBtn('julgaeDoneFilter','결재')}</th>
+      <th style="width:80px;padding:3px 4px;${_hcStyle('j_rep')}">${(()=>{const a=G.julgaeRepSearch;return`<div style="display:flex;align-items:center"><button onclick="openJulgaeRepSearch(this)" style="flex:1;padding:4px 6px;border-radius:7px;font-size:11px;cursor:pointer;font-family:inherit;border:1.5px solid ${a?'#4f8ef7':'#ddd'};background:${a?'#e8f0fe':'#fff'};color:${a?'#1565c0':'#555'};display:flex;justify-content:space-between;align-items:center;gap:3px;"><span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a?esc(a):'대표자'}</span><span style="font-size:9px;opacity:.5;flex-shrink:0">🔍</span></button>${_hcBtn('j_rep')}</div>`;})()}</th>
+      <th style="padding:4px 6px;${_hcStyle('j_manager')}"><div style="display:flex;align-items:center">${filterPopupBtn('julgaeManagers','담당자')}${_hcBtn('j_manager')}</div></th>
+      <th style="width:56px;text-align:center;padding:3px;${_hcStyle('j_data')}"><div style="display:flex;align-items:center">${julgaeCycleBtn('julgaeDataFilter','자료')}${_hcBtn('j_data')}</div></th>
+      <th style="width:56px;text-align:center;padding:3px;${_hcStyle('j_book')}"><div style="display:flex;align-items:center">${julgaeCycleBtn('julgaeBookFilter','기장')}${_hcBtn('j_book')}</div></th>
+      <th style="width:56px;text-align:center;padding:3px;${_hcStyle('j_done')}"><div style="display:flex;align-items:center">${julgaeCycleBtn('julgaeDoneFilter','결재')}${_hcBtn('j_done')}</div></th>
       ${isIncomeType?`
         <th style="width:100px;text-align:right">수입금액</th>
         <th style="width:100px;text-align:right">소득금액</th>
@@ -2662,8 +2668,8 @@ function renderJulgae() {
         <th style="width:110px;text-align:right">소득금액</th>
         <th style="width:110px;text-align:right">과세표준</th>
       `}
-      ${isSeongsiType?`<th style="width:110px;text-align:right">조정료</th><th style="width:110px;text-align:right">성실신고료</th>`:`<th style="width:110px;text-align:right">수수료청구</th>`}
-      <th style="width:70px;text-align:center;padding:3px">${julgaeCycleBtn('julgaeFeeFilter','수금',['전체','수금','미수금'])}</th>
+      ${isSeongsiType?`<th style="width:110px;text-align:right;${_hcStyle('j_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">조정료${_hcBtn('j_fee')}</div></th><th style="width:110px;text-align:right">성실신고료</th>`:`<th style="width:110px;text-align:right;${_hcStyle('j_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">수수료청구${_hcBtn('j_fee')}</div></th>`}
+      <th style="width:70px;text-align:center;padding:3px;${_hcStyle('j_collect')}"><div style="display:flex;align-items:center">${julgaeCycleBtn('julgaeFeeFilter','수금',['전체','수금','미수금'])}${_hcBtn('j_collect')}</div></th>
     </tr></thead>
     <tbody>
     ${clients.map((c, i) => {
@@ -2692,15 +2698,15 @@ function renderJulgae() {
       return `<tr id="jr-${pKey2}-${c.id}" style="background:${rowBg}">
         <td style="color:#aaa;font-size:11px">${i+1}</td>
         <td><div class="td-name">${esc(c.name)}</div></td>
-        <td style="font-size:12px;color:#444">${esc(c.rep)||'-'}</td>
-        <td style="color:#555;font-size:12px">${getManagers(c).join(', ')||'-'}</td>
-        <td style="text-align:center" onclick="toggleJulgaeField('${pKey2}',${c.id},'d')">
+        <td style="font-size:12px;color:#444;${hc['j_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
+        <td style="color:#555;font-size:12px;${hc['j_manager']?'display:none':''}">${getManagers(c).join(', ')||'-'}</td>
+        <td style="text-align:center;${hc['j_data']?'display:none':''}" onclick="toggleJulgaeField('${pKey2}',${c.id},'d')">
           <div class="chk ${v.d?'on':''}" style="margin:0 auto;width:24px;height:24px">${v.d?'✓':''}</div>
         </td>
-        <td style="text-align:center" onclick="toggleJulgaeField('${pKey2}',${c.id},'b')">
+        <td style="text-align:center;${hc['j_book']?'display:none':''}" onclick="toggleJulgaeField('${pKey2}',${c.id},'b')">
           <div class="chk ${v.b?'on':''}" style="margin:0 auto;width:24px;height:24px">${v.b?'✓':''}</div>
         </td>
-        <td style="text-align:center" onclick="toggleJulgaeField('${pKey2}',${c.id},'a')">
+        <td style="text-align:center;${hc['j_done']?'display:none':''}" onclick="toggleJulgaeField('${pKey2}',${c.id},'a')">
           <div class="chk ${v.a?'on':''}" style="margin:0 auto;width:24px;height:24px">${v.a?'✓':''}</div>
         </td>
         ${isIncomeType?`
@@ -2724,7 +2730,7 @@ function renderJulgae() {
           <td style="text-align:right;padding:4px 8px">${niInput(c.id,'taxBase',v.taxBase)}</td>
         `}
         ${isSeongsiType?`
-          <td style="text-align:right;padding:4px 8px">
+          <td style="text-align:right;padding:4px 8px;${hc['j_fee']?'display:none':''}">
             ${niInput(c.id,'fee',autoFee,autoFee?'font-weight:700;color:#7b1fa2':'')}
             ${prevFeeTxt}
           </td>
@@ -2732,12 +2738,12 @@ function renderJulgae() {
             ${niInput(c.id,'feeSeongsi',autoFee2,autoFee2?'font-weight:700;color:#7b1fa2':'')}
           </td>
         `:`
-          <td style="text-align:right;padding:4px 8px">
+          <td style="text-align:right;padding:4px 8px;${hc['j_fee']?'display:none':''}">
             ${niInput(c.id,'fee',autoFee,autoFee?'font-weight:700;color:#7b1fa2':'')}
             ${prevFeeTxt}
           </td>
         `}
-        <td style="text-align:center" onclick="toggleJulgaeField('${pKey2}',${c.id},'s')">
+        <td style="text-align:center;${hc['j_collect']?'display:none':''}" onclick="toggleJulgaeField('${pKey2}',${c.id},'s')">
           <div class="chk ${v.s?'on':''}" style="margin:0 auto;width:24px;height:24px;${v.s?'background:#c8e6c9;border-color:#2e7d32;color:#2e7d32':''}">${v.s?'💰':''}</div>
         </td>
       </tr>`;
@@ -3120,15 +3126,19 @@ function renderFees() {
   const filingSearchActive = !!G.filingSearch;
   const filingRepSearchActive = !!G.filingRepSearch;
 
+  const hc = G.hiddenCols || {};
+  const fmChips = _hcChips([['fm_rep','대표자(월정)'],['fm_dealType','수임내용'],['fm_manager','담당자(월정)'],['fm_contractDate','수임일'],['fm_fee','월수수료']]);
+  const ffChips = _hcChips([['ff_period','신고기간'],['ff_rep','대표자(신고)'],['ff_manager','담당자(신고)'],['ff_fee','청구액']]);
+
   const monthlyRows = filteredFeeClients.map(c => {
     const collected = G.monthlyFees[c.id]?.[ym] || false;
     return `<tr style="background:${collected?'#e8f5e9':'#fff'}">
       <td><div style="font-weight:600;font-size:13px">${esc(c.name)}</div></td>
-      <td style="font-size:12px;color:#444">${esc(c.rep)||'-'}</td>
-      <td>${getDealTypes(c).map(d=>dealBadge(d)).join('')}</td>
-      <td style="color:#555;font-size:12px">${getManagers(c).join(', ')||'-'}</td>
-      <td style="font-size:11px;color:#888">${c.contractDate?c.contractDate.slice(0,7):'-'}</td>
-      <td style="text-align:right;font-weight:700;color:#7b1fa2">${(c.fee||0).toLocaleString()}원</td>
+      <td style="font-size:12px;color:#444;${hc['fm_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
+      <td style="${hc['fm_dealType']?'display:none':''}">${getDealTypes(c).map(d=>dealBadge(d)).join('')}</td>
+      <td style="color:#555;font-size:12px;${hc['fm_manager']?'display:none':''}">${getManagers(c).join(', ')||'-'}</td>
+      <td style="font-size:11px;color:#888;${hc['fm_contractDate']?'display:none':''}">${c.contractDate?c.contractDate.slice(0,7):'-'}</td>
+      <td style="text-align:right;font-weight:700;color:#7b1fa2;${hc['fm_fee']?'display:none':''}">${(c.fee||0).toLocaleString()}원</td>
       <td style="text-align:center" onclick="toggleMonthlyFee(${c.id},'${ym}')">
         <div class="chk ${collected?'on':''}" style="margin:0 auto;width:26px;height:26px;${collected?'background:#c8e6c9;border-color:#2e7d32;color:#2e7d32':''}">${collected?'💰':''}</div>
       </td>
@@ -3137,11 +3147,11 @@ function renderFees() {
 
   const filingRows = filteredFilingFees.map(x => `
     <tr style="background:${x.collected?'#e8f5e9':'#fff'}">
-      <td><div style="font-weight:600;font-size:12px">${esc(x.period.label)}</div></td>
+      <td style="${hc['ff_period']?'display:none':''}"><div style="font-weight:600;font-size:12px">${esc(x.period.label)}</div></td>
       <td><div style="font-weight:600;font-size:13px">${esc(x.client.name)}</div></td>
-      <td style="font-size:12px;color:#444">${esc(x.client.rep)||'-'}</td>
-      <td style="color:#555;font-size:12px">${getManagers(x.client).join(', ')||'-'}</td>
-      <td style="text-align:right;font-weight:700;color:#7b1fa2">${x.fee.toLocaleString()}원</td>
+      <td style="font-size:12px;color:#444;${hc['ff_rep']?'display:none':''}">${esc(x.client.rep)||'-'}</td>
+      <td style="color:#555;font-size:12px;${hc['ff_manager']?'display:none':''}">${getManagers(x.client).join(', ')||'-'}</td>
+      <td style="text-align:right;font-weight:700;color:#7b1fa2;${hc['ff_fee']?'display:none':''}">${x.fee.toLocaleString()}원</td>
       <td style="text-align:center" onclick="toggleJulgaeField('${x.pKey}',${x.cid},'s');renderFees()">
         <div class="chk ${x.collected?'on':''}" style="margin:0 auto;width:26px;height:26px;${x.collected?'background:#c8e6c9;border-color:#2e7d32;color:#2e7d32':''}">${x.collected?'💰':''}</div>
       </td>
@@ -3171,6 +3181,7 @@ function renderFees() {
       </div>
     </div>
     <div style="${(G.sectionCollapsed||{})['fees-monthly']?'display:none':''}">
+    ${fmChips?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${fmChips}</div>`:''}
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
       <div style="background:#f8f9ff;border-radius:10px;padding:10px 14px">
         <div style="font-size:11px;color:#888">청구액</div>
@@ -3192,11 +3203,11 @@ function renderFees() {
     <table>
       <thead><tr>
         <th style="padding:4px 6px"><button onclick="openFeesNameSearch(this)" style="width:100%;padding:3px 5px;border-radius:6px;font-size:10px;cursor:pointer;font-family:inherit;${feesSearchActive?'border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7':'border:1.5px solid #ddd;background:#fff;color:#555'};text-align:left">거래처명${feesSearchActive?' 🔍':' 🔍'}</button></th>
-        <th style="width:80px;padding:4px 6px"><button onclick="openFeesRepSearch(this)" style="width:100%;padding:3px 5px;border-radius:6px;font-size:10px;cursor:pointer;font-family:inherit;${feesRepSearchActive?'border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7':'border:1.5px solid #ddd;background:#fff;color:#555'};text-align:left">대표자 🔍</button></th>
-        <th style="padding:4px 6px">${filterPopupBtn('feesDealFilter','수임내용')}</th>
-        <th style="padding:4px 6px">${filterPopupBtn('feesManagerFilter','담당자')}</th>
-        <th>수임일</th>
-        <th style="text-align:right">월수수료</th>
+        <th style="width:80px;padding:4px 6px;${_hcStyle('fm_rep')}"><div style="display:flex;align-items:center"><button onclick="openFeesRepSearch(this)" style="flex:1;padding:3px 5px;border-radius:6px;font-size:10px;cursor:pointer;font-family:inherit;${feesRepSearchActive?'border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7':'border:1.5px solid #ddd;background:#fff;color:#555'};text-align:left">대표자 🔍</button>${_hcBtn('fm_rep')}</div></th>
+        <th style="padding:4px 6px;${_hcStyle('fm_dealType')}"><div style="display:flex;align-items:center">${filterPopupBtn('feesDealFilter','수임내용')}${_hcBtn('fm_dealType')}</div></th>
+        <th style="padding:4px 6px;${_hcStyle('fm_manager')}"><div style="display:flex;align-items:center">${filterPopupBtn('feesManagerFilter','담당자')}${_hcBtn('fm_manager')}</div></th>
+        <th style="${_hcStyle('fm_contractDate')}"><div style="display:flex;align-items:center;justify-content:center">수임일${_hcBtn('fm_contractDate')}</div></th>
+        <th style="text-align:right;${_hcStyle('fm_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">월수수료${_hcBtn('fm_fee')}</div></th>
         <th style="width:60px;text-align:center;padding:3px">${feesCycleBtn('feesCollectFilter','수금',['전체','수금','미수금'])}</th>
       </tr></thead>
       <tbody>${monthlyRows}</tbody>
@@ -3216,15 +3227,16 @@ function renderFees() {
       <div style="font-size:13px;color:#555">청구 ${fTotal.toLocaleString()}원 · 수금 ${fCollected.toLocaleString()}원 · 미수금 ${fUnpaid.toLocaleString()}원</div>
     </div>
     <div style="${(G.sectionCollapsed||{})['fees-filing']?'display:none':''}">
+    ${ffChips?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${ffChips}</div>`:''}
     ${filingFees.length > 0 ? `
     <div class="tbl-wrap">
     <table>
       <thead><tr>
-        <th>신고기간</th>
+        <th style="${_hcStyle('ff_period')}"><div style="display:flex;align-items:center;justify-content:center">신고기간${_hcBtn('ff_period')}</div></th>
         <th style="padding:4px 6px"><button onclick="openFilingNameSearch(this)" style="width:100%;padding:3px 5px;border-radius:6px;font-size:10px;cursor:pointer;font-family:inherit;${filingSearchActive?'border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7':'border:1.5px solid #ddd;background:#fff;color:#555'};text-align:left">거래처명 🔍</button></th>
-        <th style="width:80px;padding:4px 6px"><button onclick="openFilingRepSearch(this)" style="width:100%;padding:3px 5px;border-radius:6px;font-size:10px;cursor:pointer;font-family:inherit;${filingRepSearchActive?'border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7':'border:1.5px solid #ddd;background:#fff;color:#555'};text-align:left">대표자 🔍</button></th>
-        <th style="padding:4px 6px">${filterPopupBtn('filingManagerFilter','담당자')}</th>
-        <th style="text-align:right">청구액</th>
+        <th style="width:80px;padding:4px 6px;${_hcStyle('ff_rep')}"><div style="display:flex;align-items:center"><button onclick="openFilingRepSearch(this)" style="flex:1;padding:3px 5px;border-radius:6px;font-size:10px;cursor:pointer;font-family:inherit;${filingRepSearchActive?'border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7':'border:1.5px solid #ddd;background:#fff;color:#555'};text-align:left">대표자 🔍</button>${_hcBtn('ff_rep')}</div></th>
+        <th style="padding:4px 6px;${_hcStyle('ff_manager')}"><div style="display:flex;align-items:center">${filterPopupBtn('filingManagerFilter','담당자')}${_hcBtn('ff_manager')}</div></th>
+        <th style="text-align:right;${_hcStyle('ff_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">청구액${_hcBtn('ff_fee')}</div></th>
         <th style="width:60px;text-align:center;padding:3px">${feesCycleBtn('filingCollectFilter','수금',['전체','수금','미수금'])}</th>
       </tr></thead>
       <tbody>${filingRows}</tbody>
