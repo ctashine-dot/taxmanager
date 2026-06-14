@@ -305,6 +305,13 @@ let G = {
   invoiceData: {},
   monthlyFees: {},
   feesYM: '',
+  feesSearch: '',
+  feesDealFilter: [],
+  feesManagerFilter: [],
+  feesCollectFilter: '전체',
+  filingSearch: '',
+  filingManagerFilter: [],
+  filingCollectFilter: '전체',
   settings: {
     name: '○○세무회계사무소', rep: '홍세무',
     phone: '02-1234-5678', fax: '02-1234-5679',
@@ -1094,6 +1101,62 @@ function julgaeCycleBtn(field, label, states) {
   const s = active ? (pos?'border:1.5px solid #2e7d32;background:#e8f5e9;color:#2e7d32':'border:1.5px solid #e53935;background:#fdecea;color:#c62828') : 'border:1.5px solid #ddd;background:#fff;color:#555';
   return `<button onclick="event.stopPropagation();G['${field}']='${next}';renderJulgae()" style="width:100%;padding:3px 5px;border-radius:6px;font-size:10px;cursor:pointer;font-family:inherit;${s};text-align:center">${val===states[0]?label:val}</button>`;
 }
+function feesCycleBtn(field, label, states) {
+  if (!states) states = ['전체','수금','미수금'];
+  const val = G[field] || states[0];
+  const idx = states.indexOf(val);
+  const next = states[(idx+1)%states.length];
+  const active = idx > 0;
+  const pos = idx === 1;
+  const s = active ? (pos?'border:1.5px solid #2e7d32;background:#e8f5e9;color:#2e7d32':'border:1.5px solid #e53935;background:#fdecea;color:#c62828') : 'border:1.5px solid #ddd;background:#fff;color:#555';
+  return `<button onclick="event.stopPropagation();G['${field}']='${next}';renderFees()" style="width:100%;padding:3px 5px;border-radius:6px;font-size:10px;cursor:pointer;font-family:inherit;${s};text-align:center">${val===states[0]?label:val}</button>`;
+}
+function openFeesNameSearch(btnEl) {
+  const FLD='feesSearch', ID='fns-inp';
+  const existing=document.getElementById('filter-popup');
+  if(existing){existing.remove();document.removeEventListener('click',_fpOutside);if(_fpField==='__'+ID){_fpField=null;return;}}
+  _fpField='__'+ID;
+  const cur=G[FLD]||'';
+  const pop=document.createElement('div');
+  pop.id='filter-popup';
+  pop.style.cssText='position:fixed;z-index:9999;background:#fff;border:1.5px solid #e0e0e0;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);padding:14px;min-width:200px;';
+  const rect=btnEl.getBoundingClientRect();
+  pop.style.top=Math.min(rect.bottom+6,window.innerHeight-130)+'px';
+  pop.style.left=Math.max(8,Math.min(rect.left,window.innerWidth-220))+'px';
+  pop.innerHTML=`<div style="font-size:12px;font-weight:800;color:#333;margin-bottom:8px">거래처명 검색</div>
+    <input id="${ID}" type="text" value="${cur.replace(/"/g,'&quot;')}" placeholder="거래처명"
+      oninput="G['${FLD}']=this.value;renderFees()"
+      style="width:100%;padding:8px 10px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:14px;font-family:inherit;box-sizing:border-box">
+    <div style="display:flex;gap:6px;margin-top:10px">
+      <button onclick="G['${FLD}']='';renderFees();document.getElementById('filter-popup')?.remove();document.removeEventListener('click',_fpOutside);_fpField=null" style="flex:1;padding:7px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:13px;cursor:pointer;font-family:inherit">초기화</button>
+      <button onclick="document.getElementById('filter-popup')?.remove();document.removeEventListener('click',_fpOutside);_fpField=null" style="flex:2;padding:7px;border-radius:8px;border:none;background:#4f8ef7;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">확인</button>
+    </div>`;
+  document.body.appendChild(pop);
+  setTimeout(()=>{const i=document.getElementById(ID);if(i){i.focus();const l=cur.length;i.setSelectionRange(l,l);}document.addEventListener('click',_fpOutside);},50);
+}
+function openFilingNameSearch(btnEl) {
+  const FLD='filingSearch', ID='fis-inp';
+  const existing=document.getElementById('filter-popup');
+  if(existing){existing.remove();document.removeEventListener('click',_fpOutside);if(_fpField==='__'+ID){_fpField=null;return;}}
+  _fpField='__'+ID;
+  const cur=G[FLD]||'';
+  const pop=document.createElement('div');
+  pop.id='filter-popup';
+  pop.style.cssText='position:fixed;z-index:9999;background:#fff;border:1.5px solid #e0e0e0;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);padding:14px;min-width:200px;';
+  const rect=btnEl.getBoundingClientRect();
+  pop.style.top=Math.min(rect.bottom+6,window.innerHeight-130)+'px';
+  pop.style.left=Math.max(8,Math.min(rect.left,window.innerWidth-220))+'px';
+  pop.innerHTML=`<div style="font-size:12px;font-weight:800;color:#333;margin-bottom:8px">거래처명 검색</div>
+    <input id="${ID}" type="text" value="${cur.replace(/"/g,'&quot;')}" placeholder="거래처명"
+      oninput="G['${FLD}']=this.value;renderFees()"
+      style="width:100%;padding:8px 10px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:14px;font-family:inherit;box-sizing:border-box">
+    <div style="display:flex;gap:6px;margin-top:10px">
+      <button onclick="G['${FLD}']='';renderFees();document.getElementById('filter-popup')?.remove();document.removeEventListener('click',_fpOutside);_fpField=null" style="flex:1;padding:7px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:13px;cursor:pointer;font-family:inherit">초기화</button>
+      <button onclick="document.getElementById('filter-popup')?.remove();document.removeEventListener('click',_fpOutside);_fpField=null" style="flex:2;padding:7px;border-radius:8px;border:none;background:#4f8ef7;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">확인</button>
+    </div>`;
+  document.body.appendChild(pop);
+  setTimeout(()=>{const i=document.getElementById(ID);if(i){i.focus();const l=cur.length;i.setSelectionRange(l,l);}document.addEventListener('click',_fpOutside);},50);
+}
 function onClosureSearch(v) {
   G.closureSearch = v; renderClosure();
   const inp = document.getElementById('closure-search-input');
@@ -1108,13 +1171,17 @@ const _FP_OPTIONS = {
   filterTaxTypes:    () => TAX_TYPES.slice(1),
   filterVatTypes:    () => VAT_TYPES.slice(1),
   filterFeeStatuses: () => FEE_STATUSES.slice(1),
-  filterCMS: () => ['가입', '미가입'],
+  filterCMS:         () => ['가입', '미가입'],
   julgaeManagers:    () => [...MANAGERS.slice(1), '(없음)'],
+  feesDealFilter:    () => ['기장','고문','성실'],
+  feesManagerFilter: () => [...MANAGERS.slice(1), '(없음)'],
+  filingManagerFilter:() => [...MANAGERS.slice(1), '(없음)'],
 };
 const _FP_TITLES = {
   filterDealTypes:'수임내용 필터', filterManagers:'담당자 필터',
   filterTaxTypes:'인격 필터', filterVatTypes:'과세유형 필터',
   filterFeeStatuses:'수금상태 필터', filterCMS:'CMS 가입 필터', julgaeManagers:'담당자 필터',
+  feesDealFilter:'수임내용 필터', feesManagerFilter:'담당자 필터', filingManagerFilter:'담당자 필터',
 };
 let _fpField = null;
 function openFilterPopup(field, btnEl) {
@@ -1158,6 +1225,7 @@ function fpConfirm() {
   if (pop) { pop.remove(); document.removeEventListener('click', _fpOutside); }
   const f = _fpField; _fpField = null;
   if (f==='julgaeManagers') renderJulgae();
+  else if (['feesManagerFilter','feesDealFilter','filingManagerFilter'].includes(f)) renderFees();
   else if (G.currentTab==='clients') renderClients();
 }
 
@@ -2845,7 +2913,25 @@ function renderFees() {
   const nextYM = adjYM(ym,1);
   const isCurrentMonth = ym === currentYM();
 
-  const monthlyRows = feeClients.map(c => {
+  // 필터 적용 (월정)
+  let filteredFeeClients = feeClients;
+  if (G.feesSearch) filteredFeeClients = filteredFeeClients.filter(c=>c.name.includes(G.feesSearch)||(c.rep||'').includes(G.feesSearch));
+  if ((G.feesDealFilter||[]).length>0) filteredFeeClients = filteredFeeClients.filter(c=>getDealTypes(c).some(d=>G.feesDealFilter.includes(d)));
+  if ((G.feesManagerFilter||[]).length>0) filteredFeeClients = filteredFeeClients.filter(c=>{const ms=getManagers(c);return G.feesManagerFilter.some(m=>m==='(없음)'?ms.length===0:ms.includes(m));});
+  if (G.feesCollectFilter==='수금') filteredFeeClients = filteredFeeClients.filter(c=>G.monthlyFees[c.id]?.[ym]);
+  else if (G.feesCollectFilter==='미수금') filteredFeeClients = filteredFeeClients.filter(c=>!(G.monthlyFees[c.id]?.[ym]));
+
+  // 필터 적용 (신고)
+  let filteredFilingFees = filingFees;
+  if (G.filingSearch) filteredFilingFees = filteredFilingFees.filter(x=>x.client.name.includes(G.filingSearch)||(x.client.rep||'').includes(G.filingSearch));
+  if ((G.filingManagerFilter||[]).length>0) filteredFilingFees = filteredFilingFees.filter(x=>{const ms=getManagers(x.client);return G.filingManagerFilter.some(m=>m==='(없음)'?ms.length===0:ms.includes(m));});
+  if (G.filingCollectFilter==='수금') filteredFilingFees = filteredFilingFees.filter(x=>x.collected);
+  else if (G.filingCollectFilter==='미수금') filteredFilingFees = filteredFilingFees.filter(x=>!x.collected&&x.fee>0);
+
+  const feesSearchActive = !!G.feesSearch;
+  const filingSearchActive = !!G.filingSearch;
+
+  const monthlyRows = filteredFeeClients.map(c => {
     const collected = G.monthlyFees[c.id]?.[ym] || false;
     return `<tr style="background:${collected?'#e8f5e9':'#fff'}">
       <td><div style="font-weight:600;font-size:13px">${esc(c.name)}</div><div style="font-size:11px;color:#888">${esc(c.rep)}</div></td>
@@ -2859,11 +2945,11 @@ function renderFees() {
     </tr>`;
   }).join('');
 
-  const filingRows = filingFees.map(x => `
+  const filingRows = filteredFilingFees.map(x => `
     <tr style="background:${x.collected?'#e8f5e9':'#fff'}">
       <td><div style="font-weight:600;font-size:12px">${esc(x.period.label)}</div></td>
       <td><div style="font-weight:600;font-size:13px">${esc(x.client.name)}</div><div style="font-size:11px;color:#888">${esc(x.client.rep)}</div></td>
-      <td style="color:#555;font-size:12px">${esc(x.client.manager||'-')}</td>
+      <td style="color:#555;font-size:12px">${getManagers(x.client).join(', ')||'-'}</td>
       <td style="text-align:right;font-weight:700;color:#7b1fa2">${x.fee.toLocaleString()}원</td>
       <td style="text-align:center" onclick="toggleJulgaeField('${x.pKey}',${x.cid},'s');renderFees()">
         <div class="chk ${x.collected?'on':''}" style="margin:0 auto;width:26px;height:26px;${x.collected?'background:#c8e6c9;border-color:#2e7d32;color:#2e7d32':''}">${x.collected?'💰':''}</div>
@@ -2910,12 +2996,17 @@ function renderFees() {
     <div class="tbl-wrap">
     <table>
       <thead><tr>
-        <th>거래처명</th><th>수임내용</th><th>담당자</th><th>수임일</th>
+        <th style="padding:4px 6px"><button onclick="openFeesNameSearch(this)" style="width:100%;padding:3px 5px;border-radius:6px;font-size:10px;cursor:pointer;font-family:inherit;${feesSearchActive?'border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7':'border:1.5px solid #ddd;background:#fff;color:#555'};text-align:left">거래처명${feesSearchActive?' 🔍':' 🔍'}</button></th>
+        <th style="padding:4px 6px">${filterPopupBtn('feesDealFilter','수임내용')}</th>
+        <th style="padding:4px 6px">${filterPopupBtn('feesManagerFilter','담당자')}</th>
+        <th>수임일</th>
         <th style="text-align:right">월수수료</th>
-        <th style="width:60px;text-align:center">수금</th>
+        <th style="width:60px;text-align:center;padding:3px">${feesCycleBtn('feesCollectFilter','수금',['전체','수금','미수금'])}</th>
       </tr></thead>
       <tbody>${monthlyRows}</tbody>
-    </table></div>` : '<div style="color:#aaa;text-align:center;padding:20px">이 달 해당 거래처 없음</div>'}
+    </table></div>
+    ${filteredFeeClients.length===0?'<div style="color:#aaa;text-align:center;padding:16px;font-size:13px">필터 조건에 맞는 거래처 없음</div>':''}
+    ` : '<div style="color:#aaa;text-align:center;padding:20px">이 달 해당 거래처 없음</div>'}
   </div>
 
   <!-- 신고 수수료 -->
@@ -2928,12 +3019,16 @@ function renderFees() {
     <div class="tbl-wrap">
     <table>
       <thead><tr>
-        <th>신고기간</th><th>거래처명</th><th>담당자</th>
+        <th>신고기간</th>
+        <th style="padding:4px 6px"><button onclick="openFilingNameSearch(this)" style="width:100%;padding:3px 5px;border-radius:6px;font-size:10px;cursor:pointer;font-family:inherit;${filingSearchActive?'border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7':'border:1.5px solid #ddd;background:#fff;color:#555'};text-align:left">거래처명 🔍</button></th>
+        <th style="padding:4px 6px">${filterPopupBtn('filingManagerFilter','담당자')}</th>
         <th style="text-align:right">청구액</th>
-        <th style="width:60px;text-align:center">수금</th>
+        <th style="width:60px;text-align:center;padding:3px">${feesCycleBtn('filingCollectFilter','수금',['전체','수금','미수금'])}</th>
       </tr></thead>
       <tbody>${filingRows}</tbody>
-    </table></div>` : '<div style="color:#aaa;text-align:center;padding:20px">신고 수수료 청구 내역 없음 (신고및결재 탭에서 수수료청구액 입력)</div>'}
+    </table></div>
+    ${filteredFilingFees.length===0?'<div style="color:#aaa;text-align:center;padding:16px;font-size:13px">필터 조건에 맞는 항목 없음</div>':''}
+    ` : '<div style="color:#aaa;text-align:center;padding:20px">신고 수수료 청구 내역 없음 (신고및결재 탭에서 수수료청구액 입력)</div>'}
   </div>
   `;
 }
