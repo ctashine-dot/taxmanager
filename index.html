@@ -870,7 +870,7 @@ function renderClients() {
   </div>` : ''}`;
 }
 
-function clientPageChange(dir) { G.clientPage += dir; renderClients(); }
+function clientPageChange(dir) { G.clientPage += dir; renderClients(); window.scrollTo({top:0,behavior:'instant'}); }
 function toggleTerminated() { G.showTerminated=!G.showTerminated; renderClients(); }
 function onSearch(v) {
   G.searchText = v; G.clientPage = 0; renderClients();
@@ -3642,12 +3642,12 @@ init();
     const lb = getOrCreateBtn('_prev-page-btn', 'left');
     lb.textContent = '◀';
     lb.style.display = (isClients && atLeft && G.clientPage > 0) ? '' : 'none';
-    lb.onclick = () => { G.clientPage--; renderClients(); };
+    lb.onclick = () => { G.clientPage--; renderClients(); window.scrollTo({top:0,behavior:'instant'}); };
 
     const rb = getOrCreateBtn('_next-page-btn', 'right');
     rb.textContent = '▶';
     rb.style.display = (isClients && atRight && G.clientPage < totalPages - 1) ? '' : 'none';
-    rb.onclick = () => { G.clientPage++; renderClients(); };
+    rb.onclick = () => { G.clientPage++; renderClients(); window.scrollTo({top:0,behavior:'instant'}); };
   }
 
   // 스크롤 이벤트는 버블되지 않으므로 capture 단계에서 감지
