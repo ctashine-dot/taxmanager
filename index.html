@@ -193,7 +193,7 @@ input.finput:focus,select.fsel:focus,textarea.ftarea:focus{border-color:#4f8ef7}
   <button class="tab" onclick="switchTab('clients')" id="tab-clients">👥 거래처 목록</button>
   <button class="tab" onclick="switchTab('schedule')" id="tab-schedule">📅 신고 일정</button>
   <button class="tab" onclick="switchTab('closure')" id="tab-closure">📁 해지·폐업</button>
-  <button class="tab" onclick="switchTab('julgae')" id="tab-julgae">✅ 신고 및 결재</button>
+  <button class="tab" onclick="switchTab('julgae')" id="tab-julgae">신고 및 결재</button>
   <button class="tab" onclick="switchTab('fees')" id="tab-fees">💰 수수료</button>
   <button class="tab" onclick="switchTab('aitools')" id="tab-aitools">✦ AI 도구</button>
 </div>
@@ -745,6 +745,48 @@ function renderDashboard() {
       <div class="stat-sub">클릭해서 확인·입력</div>
     </div>
   </div>
+
+  ${(()=>{
+    const latestPeriod = G.periods.length ? G.periods[G.periods.length-1] : null;
+    if (!latestPeriod) return '';
+    const pKey = latestPeriod.id;
+    const pData = G.julgae[pKey] || {};
+    const getGroupKey2 = buildClientGroupMap(G.clients);
+    const groupCounts2 = {};
+    G.clients.forEach(c=>{ const k=getGroupKey2(c); groupCounts2[k]=(groupCounts2[k]||0)+1; });
+    // 대상 업체 목록 (enrolled 또는 자동)
+    let targets;
+    if (latestPeriod.enrolled && latestPeriod.enrolled.length>0) {
+      targets = G.clients.filter(c=>latestPeriod.enrolled.includes(c.id));
+    } else {
+      const {reportType} = latestPeriod;
+      targets = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&getDealTypes(c).some(d=>REPORT_TYPE_FILTERS[reportType]?.includes(d)));
+    }
+    const total = targets.length;
+    const done  = targets.filter(c=>{ const v=julgaeVal(pKey,c.id); return v.a||v.d||v.b; }).length;
+    const pct   = total ? Math.round(done/total*100) : 0;
+    return `
+    <div style="margin:0 0 14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div>
+          <span style="font-size:15px;font-weight:800;color:#1a1a2e">${esc(latestPeriod.label)}</span>
+          <span style="font-size:12px;color:#888;margin-left:8px">결재현황</span>
+        </div>
+        <button class="btn-sm" style="background:#e8f5e9;color:#2e7d32;border:1.5px solid #a5d6a7" onclick="G.julgaePeriodIdx=${G.periods.length-1};switchTab('julgae')">바로가기 →</button>
+      </div>
+      <div class="card" style="margin-bottom:0;padding:12px 14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="font-size:13px;color:#555">완료 <b style="color:#2e7d32">${done}</b> / 전체 <b>${total}</b></span>
+          <span style="font-size:13px;font-weight:700;color:${pct===100?'#2e7d32':'#1565c0'}">${pct}%</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+        <div style="display:flex;gap:8px;margin-top:8px;font-size:12px">
+          <span style="color:#e53935">미완료 ${total-done}개</span>
+          <span style="color:#2e7d32">완료 ${done}개</span>
+        </div>
+      </div>
+    </div>`;
+  })()}
 
   <div style="margin:22px 0 12px;display:flex;justify-content:space-between;align-items:center">
     <h3 style="font-size:18px;font-weight:800">💰 수수료 현황</h3>
