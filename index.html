@@ -849,7 +849,7 @@ function renderClients() {
             ${contracts?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">수임항목</div><div style="font-size:12px;color:#555">${esc(contracts)}</div></div>`:''}
             ${c.memo?`<div style="max-width:240px"><div style="font-size:11px;color:#888;margin-bottom:3px">메모</div><div style="font-size:12px;color:#555">${esc(c.memo)}</div></div>`:''}
             ${c.seongsi?`<div>${badge('성실신고','purple')}</div>`:''}
-            ${inGroup?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">관계회사 그룹</div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><div style="font-weight:600;font-size:12px;color:${gc}">👥 ${esc(groupLabel)}</div>${!em?`<button onclick="event.stopPropagation();removeFromGroup(${c.id})" style="padding:2px 8px;border-radius:6px;font-size:11px;border:1px solid #e0e0e0;background:#fff;color:#e53935;cursor:pointer;font-family:inherit">🔓 그룹 분리</button>`:''}</div>${c.groupReason&&!em?`<div style="font-size:11px;color:#888;margin-top:3px">사유: ${esc(c.groupReason)}</div>`:''} ${em?`<div style="margin-top:4px">${iInput('relatedGroup',c.relatedGroup,'placeholder="그룹명" style="width:140px"')}</div>`:''}</div>`:`<div><div style="font-size:11px;color:#888;margin-bottom:3px">관계회사 그룹</div>${em?iInput('relatedGroup',c.relatedGroup,'placeholder="그룹명 입력" style="width:140px"'):`<button onclick="event.stopPropagation();openGroupConnectModal(${c.id})" style="padding:2px 10px;border-radius:6px;font-size:11px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;cursor:pointer;font-family:inherit">🔗 그룹 연결</button>`}</div>`}
+            <div><div style="font-size:11px;color:#888;margin-bottom:3px">관계회사 그룹</div>${em?iInput('relatedGroup',c.relatedGroup,'placeholder="그룹명" style="width:140px"'):`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${inGroup?`<div style="font-weight:600;font-size:12px;color:${gc}">👥 ${esc(groupLabel)}</div>`:''}<button onclick="event.stopPropagation();openGroupEditModal(${c.id})" style="padding:2px 10px;border-radius:6px;font-size:11px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;cursor:pointer;font-family:inherit">✏ 그룹 편집</button></div>${c.groupReason?`<div style="font-size:11px;color:#888;margin-top:3px">사유: ${esc(c.groupReason)}</div>`:''}`}</div>
             <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
               <button class="btn-sm" style="background:#f0f4ff;color:#4f8ef7" onclick="event.stopPropagation();openForm(${c.id})">✏ 수정</button>
               <button class="btn-sm" style="background:#fdecea;color:#c62828;border:1px solid #ef9a9a" onclick="event.stopPropagation();deleteClient(${c.id})">🗑 삭제</button>
@@ -1082,6 +1082,136 @@ function doGroupConnect() {
   saveToLS();
   closeModal();
   renderClients();
+}
+
+// ── 그룹 편집 모달 (통합) ──────────────────────────────────────────
+function openGroupEditModal(id) {
+  const c = G.clients.find(x=>x.id===id); if (!c) return;
+  const getGroupKey = buildClientGroupMap(G.clients);
+  const gk = getGroupKey(c);
+  const groupCounts = {};
+  G.clients.forEach(cl=>{ const k=getGroupKey(cl); groupCounts[k]=(groupCounts[k]||0)+1; });
+  const inGrp = groupCounts[gk] > 1;
+  let memberIds;
+  if (c.relatedGroup) {
+    memberIds = G.clients.filter(cl=>cl.relatedGroup===c.relatedGroup).map(cl=>cl.id);
+  } else if (inGrp) {
+    memberIds = G.clients.filter(cl=>getGroupKey(cl)===gk&&!cl.soloGroup).map(cl=>cl.id);
+  } else {
+    memberIds = [id];
+  }
+  window._geClientId = id;
+  window._geOrigGroupName = c.relatedGroup || '';
+  window._geMembers = [...memberIds];
+  window._geGroupName = c.relatedGroup || (inGrp ? (c.rep||'') : '');
+  renderGroupEditModal();
+}
+
+function renderGroupEditModal() {
+  const id = window._geClientId;
+  const c = G.clients.find(x=>x.id===id); if (!c) return;
+  const members = window._geMembers.map(mid=>G.clients.find(x=>x.id===mid)).filter(Boolean);
+  showModal(`<div style="max-width:480px;width:min(480px,95vw)">
+  <div class="modal-header"><h3>✏ 그룹 편집</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+  <div class="modal-body">
+    <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:14px">
+      <div style="flex:1"><label class="flabel">그룹명</label>
+        <input class="finput" id="ge-name" value="${esc(window._geGroupName||'')}" placeholder="그룹명 입력" style="margin-bottom:0" oninput="window._geGroupName=this.value"></div>
+      ${members.length>1?`<button onclick="geDissolveGroup()" style="padding:7px 12px;border-radius:8px;font-size:12px;border:1px solid #ef9a9a;background:#fdecea;color:#c62828;cursor:pointer;font-family:inherit;white-space:nowrap;margin-bottom:1px">🔓 그룹 해산</button>`:''}
+    </div>
+    <label class="flabel">그룹 멤버 <span style="font-weight:400;color:#aaa">(${members.length}개 업체)</span></label>
+    <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:14px;max-height:200px;overflow-y:auto">
+      ${members.length===0?`<div style="color:#aaa;font-size:13px;padding:8px">멤버 없음</div>`:
+        members.map(m=>`
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border:1px solid ${m.id===id?'#c0d4ff':'#e8e8e8'};border-radius:8px;background:${m.id===id?'#f0f4ff':'#fff'}">
+          <div><div style="font-weight:600;font-size:13px">${esc(m.name)}${m.id===id?'<span style="font-size:11px;color:#4f8ef7;margin-left:6px">(현재 업체)</span>':''}</div>
+          <div style="font-size:11px;color:#888">대표자: ${esc(m.rep||'-')}</div></div>
+          ${m.id!==id?`<button onclick="geRemoveMember(${m.id})" style="padding:3px 9px;border-radius:6px;font-size:12px;border:1px solid #ef9a9a;background:#fdecea;color:#c62828;cursor:pointer;font-family:inherit;flex-shrink:0">✕ 제거</button>`:''}
+        </div>`).join('')}
+    </div>
+    <label class="flabel">업체 추가</label>
+    <div class="search-box" style="margin-bottom:6px;background:#fff;border:1px solid #e0e0e0;border-radius:10px;padding:8px 12px">
+      <span>🔍</span>
+      <input id="ge-search" placeholder="업체명 또는 대표자 검색" oninput="geSearch(this.value)" autocomplete="off" style="border:none;outline:none;background:transparent;font-family:inherit;font-size:14px;width:100%">
+    </div>
+    <div id="ge-search-results" style="max-height:150px;overflow-y:auto;margin-bottom:14px;border-radius:8px"></div>
+    <div class="btn-row" style="margin-top:4px">
+      <button class="btn-secondary" onclick="closeModal()">취소</button>
+      <button class="btn-primary" onclick="doGroupEdit()">💾 저장</button>
+    </div>
+  </div></div>`);
+  setTimeout(()=>document.getElementById('ge-name')?.focus(), 80);
+}
+
+function geSearch(q) {
+  const results = document.getElementById('ge-search-results');
+  if (!q.trim()) { results.innerHTML=''; return; }
+  const ql = q.toLowerCase();
+  const found = G.clients.filter(cl=>
+    !window._geMembers.includes(cl.id) &&
+    (cl.name.toLowerCase().includes(ql)||(cl.rep||'').toLowerCase().includes(ql))
+  ).slice(0,10);
+  if (!found.length) { results.innerHTML=`<div style="padding:10px;color:#aaa;font-size:13px;text-align:center">검색 결과 없음</div>`; return; }
+  results.innerHTML = found.map(cl=>`
+    <div onclick="geAddMember(${cl.id})" style="padding:9px 12px;border-radius:8px;cursor:pointer;border:1px solid #f0f0f0;margin-bottom:4px;background:#fff"
+      onmouseover="this.style.background='#f0f4ff';this.style.borderColor='#c0d4ff'"
+      onmouseout="this.style.background='#fff';this.style.borderColor='#f0f0f0'">
+      <div style="font-weight:600;font-size:13px">${esc(cl.name)}</div>
+      <div style="font-size:11px;color:#888;margin-top:2px">${esc(cl.rep||'')}${cl.relatedGroup?` · <span style="color:#4f8ef7">👥 ${esc(cl.relatedGroup)}</span>`:' · <span style="color:#bbb">그룹 없음</span>'}</div>
+    </div>`).join('');
+}
+
+function geAddMember(clientId) {
+  window._geGroupName = document.getElementById('ge-name')?.value ?? window._geGroupName;
+  if (!window._geMembers.includes(clientId)) {
+    window._geMembers.push(clientId);
+    if (!window._geGroupName) {
+      const cl = G.clients.find(x=>x.id===clientId);
+      const c0 = G.clients.find(x=>x.id===window._geClientId);
+      window._geGroupName = c0?.rep || c0?.name || cl?.rep || '';
+    }
+  }
+  renderGroupEditModal();
+}
+
+function geRemoveMember(clientId) {
+  window._geGroupName = document.getElementById('ge-name')?.value ?? window._geGroupName;
+  window._geMembers = window._geMembers.filter(id=>id!==clientId);
+  renderGroupEditModal();
+}
+
+function geDissolveGroup() {
+  if (!confirm('그룹을 해산하면 모든 멤버가 분리됩니다. 계속할까요?')) return;
+  const allIds = [...window._geMembers];
+  window._geMembers = [window._geClientId];
+  window._geGroupName = '';
+  allIds.filter(id=>id!==window._geClientId).forEach(id=>{
+    const cl = G.clients.find(x=>x.id===id);
+    if (cl) { cl.relatedGroup=''; cl.soloGroup=true; }
+  });
+  saveToLS();
+  renderGroupEditModal();
+}
+
+function doGroupEdit() {
+  const name = (document.getElementById('ge-name')?.value||window._geGroupName||'').trim();
+  const c = G.clients.find(x=>x.id===window._geClientId); if (!c) return;
+  const origName = window._geOrigGroupName;
+  if (window._geMembers.length<=1) {
+    c.relatedGroup=''; c.soloGroup=true;
+  } else {
+    if (!name) return alert('그룹명을 입력해주세요');
+    window._geMembers.forEach(id=>{
+      const cl=G.clients.find(x=>x.id===id);
+      if (cl) { cl.relatedGroup=name; cl.soloGroup=false; }
+    });
+    if (origName) {
+      G.clients.forEach(cl=>{
+        if (cl.relatedGroup===origName&&!window._geMembers.includes(cl.id)) { cl.relatedGroup=''; cl.soloGroup=true; }
+      });
+    }
+  }
+  saveToLS(); closeModal(); renderClients();
 }
 
 function updateClientField(id, field, value) {
