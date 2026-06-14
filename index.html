@@ -726,26 +726,6 @@ function _renderDashboardInner() {
       <div class="stat-value" style="color:#4f8ef7">${s.active}</div>
       <div class="stat-sub">전체 ${s.total}개</div>
     </div>
-    <div class="stat-card" style="border-left:4px solid #e53935">
-      <div class="stat-label">자료 미수령</div>
-      <div class="stat-value" style="color:#e53935">${s.noData}</div>
-      <div class="stat-sub">확인 필요</div>
-    </div>
-    <div class="stat-card" style="border-left:4px solid #f57c00">
-      <div class="stat-label">기장 대기</div>
-      <div class="stat-value" style="color:#f57c00">${s.pending}</div>
-      <div class="stat-sub">처리 필요</div>
-    </div>
-    <div class="stat-card" style="border-left:4px solid #7b1fa2">
-      <div class="stat-label">미수금</div>
-      <div class="stat-value" style="color:#7b1fa2">${s.unpaid}</div>
-      <div class="stat-sub">수금 필요</div>
-    </div>
-    <div class="stat-card" style="border-left:4px solid #546e7a">
-      <div class="stat-label">폐업 신고 미완료</div>
-      <div class="stat-value" style="color:#546e7a">${s.closurePending}</div>
-      <div class="stat-sub">처리 필요</div>
-    </div>
     <div class="stat-card" style="border-left:4px solid #ff7043;cursor:pointer" onclick="showMissingClientsModal()">
       <div class="stat-label">기재사항 누락</div>
       <div class="stat-value" style="color:#ff7043">${missingClients.length}</div>
@@ -2291,6 +2271,7 @@ function renderJulgae() {
     <thead><tr>
       <th style="width:28px">번</th>
       <th style="padding:4px 6px">${(()=>{const a=G.julgaeSearch;return`<button onclick="openJulgaeNameSearch(this)" style="width:100%;padding:4px 7px;border-radius:7px;font-size:11px;cursor:pointer;font-family:inherit;border:1.5px solid ${a?'#4f8ef7':'#ddd'};background:${a?'#e8f0fe':'#fff'};color:${a?'#1565c0':'#555'};display:flex;justify-content:space-between;align-items:center;gap:4px;"><span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a?esc(a):'거래처명'}</span><span style="font-size:9px;opacity:.5;flex-shrink:0">🔍</span></button>`;})()}</th>
+      <th style="width:70px">대표자</th>
       <th style="padding:4px 6px">${filterPopupBtn('julgaeManagers','담당자')}</th>
       <th style="width:56px;text-align:center;padding:3px">${julgaeCycleBtn('julgaeDataFilter','자료')}</th>
       <th style="width:56px;text-align:center;padding:3px">${julgaeCycleBtn('julgaeBookFilter','기장')}</th>
@@ -2339,7 +2320,8 @@ function renderJulgae() {
       const margin = (v.revenue&&v.income) ? (v.income/v.revenue*100).toFixed(1) : null;
       return `<tr id="jr-${pKey2}-${c.id}" style="background:${rowBg}">
         <td style="color:#aaa;font-size:11px">${i+1}</td>
-        <td><div class="td-name">${esc(c.name)}</div><div class="td-sub">${esc(c.rep)}</div></td>
+        <td><div class="td-name">${esc(c.name)}</div></td>
+        <td style="font-size:12px;color:#444">${esc(c.rep)||'-'}</td>
         <td style="color:#555;font-size:12px">${getManagers(c).join(', ')||'-'}</td>
         <td style="text-align:center" onclick="toggleJulgaeField('${pKey2}',${c.id},'d')">
           <div class="chk ${v.d?'on':''}" style="margin:0 auto;width:24px;height:24px">${v.d?'✓':''}</div>
