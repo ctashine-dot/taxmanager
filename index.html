@@ -248,6 +248,8 @@ body.dark-mode .overlay { background: rgba(0,0,0,.65); }
   </div>
   <div id="header-btns">
     <span id="badge-no-data" class="badge-alert" style="display:none"></span>
+    <button class="hbtn" onclick="openGlobalSearch()" title="전체 검색">🔍</button>
+    <button class="hbtn" id="notif-btn" onclick="openNotificationCenter(this)" title="알림 센터" style="position:relative">🔔<span id="notif-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:#e53935;color:#fff;border-radius:10px;padding:1px 5px;font-size:10px;font-weight:700;line-height:1.4"></span></button>
     <button class="hbtn" onclick="openBosuTable()">📋 보수표</button>
     <button class="hbtn" onclick="openSettings()">⚙ 설정</button>
     <button class="hbtn" onclick="toggleDarkMode()" title="다크모드">🌙</button>
@@ -406,6 +408,13 @@ let G = {
   favorites: [],
   showFavorites: false,
   bizCode: {},
+  docChecklist: {},
+  closureChecklist: {},
+  withholding: {},
+  invoiceHistory: [],
+  julgaeBulkMode: false,
+  julgaeBulkSelected: [],
+  filterRisk: '',
   settings: {
     name: '○○세무회계사무소', rep: '홍세무',
     phone: '02-1234-5678', fax: '02-1234-5679',
@@ -414,7 +423,9 @@ let G = {
     regNo: '123-45-67890',
     managers: ['이슬빈','이현주','정여주','최수이'],
     bosuTable: null,
-    feeTarget: 0
+    feeTarget: 0,
+    invoiceSeq: 0,
+    autoCreatePeriods: false
   }
 };
 
@@ -550,6 +561,10 @@ function saveToLS() {
     localStorage.setItem('tm_managerHistory', JSON.stringify(G.managerHistory||{}));
     localStorage.setItem('tm_feeChangeHistory', JSON.stringify(G.feeChangeHistory||{}));
     localStorage.setItem('tm_clientTags', JSON.stringify(G.clientTags||{}));
+    localStorage.setItem('tm_docChecklist', JSON.stringify(G.docChecklist||{}));
+    localStorage.setItem('tm_closureChecklist', JSON.stringify(G.closureChecklist||{}));
+    localStorage.setItem('tm_withholding', JSON.stringify(G.withholding||{}));
+    localStorage.setItem('tm_invoiceHistory', JSON.stringify(G.invoiceHistory||[]));
   } catch(e) {}
   if (G.user) {
     fbDb.ref('taxmanager/' + G.user.uid).set({
@@ -566,6 +581,9 @@ function saveToLS() {
       managerHistory: JSON.stringify(G.managerHistory||{}),
       feeChangeHistory: JSON.stringify(G.feeChangeHistory||{}),
       clientTags:  JSON.stringify(G.clientTags||{}),
+      docChecklist: JSON.stringify(G.docChecklist||{}),
+      closureChecklist: JSON.stringify(G.closureChecklist||{}),
+      withholding: JSON.stringify(G.withholding||{}),
     }).catch(e => console.error('Firebase 저장 실패:', e));
   }
 }
@@ -710,6 +728,8 @@ function filteredClients() {
       const ctags = (G.clientTags||{})[c.id] || [];
       if (!ctags.some(t => G.filterTags.includes(t))) return false;
     }
+    if (G.filterRisk==='위험' && clientRiskLevel(c)!=='red') return false;
+    if (G.filterRisk==='주의' && clientRiskLevel(c)!=='yellow') return false;
     return true;
   });
   if (G.showFavorites) list = list.filter(c=>(G.favorites||[]).includes(c.id));
@@ -1150,6 +1170,35 @@ function _renderDashboardInner() {
     </div>`;
   })()}
 
+  ${(()=>{
+    const now5 = new Date();
+    const months13 = Array.from({length:12},(_,i)=>{const d5=new Date(now5.getFullYear(),now5.getMonth()-11+i,1);return d5.getFullYear()+'-'+String(d5.getMonth()+1).padStart(2,'0');});
+    const newCnts = months13.map(ym=>G.clients.filter(c=>(c.contractDate||'').slice(0,7)===ym).length);
+    const lostCnts = months13.map(ym=>G.clients.filter(c=>(c.terminationDate||'').slice(0,7)===ym).length);
+    const maxV2 = Math.max(...newCnts,...lostCnts,1);
+    const W2=100,H2=80,PL2=3,PR2=3,PT2=8,PB2=18;
+    const w2=W2-PL2-PR2, h2=H2-PT2-PB2;
+    const newPts = months13.map((ym,i)=>[PL2+i*(w2/11), PT2+h2-(newCnts[i]/maxV2)*h2]);
+    const lostPts = months13.map((ym,i)=>[PL2+i*(w2/11), PT2+h2-(lostCnts[i]/maxV2)*h2]);
+    const newLine = newPts.map(p=>p.join(',')).join(' ');
+    const lostLine = lostPts.map(p=>p.join(',')).join(' ');
+    const newDots = newPts.map((p,i)=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.5" fill="#4f8ef7" stroke="#fff" stroke-width="1"><title>${months13[i]}: 신규 ${newCnts[i]}개</title></circle>`).join('');
+    const lostDots = lostPts.map((p,i)=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.5" fill="#e53935" stroke="#fff" stroke-width="1"><title>${months13[i]}: 해지 ${lostCnts[i]}개</title></circle>`).join('');
+    const labs2 = months13.map((ym,i)=>`<text x="${(PL2+i*(w2/11)).toFixed(1)}" y="${H2-3}" text-anchor="middle" font-size="7" fill="#bbb">${ym.slice(5)}월</text>`).join('');
+    return `<div class="card" style="margin-bottom:14px">
+      <div class="card-title">📊 거래처 증감 추이 (최근 12개월)</div>
+      <svg width="100%" viewBox="0 0 ${W2} ${H2}" preserveAspectRatio="none" style="display:block;height:90px">
+        <polyline points="${newLine}" fill="none" stroke="#4f8ef7" stroke-width="1.5" stroke-linejoin="round"/>
+        <polyline points="${lostLine}" fill="none" stroke="#e53935" stroke-width="1.5" stroke-linejoin="round"/>
+        ${newDots}${lostDots}${labs2}
+      </svg>
+      <div style="display:flex;gap:14px;margin-top:6px;font-size:11px;color:#888">
+        <span><span style="display:inline-block;width:10px;height:3px;background:#4f8ef7;border-radius:2px;vertical-align:middle;margin-right:3px"></span>신규</span>
+        <span><span style="display:inline-block;width:10px;height:3px;background:#e53935;border-radius:2px;vertical-align:middle;margin-right:3px"></span>해지·폐업</span>
+      </div>
+    </div>`;
+  })()}
+
   `;
 }
 
@@ -1182,6 +1231,7 @@ function renderClients() {
       <button class="btn-sm" style="background:${G.showTerminated?'#fff3e0':'#f5f5f5'};color:${G.showTerminated?'#e65100':'#888'};border:2px solid ${G.showTerminated?'#ffcc02':'#e0e0e0'}" onclick="toggleTerminated()">${G.showTerminated?'▲ 해지·폐업 숨기기':'해지·폐업 보기 ('+terminated+')'}</button>
       <button class="btn-sm" style="background:${G.showFavorites?'#fff8e1':'#f5f5f5'};color:${G.showFavorites?'#f57c00':'#888'};border:2px solid ${G.showFavorites?'#ffd54f':'#e0e0e0'}" onclick="G.showFavorites=!G.showFavorites;G.clientPage=0;renderClients()">⭐ 즐겨찾기${G.showFavorites?' ON':''}</button>
       <button class="btn-sm" style="background:${(G.filterTags||[]).length?'#e8f0fe':'#f5f5f5'};color:${(G.filterTags||[]).length?'#4f8ef7':'#888'};border:1.5px solid ${(G.filterTags||[]).length?'#4f8ef7':'#e0e0e0'}" onclick="openTagFilterDropdown(this)">🏷 태그${(G.filterTags||[]).length?' ('+G.filterTags.length+')':''}</button>
+      <button class="btn-sm" style="background:${G.filterRisk==='위험'?'#fdecea':G.filterRisk==='주의'?'#fff3e0':'#f5f5f5'};color:${G.filterRisk==='위험'?'#c62828':G.filterRisk==='주의'?'#e65100':'#888'};border:1.5px solid ${G.filterRisk==='위험'?'#ef9a9a':G.filterRisk==='주의'?'#ffcc80':'#e0e0e0'}" onclick="G.filterRisk=G.filterRisk===''?'위험':G.filterRisk==='위험'?'주의':'';G.clientPage=0;renderClients()">● 위험도${G.filterRisk?' ('+G.filterRisk+')':' (전체)'}</button>
       <button class="btn-sm" style="background:#f0f8ff;color:#1565c0;border:1.5px solid #90caf9" onclick="openImportModal()">📥 세무사랑 가져오기</button>
       <button class="btn-sm" style="background:${G.bulkMode?'#e8f5e9':'#f5f5f5'};color:${G.bulkMode?'#2e7d32':'#888'};border:2px solid ${G.bulkMode?'#43a047':'#e0e0e0'}" onclick="G.bulkMode=!G.bulkMode;G.selectedClients=[];renderClients()">☑ 일괄편집${G.bulkMode?' ON':''}</button>
       <button class="btn-primary btn-sm" onclick="openForm(null)" style="padding:8px 14px">+ 거래처 추가</button>
@@ -1230,7 +1280,7 @@ function renderClients() {
       const groupSub = inGroup ? `<span style="font-size:10px;color:${gc};font-weight:600;margin-left:4px">👥 ${esc(groupLabel)}</span>` : '';
       return `<tr class="client-row" onclick="toggleExpand(${c.id})" style="${inGroup?`border-left:3px solid ${gc}`:''}" >
         ${G.bulkMode?`<td onclick="event.stopPropagation();toggleClientSelect(${c.id})" style="width:32px;text-align:center;cursor:pointer"><input type="checkbox" ${(G.selectedClients||[]).includes(c.id)?'checked':''} style="width:16px;height:16px;cursor:pointer" onclick="event.stopPropagation();toggleClientSelect(${c.id})"></td>`:''}
-        <td><div class="td-name">${groupDot}${esc(c.name)}<button onclick="event.stopPropagation();openClientNotes(${c.id})" style="margin-left:4px;padding:1px 5px;border-radius:5px;border:1px solid #e0e0e0;background:#f8f9ff;font-size:11px;cursor:pointer;vertical-align:middle" title="메모/이력">📝${(G.clientNotes||{})[c.id]?.length?` ${G.clientNotes[c.id].length}`:''}</button><button onclick="event.stopPropagation();toggleFavorite(${c.id})" style="margin-left:2px;padding:1px 4px;border-radius:5px;border:1px solid #e0e0e0;background:#fff;font-size:12px;cursor:pointer;vertical-align:middle" title="즐겨찾기">${(G.favorites||[]).includes(c.id)?'⭐':'☆'}</button></div>${(c.bizType||c.bizCode||groupSub)?`<div class="td-sub">${c.bizType?esc(c.bizType):''}${c.bizCode?` <span style="color:#aaa;font-size:10px">[${esc(c.bizCode)}]</span>`:''}${groupSub}</div>`:''}</td>
+        <td><div class="td-name">${(()=>{const risk=clientRiskLevel(c);return risk==='red'?'<span title="위험" style="color:#e53935;margin-right:4px">●</span>':risk==='yellow'?'<span title="주의" style="color:#f57c00;margin-right:4px">●</span>':''})()}${groupDot}${esc(c.name)}<button onclick="event.stopPropagation();openClientNotes(${c.id})" style="margin-left:4px;padding:1px 5px;border-radius:5px;border:1px solid #e0e0e0;background:#f8f9ff;font-size:11px;cursor:pointer;vertical-align:middle" title="메모/이력">📝${(G.clientNotes||{})[c.id]?.length?` ${G.clientNotes[c.id].length}`:''}</button><button onclick="event.stopPropagation();toggleFavorite(${c.id})" style="margin-left:2px;padding:1px 4px;border-radius:5px;border:1px solid #e0e0e0;background:#fff;font-size:12px;cursor:pointer;vertical-align:middle" title="즐겨찾기">${(G.favorites||[]).includes(c.id)?'⭐':'☆'}</button></div>${(c.bizType||c.bizCode||groupSub)?`<div class="td-sub">${c.bizType?esc(c.bizType):''}${c.bizCode?` <span style="color:#aaa;font-size:10px">[${esc(c.bizCode)}]</span>`:''}${groupSub}</div>`:''}</td>
         <td data-label="대표자" style="font-size:12px;color:#444;${hc['c_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
         <td data-label="수임내용" style="${hc['c_dealType']?'display:none':''}">${em?iSel('dealType',DEAL_TYPES.slice(1),getDealTypes(c)[0]):getDealTypes(c).map(d=>dealBadge(d)).join('')}</td>
         <td data-label="인격" style="${hc['c_taxType']?'display:none':''}">${em?iSel('taxType',TAX_TYPES.slice(1),c.taxType):badge(c.taxType,c.taxType==='법인'?'blue':'gray')}</td>
@@ -1255,6 +1305,7 @@ function renderClients() {
             ${((G.clientTags||{})[c.id]||[]).length?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">태그</div><div style="display:flex;flex-wrap:wrap;gap:4px">${((G.clientTags||{})[c.id]||[]).map(t=>`<span style="background:#e8f0fe;color:#4f8ef7;border-radius:10px;padding:2px 10px;font-size:11px">${esc(t)}</span>`).join('')}</div></div>`:''}
             ${c.bizCode?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">업종코드</div><div style="font-weight:600;font-family:monospace;font-size:13px">${esc(c.bizCode)}</div></div>`:''}
             ${c.seongsi?`<div>${badge('성실신고','purple')}</div>`:''}
+            ${(()=>{const docs=[{k:'contract',l:'수임계약서'},{k:'proxy',l:'위임장'},{k:'bizReg',l:'사업자등록증'},{k:'bank',l:'통장사본'},{k:'seal',l:'인감증명서'}];const dCheck=((G.docChecklist||{})[c.id]||{});return`<div style="flex-basis:100%"><div style="font-size:11px;color:#888;margin-bottom:5px">📋 서류 체크</div><div style="display:flex;flex-wrap:wrap;gap:5px">${docs.map(d=>`<button onclick="event.stopPropagation();toggleDocCheck(${c.id},'${d.k}')" style="padding:4px 10px;border-radius:12px;border:1.5px solid ${dCheck[d.k]?'#43a047':'#e0e0e0'};background:${dCheck[d.k]?'#e8f5e9':'#f5f5f5'};color:${dCheck[d.k]?'#2e7d32':'#888'};font-size:11px;cursor:pointer;font-family:inherit;font-weight:600">${dCheck[d.k]?'✓ ':''} ${d.l}</button>`).join('')}</div></div>`;})()}
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">관계회사 그룹</div>${em?iInput('relatedGroup',c.relatedGroup,'placeholder="그룹명" style="width:140px"'):`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${inGroup?`<div style="font-weight:600;font-size:12px;color:${gc}">👥 ${esc(groupLabel)}</div>`:''}<button onclick="event.stopPropagation();openGroupEditModal(${c.id})" style="padding:2px 10px;border-radius:6px;font-size:11px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;cursor:pointer;font-family:inherit">✏ 그룹 편집</button></div>${c.groupReason?`<div style="font-size:11px;color:#888;margin-top:3px">사유: ${esc(c.groupReason)}</div>`:''}`}</div>
             ${(()=>{const cJulgae=(G.periods||[]).map(p=>{const pk=p.id+'|'+(p.reportType||p.type);const v=julgaeVal(pk,c.id);if(!v||(!v.d&&!v.b&&!v.a&&!v.fee&&!v.s))return null;return{label:p.label,v};}).filter(Boolean);if(!cJulgae.length)return'';return`<div style="flex-basis:100%"><div style="font-size:11px;color:#888;margin-bottom:4px">신고 현황</div><div style="display:flex;flex-wrap:wrap;gap:4px">${cJulgae.slice(-6).map(x=>`<div style="background:${x.v.a?'#e8f5e9':x.v.s?'#f3e5f5':'#f5f5f5'};border-radius:8px;padding:4px 10px;font-size:11px"><span style="font-weight:600">${esc(x.label)}</span><span style="margin-left:4px">${x.v.d?'📋':''}${x.v.b?'📖':''}${x.v.a?'✅':''}${x.v.s?'💰':''}</span></div>`).join('')}</div></div>`;})()}
             ${(()=>{const mHist=(G.managerHistory||{})[c.id];if(!mHist||!mHist.length)return'';return`<div><div style="font-size:11px;color:#888;margin-bottom:3px">담당자 변경 이력</div>${mHist.slice(-3).reverse().map(h=>`<div style="font-size:11px;color:#666;padding:2px 0">${h.date.slice(0,10)} : ${esc(h.from||'(없음)')} → ${esc(h.to||'(없음)')}</div>`).join('')}</div>`;})()}
@@ -2786,6 +2837,21 @@ function renderClosure() {
     <div class="stat-card" style="border-left:4px solid #e65100"><div class="stat-label">폐업 신고 미완료</div><div class="stat-value" style="color:#e65100">${closurePendingAll.length}<span style="font-size:12px">건</span></div></div>
   </div>
 
+  ${(()=>{
+    const closedClients = G.clients.filter(c=>c.status==='폐업'&&c.closureYear);
+    if (!closedClients.length) return '';
+    const byYear = {};
+    closedClients.forEach(c=>{const yr=c.closureYear||'미입력';byYear[yr]=(byYear[yr]||0)+1;});
+    const years = Object.keys(byYear).sort();
+    const maxVal = Math.max(...Object.values(byYear),1);
+    return `<div class="card" style="margin-bottom:16px">
+      <div class="card-title">📊 연도별 폐업 통계</div>
+      <div style="display:flex;gap:10px;align-items:flex-end;height:80px;margin-bottom:8px">
+        ${years.map(yr=>{const cnt=byYear[yr];const ht=Math.max(10,Math.round(cnt/maxVal*70));return`<div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex:1"><div style="font-size:11px;font-weight:700;color:#c62828">${cnt}</div><div style="width:100%;height:${ht}px;background:#fdecea;border-radius:4px 4px 0 0;border-top:2px solid #c62828"></div><div style="font-size:10px;color:#888;white-space:nowrap">${yr}년</div></div>`;}).join('')}
+      </div>
+    </div>`;
+  })()}
+
   ${closurePendingAll.length>0?`<div class="card" style="border:2px solid #ffcc02;margin-bottom:16px">
     <div class="card-title" style="color:#e65100">⚠ 폐업 신고 처리 필요 (${closurePendingAll.length}건)</div>
     ${closurePendingAll.map(c=>`<div style="background:#fffde7;border-radius:10px;padding:12px 14px;margin-bottom:8px">
@@ -2817,7 +2883,7 @@ function renderClosure() {
       <th style="padding:4px 6px;${_hcStyle('cl_manager')}"><div style="display:flex;align-items:center">${filterPopupBtn('closureManagerFilter','담당자')}${_hcBtn('cl_manager')}</div></th>
     </tr></thead>
     <tbody>
-    ${terminated.length>0?terminated.map(c=>`<tr onclick="openDetail(${c.id})">
+    ${terminated.length>0?terminated.map(c=>{const cCheck=(G.closureChecklist||{})[c.id]||{};return`<tr onclick="openDetail(${c.id})">
       <td><div class="td-name">${esc(c.name)}</div></td>
       <td style="font-size:12px;color:#444;${hc['cl_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
       <td style="${hc['cl_taxType']?'display:none':''}">${badge(c.taxType,c.taxType==='법인'?'blue':'gray')}</td>
@@ -2829,7 +2895,12 @@ function renderClosure() {
       <td style="${hc['cl_filed']?'display:none':''}" onclick="event.stopPropagation();c.status==='폐업'&&toggleField(${c.id},'closureTaxFiled')&&renderClosure()">${c.status==='폐업'?chk(c.closureTaxFiled):'<span style="color:#ccc;font-size:12px">-</span>'}</td>
       <td style="${hc['cl_approved']?'display:none':''}" onclick="event.stopPropagation();c.status==='폐업'&&toggleField(${c.id},'closureTaxApproved')&&renderClosure()">${c.status==='폐업'?chk(c.closureTaxApproved):'<span style="color:#ccc;font-size:12px">-</span>'}</td>
       <td style="color:#555;font-size:12px;${hc['cl_manager']?'display:none':''}">${getManagers(c).join(', ')||'-'}</td>
-    </tr>`).join(''):
+    </tr><tr style="background:#fffde7"><td colspan="11" style="padding:6px 14px">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:11px;color:#888;font-weight:600">체크리스트:</span>
+        ${[['finalBilled','최종 청구'],['finalCollected','최종 수금'],['closureReported','폐업신고']].map(([f,l])=>`<button onclick="event.stopPropagation();toggleClosureCheck(${c.id},'${f}')" style="padding:3px 10px;border-radius:10px;border:1.5px solid ${cCheck[f]?'#43a047':'#e0e0e0'};background:${cCheck[f]?'#e8f5e9':'#fff'};color:${cCheck[f]?'#2e7d32':'#888'};font-size:11px;cursor:pointer;font-family:inherit;font-weight:600">${cCheck[f]?'✓ ':''} ${l}</button>`).join('')}
+      </div>
+    </td></tr>`;}).join(''):
     '<tr><td colspan="11" style="text-align:center;padding:40px;color:#aaa">해지·폐업 거래처가 없습니다</td></tr>'}
     </tbody>
   </table>
@@ -3089,6 +3160,8 @@ function renderJulgae() {
     <button class="btn-sm" style="background:#f3e5f5;color:#6a1b9a;border:1.5px solid #ce93d8" onclick="printJulgaeList()">🖨 인쇄</button>
     <button class="btn-sm" style="background:#e0f2f1;color:#00695c;border:1.5px solid #80cbc4" onclick="copyPeriod('${pKey}')">📋 복사</button>
     <button class="btn-sm" style="background:${G.julgaeKanban?'#e8f0fe':'#f5f5f5'};color:${G.julgaeKanban?'#4f8ef7':'#555'};border:1.5px solid ${G.julgaeKanban?'#4f8ef7':'#e0e0e0'}" onclick="G.julgaeKanban=!G.julgaeKanban;renderJulgae()">📋 칸반뷰</button>
+    <button class="btn-sm" style="background:${G.julgaeBulkMode?'#e8f5e9':'#f5f5f5'};color:${G.julgaeBulkMode?'#2e7d32':'#888'};border:1.5px solid ${G.julgaeBulkMode?'#43a047':'#e0e0e0'}" onclick="G.julgaeBulkMode=!G.julgaeBulkMode;G.julgaeBulkSelected=[];renderJulgae()">☑ 일괄처리${G.julgaeBulkMode?' ON':''}</button>
+    <button class="btn-sm" style="background:#e8f0fe;color:#1565c0;border:1.5px solid #90caf9" onclick="openWithholdingModal()">📋 원천세</button>
   </div>
 
   ${prevPeriods.length>0?`<div style="font-size:12px;color:#888;background:#fffde7;padding:6px 12px;border-radius:8px;margin-bottom:10px">💡 과거 동기(${prevPeriods.map(p=>esc(p.label)).join(', ')}) 수입금액·수수료청구액이 참고로 표시됩니다. (전년·전전년)</div>`:''}
@@ -3124,6 +3197,7 @@ function renderJulgae() {
   <div class="tbl-wrap" style="${(G.sectionCollapsed||{})['julgae-list']?'display:none':''}">
   <table>
     <thead><tr>
+      ${G.julgaeBulkMode?'<th style="width:32px"><input type="checkbox" onclick="if(this.checked){G.julgaeBulkSelected=clients.map(c=>c.id)}else{G.julgaeBulkSelected=[]};renderJulgae()"></th>':''}
       <th style="width:28px">번</th>
       <th style="padding:4px 6px">${(()=>{const a=G.julgaeSearch;return`<button onclick="openJulgaeNameSearch(this)" style="width:100%;padding:4px 7px;border-radius:7px;font-size:11px;cursor:pointer;font-family:inherit;border:1.5px solid ${a?'#4f8ef7':'#ddd'};background:${a?'#e8f0fe':'#fff'};color:${a?'#1565c0':'#555'};display:flex;justify-content:space-between;align-items:center;gap:4px;"><span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a?esc(a):'거래처명'}</span><span style="font-size:9px;opacity:.5;flex-shrink:0">🔍</span></button>`;})()}</th>
       <th style="width:80px;padding:3px 4px;${_hcStyle('j_rep')}">${(()=>{const a=G.julgaeRepSearch;return`<div style="display:flex;align-items:center"><button onclick="openJulgaeRepSearch(this)" style="flex:1;padding:4px 6px;border-radius:7px;font-size:11px;cursor:pointer;font-family:inherit;border:1.5px solid ${a?'#4f8ef7':'#ddd'};background:${a?'#e8f0fe':'#fff'};color:${a?'#1565c0':'#555'};display:flex;justify-content:space-between;align-items:center;gap:3px;"><span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a?esc(a):'대표자'}</span><span style="font-size:9px;opacity:.5;flex-shrink:0">🔍</span></button>${_hcBtn('j_rep')}</div>`;})()}</th>
@@ -3179,6 +3253,7 @@ function renderJulgae() {
         ? `<div onclick="applyBosuFee('${pKey2}',${c.id},'${_bosuRec.field}',${_bosuRec.fee})" style="font-size:9px;color:#7b1fa2;background:#f3e5f5;border-radius:4px;padding:2px 5px;cursor:pointer;margin-top:2px;text-align:right;white-space:nowrap" title="클릭하여 수수료 자동입력">💡 추천 ${_bosuRec.fee.toLocaleString()}원</div>`
         : '';
       return `<tr id="jr-${pKey2}-${c.id}" style="background:${rowBg}">
+        ${G.julgaeBulkMode?`<td style="text-align:center;width:32px" onclick="event.stopPropagation();toggleJulgaeSelect(${c.id})"><input type="checkbox" ${(G.julgaeBulkSelected||[]).includes(c.id)?'checked':''} style="width:16px;height:16px;cursor:pointer" onclick="event.stopPropagation();toggleJulgaeSelect(${c.id})"></td>`:''}
         <td style="color:#aaa;font-size:11px">${i+1}</td>
         <td><div class="td-name">${esc(c.name)}</div></td>
         <td style="font-size:12px;color:#444;${hc['j_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
@@ -3233,7 +3308,17 @@ function renderJulgae() {
     }).join('')}
     ${clients.length===0?`<tr><td colspan="${totalCols}" style="text-align:center;padding:40px;color:#aaa">해당 조건의 거래처가 없습니다</td></tr>`:''}
     </tbody>
-  </table></div>`}
+  </table></div>
+  ${G.julgaeBulkMode&&(G.julgaeBulkSelected||[]).length?`
+  <div style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1a1a2e;color:#fff;border-radius:16px;padding:12px 20px;display:flex;gap:10px;align-items:center;box-shadow:0 4px 20px rgba(0,0,0,.3);z-index:150;flex-wrap:wrap">
+    <span style="font-size:13px">${(G.julgaeBulkSelected||[]).length}개 선택됨</span>
+    <button onclick="bulkSetJulgae('d',true)" style="padding:6px 12px;background:#4f8ef7;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12px">📥 자료</button>
+    <button onclick="bulkSetJulgae('b',true)" style="padding:6px 12px;background:#f57c00;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12px">📖 기장</button>
+    <button onclick="bulkSetJulgae('a',true)" style="padding:6px 12px;background:#2e7d32;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12px">✅ 결재</button>
+    <button onclick="bulkSetJulgae('s',true)" style="padding:6px 12px;background:#7b1fa2;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12px">💰 수금</button>
+    <button onclick="bulkSetJulgae('reset',false)" style="padding:6px 12px;background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-size:12px">초기화</button>
+    <button onclick="G.julgaeBulkSelected=[];renderJulgae()" style="padding:6px 12px;background:rgba(255,255,255,.08);color:#aaa;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-size:12px">선택 해제</button>
+  </div>`:''}`}
   ` : ''}
   `}
 }
@@ -4285,9 +4370,15 @@ async function runAINotice() {
 // ══════════════════════════════════════════════════════
 function openAIInvoice() {
   const active = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&c.fee>0);
+  const invNo = nextInvoiceNo();
+  // Save the number back (peek without incrementing) - we increment in nextInvoiceNo
+  // We'll use this number if user prints
+  window._currentInvoiceNo = invNo;
+  const histRows = (G.invoiceHistory||[]).slice(-5).reverse().map(h=>`<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid #f5f5f5"><span><b>${esc(h.no)}</b> · ${esc(h.clientName)}</span><span style="color:#888">${esc(h.date)} · ${(h.amount||0).toLocaleString()}원</span></div>`).join('');
   showModal(`<div style="max-width:520px">
   <div class="modal-header"><h3>🖨 청구서 PDF 생성</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
   <div class="modal-body">
+    <div style="background:#e8f0fe;border-radius:8px;padding:8px 14px;font-size:13px;color:#1565c0;font-weight:700;margin-bottom:4px">청구서 번호: ${esc(invNo)}</div>
     <div><label class="flabel">청구 거래처</label>
       <select class="fsel" id="inv-client" onchange="updateInvoicePreview()">
         ${active.map(c=>`<option value="${c.id}">${esc(c.name)} (${esc(c.rep)}) — ${c.fee.toLocaleString()}원</option>`).join('')}
@@ -4302,6 +4393,7 @@ function openAIInvoice() {
     <div id="inv-preview" style="background:#f8f9ff;border:2px dashed #b0bec5;border-radius:12px;padding:18px;font-size:13px"></div>
     <button class="btn-green" style="width:100%" onclick="printInvoice()">🖨 인쇄 / PDF 저장</button>
     <div style="font-size:12px;color:#aaa;text-align:center">인쇄 팝업에서 "PDF로 저장"을 선택하면 파일로 저장됩니다</div>
+    ${histRows?`<div style="margin-top:12px"><div style="font-size:12px;font-weight:700;color:#555;margin-bottom:6px">최근 발행 이력</div>${histRows}</div>`:''}
   </div></div>`);
   setTimeout(updateInvoicePreview, 50);
 }
@@ -4348,6 +4440,7 @@ function printInvoice() {
   .ft{text-align:center;font-size:11px;color:#aaa;border-top:1px solid #eee;padding-top:10px}
   </style></head><body>
   <div class="h1">청 구 서</div><div class="sub">${esc(officeName)}</div>
+  <div style="text-align:right;font-size:11px;color:#888;margin-bottom:10px">청구서 번호: ${window._currentInvoiceNo||''}</div>
   <div class="meta">
     <div class="mb"><div class="ml">수신</div><div class="mv">${esc(c.name)} 귀중</div><div style="font-size:12px;color:#666">대표: ${esc(c.rep)}</div></div>
     <div class="mb"><div class="ml">발행일</div><div class="mv">${date}</div>${due?`<div class="ml" style="margin-top:8px">납부기한</div><div class="mv">${due}</div>`:''}</div>
@@ -4364,6 +4457,11 @@ function printInvoice() {
   <div class="ft">${esc(officeName)} · Tel: ${esc(s.phone)} · ${esc(s.email)}</div>
   </body></html>`);
   w.document.close(); w.focus(); setTimeout(()=>w.print(),400);
+  // Record invoice history
+  if (!G.invoiceHistory) G.invoiceHistory = [];
+  G.invoiceHistory.push({no: window._currentInvoiceNo||'', date: date, clientName: c.name, amount: c.fee||0});
+  if (G.invoiceHistory.length > 100) G.invoiceHistory = G.invoiceHistory.slice(-100);
+  saveToLS();
 }
 
 // ══════════════════════════════════════════════════════
@@ -4989,6 +5087,19 @@ function openSettings() {
     </div>
     <div><label class="flabel">월 수금 목표액 (원)</label>
     <input type="number" class="finput" id="set-feeTarget" value="${s.feeTarget||0}" placeholder="0"></div>
+    <div><label class="flabel">청구서 시작 번호</label>
+    <input type="number" class="finput" id="set-invoiceSeq" value="${s.invoiceSeq||0}" placeholder="0"></div>
+    <div style="border:1px solid #e0e0e0;border-radius:10px;padding:14px;background:#f8f9ff">
+      <div style="font-weight:700;font-size:13px;margin-bottom:10px">⚙ 신고기간 관리</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <button type="button" class="btn-sm" style="background:#e3f2fd;color:#1565c0;border:1.5px solid #90caf9" onclick="autoCreatePeriods(new Date().getFullYear())">📅 이번연도 신고기간 자동 생성</button>
+        <button type="button" class="btn-sm" style="background:#f3e5f5;color:#6a1b9a;border:1.5px solid #ce93d8" onclick="autoCreatePeriods(new Date().getFullYear()+1)">📅 다음연도 신고기간 자동 생성</button>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+        <input type="checkbox" id="set-autoCreatePeriods" ${s.autoCreatePeriods?'checked':''}>
+        매년 1월 자동 생성 알림
+      </label>
+    </div>
     <div style="background:#f8f9ff;border-radius:10px;padding:14px;font-size:12px;color:#555;line-height:2;border:1px dashed #c5cae9" id="settings-preview"></div>
     <div class="btn-row"><button class="btn-secondary" onclick="closeModal()">취소</button><button class="btn-primary" onclick="saveSettings()">저장</button></div>
   </div></div>`);
@@ -5024,6 +5135,8 @@ function saveSettings() {
   });
   G.settings.managers = [..._tempMgrs];
   G.settings.feeTarget = Number(document.getElementById('set-feeTarget')?.value)||0;
+  G.settings.invoiceSeq = Number(document.getElementById('set-invoiceSeq')?.value)||0;
+  G.settings.autoCreatePeriods = document.getElementById('set-autoCreatePeriods')?.checked||false;
   MANAGERS = ['전체', ...G.settings.managers];
   saveToLS();
   closeModal();
@@ -5165,6 +5278,265 @@ function updateBadge() {
   const el = document.getElementById('badge-no-data');
   el.style.display = noData>0?'inline':'none';
   el.textContent = '미수령 '+noData;
+  // Update notification badge
+  try {
+    const alerts = computeAlerts();
+    const nb = document.getElementById('notif-badge');
+    if (nb) {
+      if (alerts.length > 0) { nb.style.display='inline'; nb.textContent=alerts.length; }
+      else { nb.style.display='none'; }
+    }
+  } catch(e) {}
+}
+
+// ══════════════════════════════════════════════════════
+// Feature 1: 전체 통합 검색 (Global Search)
+// ══════════════════════════════════════════════════════
+function openGlobalSearch() {
+  const existing = document.getElementById('global-search-popup');
+  if (existing) { existing.remove(); return; }
+  const popup = document.createElement('div');
+  popup.id = 'global-search-popup';
+  popup.style.cssText = 'position:fixed;top:56px;left:50%;transform:translateX(-50%);z-index:500;background:#fff;border-radius:14px;box-shadow:0 8px 40px rgba(0,0,0,.22);padding:14px;width:min(480px,96vw);max-height:70vh;overflow-y:auto';
+  popup.innerHTML = `<div style="margin-bottom:10px"><input id="global-search-input" type="text" placeholder="거래처명, 대표자, 사업자번호 검색..." style="width:100%;padding:10px 14px;border:1.5px solid #4f8ef7;border-radius:10px;font-size:14px;outline:none;font-family:inherit" oninput="doGlobalSearch(this.value)"></div><div id="global-search-results" style="display:flex;flex-direction:column;gap:4px"></div>`;
+  document.body.appendChild(popup);
+  document.getElementById('global-search-input').focus();
+  doGlobalSearch('');
+  document.addEventListener('keydown', function _gsEsc(e) { if(e.key==='Escape'){closeGlobalSearch();document.removeEventListener('keydown',_gsEsc);} });
+  setTimeout(()=>{ document.addEventListener('click', function _gsOut(e){ if(!popup.contains(e.target)&&e.target.id!=='notif-btn'){closeGlobalSearch();document.removeEventListener('click',_gsOut);} }); }, 100);
+}
+function doGlobalSearch(q) {
+  const res = document.getElementById('global-search-results');
+  if (!res) return;
+  const lq = q.toLowerCase();
+  const matches = G.clients.filter(c=>{
+    if (!lq) return true;
+    return c.name.toLowerCase().includes(lq) || (c.rep||'').toLowerCase().includes(lq) || (c.bizNo||'').includes(lq);
+  }).slice(0,20);
+  if (!matches.length) { res.innerHTML='<div style="color:#aaa;text-align:center;padding:20px 0">검색 결과 없음</div>'; return; }
+  res.innerHTML = matches.map(c=>`<div onclick="closeGlobalSearch();switchTab('clients');G.searchText='${esc(c.name).replace(/'/g,"\\'")}';renderClients()" style="padding:10px 12px;border-radius:10px;border:1px solid #f0f0f0;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;background:#fafbff" onmouseover="this.style.background='#e8f0fe'" onmouseout="this.style.background='#fafbff'">
+    <div><div style="font-weight:700;font-size:13px">${esc(c.name)}</div><div style="font-size:11px;color:#888">${esc(c.rep||'')} · ${esc(c.bizNo||'-')}</div></div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">${badge(c.status,c.status==='정상'?'green':c.status==='주의'?'orange':'gray')}<div style="font-size:11px;color:#aaa">${esc(getManagers(c).join(',')||'-')}</div></div>
+  </div>`).join('');
+}
+function closeGlobalSearch() {
+  document.getElementById('global-search-popup')?.remove();
+}
+
+// ══════════════════════════════════════════════════════
+// Feature 2: 알림 센터 (Notification Center)
+// ══════════════════════════════════════════════════════
+function computeAlerts() {
+  const alerts = [];
+  const today = new Date(); today.setHours(0,0,0,0);
+  // 신고 마감 D-7
+  G.periods.forEach(p => {
+    const tpl = PERIOD_TEMPLATES.find(t=>t.reportType===p.reportType||t.tpl===p.reportType);
+    if (!tpl||!tpl.deadline) return;
+    const m = tpl.deadline.match(/(\d+)월\s*(\d+)일/);
+    if (!m) return;
+    const yr = today.getFullYear();
+    let dl = new Date(yr, Number(m[1])-1, Number(m[2]));
+    if (dl < today) dl = new Date(yr+1, Number(m[1])-1, Number(m[2]));
+    const diff = Math.ceil((dl-today)/86400000);
+    if (diff<=7) alerts.push({type:'deadline',label:'신고 마감 D-'+diff,detail:esc(p.label)+' · '+tpl.deadline,color:'#e53935'});
+  });
+  // 장기 미수금 (3개월 이상)
+  const activeClients = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&c.fee>0&&getDealTypes(c).some(d=>['기장','고문','성실'].includes(d)));
+  activeClients.forEach(c=>{
+    let uncollected = 0;
+    const now2 = new Date();
+    for (let i=1;i<=6;i++) {
+      const d2 = new Date(now2.getFullYear(), now2.getMonth()-i, 1);
+      const ym2 = d2.getFullYear()+'-'+String(d2.getMonth()+1).padStart(2,'0');
+      if (!c.contractDate||c.contractDate.slice(0,7)>ym2) break;
+      if (!(G.monthlyFees[c.id]&&G.monthlyFees[c.id][ym2])) uncollected++;
+      else break;
+    }
+    if (uncollected>=3) alerts.push({type:'unpaid',label:'장기 미수금',detail:esc(c.name)+' '+uncollected+'개월 미수',color:'#c62828'});
+  });
+  // 계약 갱신 필요 (11개월 이상)
+  const renewalClients = G.clients.filter(c=>{
+    if(c.status!=='정상'||!c.contractDate)return false;
+    const cd=new Date(c.contractDate);
+    const months=(today.getFullYear()-cd.getFullYear())*12+(today.getMonth()-cd.getMonth());
+    return months>=11;
+  });
+  if (renewalClients.length) alerts.push({type:'renewal',label:'계약 갱신 필요',detail:renewalClients.length+'개 거래처 (11개월 이상 경과)',color:'#e65100'});
+  // 사업자번호 미입력
+  const noBizNo = G.clients.filter(c=>!c.bizNo&&c.status==='정상').length;
+  if (noBizNo>0) alerts.push({type:'missingBiz',label:'사업자번호 미입력',detail:noBizNo+'개 거래처 사업자번호 미입력',color:'#888'});
+  return alerts;
+}
+function openNotificationCenter(btn) {
+  const existing = document.getElementById('notification-panel');
+  if (existing) { existing.remove(); return; }
+  const alerts = computeAlerts();
+  const panel = document.createElement('div');
+  panel.id = 'notification-panel';
+  const rect = btn.getBoundingClientRect();
+  panel.style.cssText = `position:fixed;top:${rect.bottom+6}px;left:${Math.min(rect.left,window.innerWidth-320)}px;z-index:500;background:#fff;border-radius:14px;box-shadow:0 8px 40px rgba(0,0,0,.22);padding:14px;width:300px;max-height:70vh;overflow-y:auto`;
+  panel.innerHTML = `<div style="font-weight:700;font-size:14px;margin-bottom:10px">🔔 알림 센터 (${alerts.length})</div>
+    ${alerts.length?alerts.map(a=>`<div style="padding:10px 12px;border-radius:10px;border-left:4px solid ${a.color};background:#fafbff;margin-bottom:6px">
+      <div style="font-weight:700;font-size:13px;color:${a.color}">${a.label}</div>
+      <div style="font-size:11px;color:#666;margin-top:2px">${a.detail}</div>
+    </div>`).join(''):`<div style="color:#aaa;text-align:center;padding:20px">알림이 없습니다</div>`}`;
+  document.body.appendChild(panel);
+  setTimeout(()=>{ document.addEventListener('click', function _npOut(e){ if(!panel.contains(e.target)&&!btn.contains(e.target)){panel.remove();document.removeEventListener('click',_npOut);} }); }, 100);
+}
+
+// ══════════════════════════════════════════════════════
+// Feature 3: 해지폐업 탭 체크리스트
+// ══════════════════════════════════════════════════════
+function toggleClosureCheck(clientId, field) {
+  if (!G.closureChecklist) G.closureChecklist = {};
+  if (!G.closureChecklist[clientId]) G.closureChecklist[clientId] = {};
+  G.closureChecklist[clientId][field] = !G.closureChecklist[clientId][field];
+  saveToLS();
+  renderClosure();
+}
+
+// ══════════════════════════════════════════════════════
+// Feature 4: 수임서류 체크리스트
+// ══════════════════════════════════════════════════════
+function toggleDocCheck(clientId, field) {
+  if (!G.docChecklist) G.docChecklist = {};
+  if (!G.docChecklist[clientId]) G.docChecklist[clientId] = {};
+  G.docChecklist[clientId][field] = !G.docChecklist[clientId][field];
+  saveToLS();
+  toggleExpand(clientId); toggleExpand(clientId);
+}
+
+// ══════════════════════════════════════════════════════
+// Feature 5: 거래처 위험도 자동 배지
+// ══════════════════════════════════════════════════════
+function clientRiskLevel(c) {
+  if (c.status==='주의') return 'red';
+  // Count uncollected months
+  const now3 = new Date();
+  let uncollected = 0;
+  if (c.fee>0&&getDealTypes(c).some(d=>['기장','고문','성실'].includes(d))) {
+    for (let i=1;i<=6;i++) {
+      const d3 = new Date(now3.getFullYear(), now3.getMonth()-i, 1);
+      const ym3 = d3.getFullYear()+'-'+String(d3.getMonth()+1).padStart(2,'0');
+      if (!c.contractDate||c.contractDate.slice(0,7)>ym3) break;
+      if (!(G.monthlyFees[c.id]&&G.monthlyFees[c.id][ym3])) uncollected++;
+      else break;
+    }
+  }
+  if (uncollected>=3) return 'red';
+  // Contract age
+  let contractMonths = 0;
+  if (c.contractDate) {
+    const cd=new Date(c.contractDate);
+    contractMonths=(now3.getFullYear()-cd.getFullYear())*12+(now3.getMonth()-cd.getMonth());
+  }
+  if (contractMonths>=12) return 'red';
+  if (uncollected>=1&&uncollected<=2) return 'yellow';
+  if (!c.bizNo) return 'yellow';
+  if (contractMonths>=10&&contractMonths<=11) return 'yellow';
+  return 'green';
+}
+
+// ══════════════════════════════════════════════════════
+// Feature 6: 신고탭 일괄 완료 처리
+// ══════════════════════════════════════════════════════
+function toggleJulgaeSelect(clientId) {
+  if (!G.julgaeBulkSelected) G.julgaeBulkSelected = [];
+  const idx2 = G.julgaeBulkSelected.indexOf(clientId);
+  if (idx2>=0) G.julgaeBulkSelected.splice(idx2,1);
+  else G.julgaeBulkSelected.push(clientId);
+  renderJulgae();
+}
+function bulkSetJulgae(field, value) {
+  const period = G.periods[G.julgaePeriodIdx];
+  if (!period) return;
+  const pKey3 = period.id+'|'+(period.reportType||period.type);
+  const pKeySimple = period.id;
+  (G.julgaeBulkSelected||[]).forEach(id => {
+    if (!G.julgae[pKeySimple]) G.julgae[pKeySimple] = {};
+    if (!G.julgae[pKeySimple][id]) G.julgae[pKeySimple][id] = {};
+    if (field==='reset') { G.julgae[pKeySimple][id].d=false; G.julgae[pKeySimple][id].b=false; G.julgae[pKeySimple][id].a=false; G.julgae[pKeySimple][id].s=false; }
+    else G.julgae[pKeySimple][id][field] = value;
+  });
+  saveToLS();
+  renderJulgae();
+}
+
+// ══════════════════════════════════════════════════════
+// Feature 7: 원천세 월별 신고 관리
+// ══════════════════════════════════════════════════════
+function toggleWithholding(clientId, ym) {
+  if (!G.withholding) G.withholding = {};
+  if (!G.withholding[clientId]) G.withholding[clientId] = {};
+  G.withholding[clientId][ym] = !G.withholding[clientId][ym];
+  saveToLS();
+  openWithholdingModal();
+}
+function openWithholdingModal() {
+  const wClients = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&(c.contracts||[]).includes('원천세'));
+  if (!wClients.length) { alert('원천세 수임 거래처가 없습니다'); return; }
+  const now4 = new Date();
+  const months = Array.from({length:12},(_,i)=>{const d4=new Date(now4.getFullYear(),now4.getMonth()-11+i,1);return d4.getFullYear()+'-'+String(d4.getMonth()+1).padStart(2,'0');});
+  const rows = wClients.map(c=>{
+    const wData = (G.withholding||{})[c.id]||{};
+    return `<tr><td style="padding:6px 10px;font-weight:600;font-size:13px;white-space:nowrap;border-bottom:1px solid #f0f0f0">${esc(c.name)}</td>${months.map(ym=>{
+      const checked=!!wData[ym];
+      return `<td style="text-align:center;border-bottom:1px solid #f0f0f0;border-left:1px solid #f5f5f5;cursor:pointer;padding:4px" onclick="toggleWithholding(${c.id},'${ym}')"><div style="width:24px;height:24px;border-radius:6px;margin:0 auto;background:${checked?'#e8f5e9':'#f5f5f5'};border:2px solid ${checked?'#43a047':'#e0e0e0'};display:flex;align-items:center;justify-content:center;font-size:13px">${checked?'✓':''}</div></td>`;
+    }).join('')}</tr>`;
+  }).join('');
+  showModal(`<div style="max-width:900px;width:min(900px,97vw)">
+  <div class="modal-header"><h3>📋 원천세 월별 신고 현황</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+  <div class="modal-body" style="padding:10px">
+    <div style="overflow-x:auto;border-radius:10px;border:1px solid #e0e0e0">
+    <table style="border-collapse:collapse;min-width:600px;width:100%">
+      <thead><tr style="background:#f8f9ff">
+        <th style="padding:8px 10px;text-align:left;font-size:12px;border-bottom:2px solid #e0e0e0">거래처</th>
+        ${months.map(ym=>`<th style="padding:6px 4px;text-align:center;font-size:11px;border-bottom:2px solid #e0e0e0;white-space:nowrap">${ym.slice(5)}월</th>`).join('')}
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    </div>
+    <div style="font-size:12px;color:#aaa;margin-top:10px;text-align:center">셀을 클릭하면 신고 완료 여부가 자동 저장됩니다</div>
+    <div class="btn-row"><button class="btn-secondary" onclick="closeModal()">닫기</button></div>
+  </div></div>`);
+}
+
+// ══════════════════════════════════════════════════════
+// Feature 9: 청구서 일련번호 채번
+// ══════════════════════════════════════════════════════
+function nextInvoiceNo() {
+  if (!G.settings.invoiceSeq) G.settings.invoiceSeq = 0;
+  G.settings.invoiceSeq++;
+  const year = new Date().getFullYear();
+  return `${year}-${String(G.settings.invoiceSeq).padStart(4,'0')}`;
+}
+
+// ══════════════════════════════════════════════════════
+// Feature 10: 신고기간 자동 생성 스케줄러
+// ══════════════════════════════════════════════════════
+function autoCreatePeriods(year) {
+  const yy = String(year).slice(2);
+  let created = 0;
+  PERIOD_TEMPLATES.forEach(tpl => {
+    const label = yy + '년 ' + tpl.label;
+    const exists = G.periods.find(p => p.label === label && p.reportType === tpl.reportType);
+    if (exists) return;
+    const newId = 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2,6);
+    G.periods.push({
+      id: newId,
+      label,
+      type: tpl.type,
+      reportType: tpl.reportType,
+      targetType: tpl.targetType,
+      deadline: tpl.deadline,
+      hint: tpl.hint,
+      enrolled: []
+    });
+    created++;
+  });
+  if (created > 0) { saveToLS(); alert(year+'년 신고기간 '+created+'개 자동 생성 완료'); renderJulgae(); }
+  else alert(year+'년 신고기간이 이미 모두 존재합니다');
 }
 
 function showModal(html) {
@@ -5245,6 +5617,10 @@ async function loadFromFirebase() {
       G.managerHistory = data.managerHistory ? JSON.parse(data.managerHistory) : {};
       G.feeChangeHistory = data.feeChangeHistory ? JSON.parse(data.feeChangeHistory) : {};
       G.clientTags = data.clientTags ? JSON.parse(data.clientTags) : {};
+      G.docChecklist = data.docChecklist ? JSON.parse(data.docChecklist) : {};
+      G.closureChecklist = data.closureChecklist ? JSON.parse(data.closureChecklist) : {};
+      G.withholding = data.withholding ? JSON.parse(data.withholding) : {};
+      G.invoiceHistory = data.invoiceHistory ? JSON.parse(data.invoiceHistory) : [];
     } else {
       // 신규 계정: 로컬스토리지 데이터 마이그레이션 시도
       const saved = localStorage.getItem('tm_clients');
@@ -5267,6 +5643,10 @@ async function loadFromFirebase() {
         G.managerHistory = JSON.parse(localStorage.getItem('tm_managerHistory')||'{}');
         G.feeChangeHistory = JSON.parse(localStorage.getItem('tm_feeChangeHistory')||'{}');
         G.clientTags = JSON.parse(localStorage.getItem('tm_clientTags')||'{}');
+        G.docChecklist = JSON.parse(localStorage.getItem('tm_docChecklist')||'{}');
+        G.closureChecklist = JSON.parse(localStorage.getItem('tm_closureChecklist')||'{}');
+        G.withholding = JSON.parse(localStorage.getItem('tm_withholding')||'{}');
+        G.invoiceHistory = JSON.parse(localStorage.getItem('tm_invoiceHistory')||'[]');
         saveToLS(); // Firebase에 업로드
       } else {
         const json = await decompressB64(CLIENTS_B64);
@@ -5295,6 +5675,10 @@ async function loadFromFirebase() {
     G.managerHistory = JSON.parse(localStorage.getItem('tm_managerHistory')||'{}');
     G.feeChangeHistory = JSON.parse(localStorage.getItem('tm_feeChangeHistory')||'{}');
     G.clientTags = JSON.parse(localStorage.getItem('tm_clientTags')||'{}');
+    G.docChecklist = JSON.parse(localStorage.getItem('tm_docChecklist')||'{}');
+    G.closureChecklist = JSON.parse(localStorage.getItem('tm_closureChecklist')||'{}');
+    G.withholding = JSON.parse(localStorage.getItem('tm_withholding')||'{}');
+    G.invoiceHistory = JSON.parse(localStorage.getItem('tm_invoiceHistory')||'[]');
   }
   // Apply dark mode if saved
   if (localStorage.getItem('tm_darkMode')) { G.darkMode=true; document.body.classList.add('dark-mode'); }
@@ -5304,6 +5688,13 @@ async function loadFromFirebase() {
   document.getElementById('loading').style.display = 'none';
   document.getElementById('page-dashboard').style.display = 'block';
   renderDashboard();
+  // Feature 10: auto-create periods if enabled
+  if (G.settings?.autoCreatePeriods) {
+    const yr = new Date().getFullYear();
+    const yy = String(yr).slice(2);
+    const hasThisYear = G.periods.some(p => (p.label||'').startsWith(yy+'년'));
+    if (!hasThisYear) autoCreatePeriods(yr);
+  }
 }
 
 // ══════════════════════════════════════════════════════
