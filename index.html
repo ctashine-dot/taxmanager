@@ -320,6 +320,11 @@ let G = {
   closureStatusFilter: '전체',
   sectionCollapsed: {},
   hiddenCols: {},
+  clientNotes: {},
+  taxInvoice: {},
+  favorites: [],
+  showFavorites: false,
+  bizCode: {},
   settings: {
     name: '○○세무회계사무소', rep: '홍세무',
     phone: '02-1234-5678', fax: '02-1234-5679',
@@ -456,6 +461,9 @@ function saveToLS() {
     localStorage.setItem('tm_settings', JSON.stringify(G.settings));
     localStorage.setItem('tm_monthlyFees', JSON.stringify(G.monthlyFees));
     localStorage.setItem('tm_invoiceData', JSON.stringify(G.invoiceData||{}));
+    localStorage.setItem('tm_clientNotes', JSON.stringify(G.clientNotes||{}));
+    localStorage.setItem('tm_taxInvoice', JSON.stringify(G.taxInvoice||{}));
+    localStorage.setItem('tm_favorites', JSON.stringify(G.favorites||[]));
   } catch(e) {}
   if (G.user) {
     fbDb.ref('taxmanager/' + G.user.uid).set({
@@ -465,6 +473,9 @@ function saveToLS() {
       settings:    JSON.stringify(G.settings),
       monthlyFees: JSON.stringify(G.monthlyFees),
       invoiceData: JSON.stringify(G.invoiceData||{}),
+      clientNotes: JSON.stringify(G.clientNotes||{}),
+      taxInvoice:  JSON.stringify(G.taxInvoice||{}),
+      favorites:   JSON.stringify(G.favorites||[]),
     }).catch(e => console.error('Firebase 저장 실패:', e));
   }
 }
@@ -607,6 +618,7 @@ function filteredClients() {
     if (G.filterCMS.length > 0 && !G.filterCMS.includes(c.cms ? '가입' : '미가입')) return false;
     return true;
   });
+  if (G.showFavorites) list = list.filter(c=>(G.favorites||[]).includes(c.id));
 
   // 수임일자 정렬키: 없으면 뒤로
   const csk = c => c.contractDate || 'ZZZZ-ZZ-ZZ';
@@ -907,7 +919,71 @@ function _renderDashboardInner() {
     })()}
   </div>`:''}
 
-  <div class="card"><div class="card-title">담당자별 현황 (업체수 · 월정수수료)</div>${feeByManager||'<div style="color:#aaa;font-size:13px">담당자 데이터 없음</div>'}</div>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="card-title" style="margin:0">담당자별 현황 (업체수 · 월정수수료)</div>
+      <button onclick="openManagerAnalysis()" style="padding:5px 12px;border-radius:8px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;font-size:12px;cursor:pointer;font-family:inherit">👤 상세 분석</button>
+    </div>
+    ${feeByManager||'<div style="color:#aaa;font-size:13px">담당자 데이터 없음</div>'}
+  </div>
+
+  ${(()=>{
+    const now2 = new Date();
+    const months12 = Array.from({length:12},(_,i)=>{const d=new Date(now2.getFullYear(),now2.getMonth()-11+i,1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');});
+    const mStats = months12.map(ym=>{
+      const act=G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&getDealTypes(c).some(d=>['기장','고문','성실'].includes(d))&&(!c.contractDate||c.contractDate.slice(0,7)<=ym));
+      const total=act.reduce((a,c)=>a+(c.fee||0),0);
+      const collected=act.filter(c=>G.monthlyFees[c.id]?.[ym]).reduce((a,c)=>a+(c.fee||0),0);
+      return {ym,total,collected};
+    });
+    const maxV=Math.max(...mStats.map(m=>m.total),1);
+    const bars=mStats.map(({ym,total,collected})=>{
+      const ht=Math.max(2,Math.round(collected/maxV*100));
+      const hb=Math.max(2,Math.round(total/maxV*100));
+      return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
+        <div style="flex:1;width:100%;display:flex;align-items:flex-end;min-height:100px">
+          <div style="width:100%;position:relative;height:${hb}px">
+            <div style="width:100%;height:100%;background:#e8eaf6;border-radius:3px 3px 0 0"></div>
+            <div style="position:absolute;bottom:0;width:100%;height:${ht}px;background:#4f8ef7;border-radius:3px 3px 0 0"></div>
+          </div>
+        </div>
+        <div style="font-size:9px;color:#aaa;white-space:nowrap">${ym.slice(5)}월</div>
+      </div>`;
+    }).join('');
+    return `<div class="card">
+      <div class="card-title">📊 월정수수료 12개월 추이</div>
+      <div style="display:flex;align-items:flex-end;gap:3px;height:130px">${bars}</div>
+      <div style="display:flex;gap:12px;margin-top:8px;font-size:11px;color:#888">
+        <span><span style="display:inline-block;width:10px;height:10px;background:#4f8ef7;border-radius:2px;margin-right:3px"></span>수납</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:#e8eaf6;border-radius:2px;margin-right:3px"></span>청구</span>
+        <span style="margin-left:auto">최대 ${maxV.toLocaleString()}원/월</span>
+      </div>
+    </div>`;
+  })()}
+
+  ${(()=>{
+    const today3=new Date();
+    const renewal=G.clients.filter(c=>{
+      if(c.status==='해지'||c.status==='폐업'||!c.contractDate)return false;
+      const cd=new Date(c.contractDate);
+      const months=(today3.getFullYear()-cd.getFullYear())*12+(today3.getMonth()-cd.getMonth());
+      return months>=11;
+    });
+    if(!renewal.length)return '';
+    return `<div class="card" style="border-left:4px solid #ff9800">
+      <div class="card-title" style="color:#e65100">🔔 계약 갱신 검토 대상 (${renewal.length}개)</div>
+      <div style="font-size:12px;color:#888;margin-bottom:10px">수임일로부터 11개월 이상 경과한 거래처입니다</div>
+      ${renewal.slice(0,10).map(c=>{
+        const cd=new Date(c.contractDate);
+        const months=(today3.getFullYear()-cd.getFullYear())*12+(today3.getMonth()-cd.getMonth());
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f5f5f5">
+          <div><span style="font-weight:700;font-size:13px">${esc(c.name)}</span><span style="font-size:11px;color:#888;margin-left:8px">${esc(c.rep||'')}</span></div>
+          <span style="font-size:12px;background:${months>=12?'#fdecea':'#fff3e0'};color:${months>=12?'#c62828':'#e65100'};padding:2px 8px;border-radius:8px">${months}개월 경과</span>
+        </div>`;
+      }).join('')}
+      ${renewal.length>10?`<div style="font-size:12px;color:#aaa;margin-top:8px">외 ${renewal.length-10}개...</div>`:''}
+    </div>`;
+  })()}
 
   `;
 }
@@ -939,6 +1015,7 @@ function renderClients() {
       ${hiddenChips}
       <button class="btn-sm" style="background:${G.editMode?'#e8f5e9':'#f5f5f5'};color:${G.editMode?'#2e7d32':'#888'};border:2px solid ${G.editMode?'#43a047':'#e0e0e0'}" onclick="toggleEditMode()">${G.editMode?'✓ 수정모드 ON':'✏ 수정모드'}</button>
       <button class="btn-sm" style="background:${G.showTerminated?'#fff3e0':'#f5f5f5'};color:${G.showTerminated?'#e65100':'#888'};border:2px solid ${G.showTerminated?'#ffcc02':'#e0e0e0'}" onclick="toggleTerminated()">${G.showTerminated?'▲ 해지·폐업 숨기기':'해지·폐업 보기 ('+terminated+')'}</button>
+      <button class="btn-sm" style="background:${G.showFavorites?'#fff8e1':'#f5f5f5'};color:${G.showFavorites?'#f57c00':'#888'};border:2px solid ${G.showFavorites?'#ffd54f':'#e0e0e0'}" onclick="G.showFavorites=!G.showFavorites;G.clientPage=0;renderClients()">⭐ 즐겨찾기${G.showFavorites?' ON':''}</button>
       <button class="btn-sm" style="background:#f0f8ff;color:#1565c0;border:1.5px solid #90caf9" onclick="openImportModal()">📥 세무사랑 가져오기</button>
       <button class="btn-primary btn-sm" onclick="openForm(null)" style="padding:8px 14px">+ 거래처 추가</button>
     </div>
@@ -985,7 +1062,7 @@ function renderClients() {
       const groupDot = inGroup ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${gc};margin-right:5px;vertical-align:middle"></span>` : '';
       const groupSub = inGroup ? `<span style="font-size:10px;color:${gc};font-weight:600;margin-left:4px">👥 ${esc(groupLabel)}</span>` : '';
       return `<tr class="client-row" onclick="toggleExpand(${c.id})" style="${inGroup?`border-left:3px solid ${gc}`:''}" >
-        <td><div class="td-name">${groupDot}${esc(c.name)}</div>${(c.bizType||groupSub)?`<div class="td-sub">${c.bizType?esc(c.bizType):''}${groupSub}</div>`:''}</td>
+        <td><div class="td-name">${groupDot}${esc(c.name)}<button onclick="event.stopPropagation();openClientNotes(${c.id})" style="margin-left:4px;padding:1px 5px;border-radius:5px;border:1px solid #e0e0e0;background:#f8f9ff;font-size:11px;cursor:pointer;vertical-align:middle" title="메모/이력">📝${(G.clientNotes||{})[c.id]?.length?` ${G.clientNotes[c.id].length}`:''}</button><button onclick="event.stopPropagation();toggleFavorite(${c.id})" style="margin-left:2px;padding:1px 4px;border-radius:5px;border:1px solid #e0e0e0;background:#fff;font-size:12px;cursor:pointer;vertical-align:middle" title="즐겨찾기">${(G.favorites||[]).includes(c.id)?'⭐':'☆'}</button></div>${(c.bizType||c.bizCode||groupSub)?`<div class="td-sub">${c.bizType?esc(c.bizType):''}${c.bizCode?` <span style="color:#aaa;font-size:10px">[${esc(c.bizCode)}]</span>`:''}${groupSub}</div>`:''}</td>
         <td style="font-size:12px;color:#444;${hc['c_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
         <td style="${hc['c_dealType']?'display:none':''}">${em?iSel('dealType',DEAL_TYPES.slice(1),getDealTypes(c)[0]):getDealTypes(c).map(d=>dealBadge(d)).join('')}</td>
         <td style="${hc['c_taxType']?'display:none':''}">${em?iSel('taxType',TAX_TYPES.slice(1),c.taxType):badge(c.taxType,c.taxType==='법인'?'blue':'gray')}</td>
@@ -1007,9 +1084,11 @@ function renderClients() {
             ${c.status==='해지'||c.status==='폐업'?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">해지/폐업일</div><div style="font-weight:600;color:#c62828">${esc(c.terminationDate||'-')}</div></div>`:''}
             ${contracts?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">수임항목</div><div style="font-size:12px;color:#555">${esc(contracts)}</div></div>`:''}
             ${c.memo?`<div style="max-width:240px"><div style="font-size:11px;color:#888;margin-bottom:3px">메모</div><div style="font-size:12px;color:#555">${esc(c.memo)}</div></div>`:''}
+            ${c.bizCode?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">업종코드</div><div style="font-weight:600;font-family:monospace;font-size:13px">${esc(c.bizCode)}</div></div>`:''}
             ${c.seongsi?`<div>${badge('성실신고','purple')}</div>`:''}
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">관계회사 그룹</div>${em?iInput('relatedGroup',c.relatedGroup,'placeholder="그룹명" style="width:140px"'):`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${inGroup?`<div style="font-weight:600;font-size:12px;color:${gc}">👥 ${esc(groupLabel)}</div>`:''}<button onclick="event.stopPropagation();openGroupEditModal(${c.id})" style="padding:2px 10px;border-radius:6px;font-size:11px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;cursor:pointer;font-family:inherit">✏ 그룹 편집</button></div>${c.groupReason?`<div style="font-size:11px;color:#888;margin-top:3px">사유: ${esc(c.groupReason)}</div>`:''}`}</div>
             <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+              <button class="btn-sm" style="background:#f8f9ff;color:#4f8ef7;border:1px solid #c5cae9" onclick="event.stopPropagation();openClientNotes(${c.id})">📝 메모/이력</button>
               <button class="btn-sm" style="background:#f0f4ff;color:#4f8ef7" onclick="event.stopPropagation();openForm(${c.id})">✏ 수정</button>
               <button class="btn-sm" style="background:#fdecea;color:#c62828;border:1px solid #ef9a9a" onclick="event.stopPropagation();deleteClient(${c.id})">🗑 삭제</button>
             </div>
@@ -1992,6 +2071,7 @@ function openForm(id) {
 
     <div class="form-grid">
       <div><label class="flabel">업종</label><input class="finput" id="f-bizType" value="${esc(c.bizType||'')}" oninput="window._formData.bizType=this.value"></div>
+      <div><label class="flabel">업종코드</label><input class="finput" id="f-bizCode" value="${esc(c.bizCode||'')}" placeholder="예: 743002" maxlength="10" oninput="window._formData.bizCode=this.value"></div>
       <div><label class="flabel">관할세무서</label><input class="finput" id="f-taxOffice" value="${esc(c.taxOffice||'')}" oninput="window._formData.taxOffice=this.value"></div>
     </div>
 
@@ -2643,6 +2723,7 @@ function renderJulgae() {
     <button class="btn-sm" style="background:#e8f5e9;color:#2e7d32;border:1.5px solid #a5d6a7" onclick="bulkJulgae('${pKey}',true)">전체 완료</button>
     <button class="btn-sm" style="background:#fdecea;color:#c62828;border:1.5px solid #ef9a9a" onclick="bulkJulgae('${pKey}',false)">전체 해제</button>
     <button class="btn-sm" style="background:#fff3e0;color:#e65100;border:1.5px solid #ffcc80" onclick="window._julgaeAddToPeriod='${pKey}';openForm(null)">+ 업체 추가</button>
+    <button class="btn-sm" style="background:#f3e5f5;color:#6a1b9a;border:1.5px solid #ce93d8" onclick="printJulgaeList()">🖨 인쇄</button>
   </div>
 
   ${prevPeriods.length>0?`<div style="font-size:12px;color:#888;background:#fffde7;padding:6px 12px;border-radius:8px;margin-bottom:10px">💡 과거 동기(${prevPeriods.map(p=>esc(p.label)).join(', ')}) 수입금액·수수료청구액이 참고로 표시됩니다. (전년·전전년)</div>`:''}
@@ -3158,6 +3239,9 @@ function renderFees() {
       <td style="text-align:center" onclick="toggleMonthlyFee(${c.id},'${ym}')">
         <div class="chk ${collected?'on':''}" style="margin:0 auto;width:26px;height:26px;${collected?'background:#c8e6c9;border-color:#2e7d32;color:#2e7d32':''}">${collected?'💰':''}</div>
       </td>
+      <td style="text-align:center;cursor:pointer" onclick="toggleTaxInvoice(${c.id},'${ym}')" title="세금계산서 발행 여부">
+        <span style="font-size:16px">${((G.taxInvoice||{})[c.id]||{})[ym]?'✅':'☐'}</span>
+      </td>
     </tr>`;
   }).join('');
 
@@ -3224,7 +3308,8 @@ function renderFees() {
         <th style="padding:4px 6px;${_hcStyle('fm_manager')}"><div style="display:flex;align-items:center">${filterPopupBtn('feesManagerFilter','담당자')}${_hcBtn('fm_manager')}</div></th>
         <th style="${_hcStyle('fm_contractDate')}"><div style="display:flex;align-items:center;justify-content:center">수임일${_hcBtn('fm_contractDate')}</div></th>
         <th style="text-align:right;${_hcStyle('fm_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">월수수료${_hcBtn('fm_fee')}</div></th>
-        <th style="width:60px;text-align:center;padding:3px">${feesCycleBtn('feesCollectFilter','수금',['전체','수금','미수금'])}</th>
+        <th style="width:56px;text-align:center;padding:3px">${feesCycleBtn('feesCollectFilter','수금',['전체','수금','미수금'])}</th>
+        <th style="width:52px;text-align:center;font-size:11px">계산서</th>
       </tr></thead>
       <tbody>${monthlyRows}</tbody>
     </table></div>
@@ -3260,6 +3345,33 @@ function renderFees() {
     ${filteredFilingFees.length===0?'<div style="color:#aaa;text-align:center;padding:16px;font-size:13px">필터 조건에 맞는 항목 없음</div>':''}
     ` : '<div style="color:#aaa;text-align:center;padding:20px">신고 수수료 청구 내역 없음 (신고및결재 탭에서 수수료청구액 입력)</div>'}
     </div>
+  </div>
+
+  ${(()=>{
+    const cmsClients=G.clients.filter(c=>c.cms&&c.status!=='해지'&&c.status!=='폐업'&&(c.fee||0)>0);
+    if(!cmsClients.length) return '';
+    return `<div class="card" style="margin-top:4px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div class="card-title" style="margin:0">🏦 CMS 자동이체 현황 (${ym})</div>
+        <span style="font-size:12px;color:#888">${cmsClients.length}개 거래처</span>
+      </div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>거래처명</th><th>대표자</th><th style="text-align:right">이체금액</th><th style="text-align:center;width:70px">이체완료</th></tr></thead>
+        <tbody>${cmsClients.map(c=>`<tr>
+          <td><div class="td-name">${esc(c.name)}</div></td>
+          <td style="font-size:12px">${esc(c.rep||'')}</td>
+          <td style="text-align:right;font-weight:700;color:#7b1fa2">${(c.fee||0).toLocaleString()}원</td>
+          <td style="text-align:center;cursor:pointer" onclick="toggleMonthlyFee(${c.id},'${ym}')">
+            <div class="chk ${(G.monthlyFees[c.id]||{})[ym]?'on':''}" style="margin:0 auto;width:26px;height:26px;${(G.monthlyFees[c.id]||{})[ym]?'background:#c8e6c9;border-color:#2e7d32;color:#2e7d32':''}">${(G.monthlyFees[c.id]||{})[ym]?'💰':''}</div>
+          </td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </div>`;
+  })()}
+
+  <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+    <button onclick="openBulkInvoice()" style="padding:8px 16px;border-radius:10px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">🖨 일괄 청구서 발행</button>
+    <button onclick="openBulkReminder()" style="padding:8px 16px;border-radius:10px;border:1.5px solid #ff9800;background:#fff3e0;color:#e65100;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">📨 미수금 일괄 안내문</button>
   </div>
   `;
 }
@@ -3387,6 +3499,24 @@ function renderAITools() {
       <div style="font-weight:800;font-size:16px;margin-bottom:6px">자료 미제출 알림 문자</div>
       <div style="font-size:13px;color:#777;line-height:1.6">미제출 거래처에 보낼 문자를 AI가 작성합니다</div>
       <div style="margin-top:14px;color:#e65100;font-weight:700;font-size:13px">시작하기 →</div>
+    </button>
+    <button class="tool-card" onclick="openBulkInvoice()">
+      <div class="tool-icon" style="background:#e8f5e9;color:#2e7d32">📄</div>
+      <div style="font-weight:800;font-size:16px;margin-bottom:6px">일괄 청구서 발행</div>
+      <div style="font-size:13px;color:#777;line-height:1.6">여러 거래처 청구서를 한 번에 선택·출력합니다</div>
+      <div style="margin-top:14px;color:#2e7d32;font-weight:700;font-size:13px">시작하기 →</div>
+    </button>
+    <button class="tool-card" onclick="openBulkReminder()">
+      <div class="tool-icon" style="background:#fce4ec;color:#c62828">📨</div>
+      <div style="font-weight:800;font-size:16px;margin-bottom:6px">미수금 일괄 안내문</div>
+      <div style="font-size:13px;color:#777;line-height:1.6">이달 미수금 거래처 안내 문자를 일괄 생성합니다</div>
+      <div style="margin-top:14px;color:#c62828;font-weight:700;font-size:13px">시작하기 →</div>
+    </button>
+    <button class="tool-card" onclick="openFeeRaiseHelper()">
+      <div class="tool-icon" style="background:#f3e5f5;color:#6a1b9a">📈</div>
+      <div style="font-weight:800;font-size:16px;margin-bottom:6px">수수료 자동 인상 도우미</div>
+      <div style="font-size:13px;color:#777;line-height:1.6">인상률 설정 후 전체 거래처 수수료를 일괄 조정합니다</div>
+      <div style="margin-top:14px;color:#6a1b9a;font-weight:700;font-size:13px">시작하기 →</div>
     </button>
   </div>`;
 }
@@ -3824,6 +3954,299 @@ async function runAIReminder() {
       results.innerHTML += `<div style="color:red;margin-top:8px">${esc(c.name)}: 생성 실패</div>`;
     }
   }
+}
+
+// ══════════════════════════════════════════════════════
+// 거래처 메모/이력
+// ══════════════════════════════════════════════════════
+function openClientNotes(id) {
+  window._notesClientId = id;
+  const c = G.clients.find(x=>x.id===id);
+  if (!c) return;
+  const notes = (G.clientNotes||{})[id] || [];
+  showModal(`<div style="max-width:520px">
+  <div class="modal-header"><h3>📝 ${esc(c.name)} — 메모/이력</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+  <div class="modal-body">
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <textarea id="note-input" placeholder="메모 입력..." style="flex:1;padding:8px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;min-height:64px"></textarea>
+      <button onclick="addClientNote(${id})" style="padding:8px 14px;background:#4f8ef7;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-size:13px;white-space:nowrap;align-self:flex-start">+ 추가</button>
+    </div>
+    ${notes.length===0?'<div style="text-align:center;color:#aaa;padding:20px">메모가 없습니다</div>':
+      '<div style="display:flex;flex-direction:column;gap:8px">'+[...notes].reverse().map(n=>`
+        <div style="background:#f8f9ff;border-radius:10px;padding:10px 14px;border-left:3px solid #4f8ef7">
+          <div style="font-size:11px;color:#aaa;margin-bottom:4px">${esc(n.date)}</div>
+          <div style="font-size:13px;white-space:pre-wrap;line-height:1.5">${esc(n.text)}</div>
+          <button onclick="deleteClientNote(${id},'${n.id}')" style="margin-top:6px;padding:2px 8px;border-radius:6px;border:1px solid #ef9a9a;background:#fdecea;color:#c62828;font-size:11px;cursor:pointer;font-family:inherit">삭제</button>
+        </div>`).join('')+'</div>'}
+  </div></div>`);
+}
+function addClientNote(id) {
+  const txt = (document.getElementById('note-input')||{}).value?.trim();
+  if (!txt) return;
+  if (!G.clientNotes) G.clientNotes = {};
+  if (!G.clientNotes[id]) G.clientNotes[id] = [];
+  G.clientNotes[id].push({id:Date.now()+'', date:new Date().toLocaleString('ko-KR'), text:txt});
+  saveToLS();
+  openClientNotes(id);
+}
+function deleteClientNote(clientId, noteId) {
+  if (!G.clientNotes?.[clientId]) return;
+  G.clientNotes[clientId] = G.clientNotes[clientId].filter(n=>n.id!==noteId);
+  saveToLS();
+  openClientNotes(clientId);
+}
+
+// ══════════════════════════════════════════════════════
+// 즐겨찾기
+// ══════════════════════════════════════════════════════
+function toggleFavorite(id) {
+  if (!G.favorites) G.favorites = [];
+  const idx = G.favorites.indexOf(id);
+  if (idx>=0) G.favorites.splice(idx,1);
+  else G.favorites.push(id);
+  saveToLS();
+  renderClients();
+}
+
+// ══════════════════════════════════════════════════════
+// 담당자별 업무량 분석
+// ══════════════════════════════════════════════════════
+function openManagerAnalysis() {
+  const managers = (G.settings?.managers||[]);
+  const thisYM = (()=>{const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');})();
+  const rows = managers.map(m=>{
+    const allC=G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&getManagers(c).includes(m));
+    const monthlyC=allC.filter(c=>getDealTypes(c).some(d=>['기장','고문','성실'].includes(d)));
+    const monthlyFee=monthlyC.reduce((a,c)=>a+(c.fee||0),0);
+    const collected=monthlyC.filter(c=>(G.monthlyFees[c.id]||{})[thisYM]).reduce((a,c)=>a+(c.fee||0),0);
+    const collPct=monthlyFee>0?Math.round(collected/monthlyFee*100):0;
+    let jDone=0,jTotal=0;
+    (G.periods||[]).forEach(p=>{
+      allC.forEach(c=>{
+        const v=julgaeVal(p.id+'|'+(p.reportType||p.type),c.id);
+        if(v&&(v.a!==undefined||v.d!==undefined)){jTotal++;if(v.a)jDone++;}
+      });
+    });
+    const jPct=jTotal>0?Math.round(jDone/jTotal*100):0;
+    return `<tr style="border-bottom:1px solid #f0f0f0">
+      <td style="padding:10px 12px;font-weight:700">${esc(m)}</td>
+      <td style="text-align:center;padding:10px 12px">${allC.length}</td>
+      <td style="text-align:center;padding:10px 12px">${monthlyC.length}</td>
+      <td style="text-align:right;padding:10px 12px;font-weight:600;color:#4f8ef7">${monthlyFee.toLocaleString()}원</td>
+      <td style="text-align:center;padding:10px 12px"><span style="background:${collPct>=80?'#e8f5e9':'#fff3e0'};color:${collPct>=80?'#2e7d32':'#e65100'};padding:2px 8px;border-radius:8px;font-size:12px">${collPct}%</span></td>
+      <td style="text-align:center;padding:10px 12px"><span style="font-size:12px;color:#888">${jDone}/${jTotal} (${jPct}%)</span></td>
+    </tr>`;
+  }).join('');
+  showModal(`<div style="max-width:640px">
+  <div class="modal-header"><h3>👤 담당자별 업무량 분석</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+  <div class="modal-body" style="padding:0">
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr style="background:#f8f9ff;border-bottom:2px solid #e8eaf6">
+        <th style="padding:10px 12px;text-align:left">담당자</th>
+        <th style="padding:10px 12px;text-align:center">전체</th>
+        <th style="padding:10px 12px;text-align:center">월정</th>
+        <th style="padding:10px 12px;text-align:right">월정수수료</th>
+        <th style="padding:10px 12px;text-align:center">이달수납률</th>
+        <th style="padding:10px 12px;text-align:center">신고완료율</th>
+      </tr></thead>
+      <tbody>${rows||'<tr><td colspan="6" style="text-align:center;padding:20px;color:#aaa">담당자 없음</td></tr>'}</tbody>
+    </table>
+  </div></div>`);
+}
+
+// ══════════════════════════════════════════════════════
+// 일괄 청구서 발행
+// ══════════════════════════════════════════════════════
+function openBulkInvoice() {
+  const ym = G.feesYM||(()=>{const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');})();
+  const active=G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&getDealTypes(c).some(d=>['기장','고문','성실'].includes(d))&&(c.fee||0)>0);
+  showModal(`<div style="max-width:560px">
+  <div class="modal-header"><h3>🖨 일괄 청구서 발행</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+  <div class="modal-body">
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+      <label style="font-size:13px;color:#555">청구 월:</label>
+      <input type="month" id="bulk-inv-ym" value="${ym}" style="padding:6px 10px;border:1px solid #e0e0e0;border-radius:8px;font-family:inherit;font-size:13px">
+      <button onclick="document.querySelectorAll('.bulk-inv-chk').forEach(e=>e.checked=true)" style="padding:4px 10px;border-radius:6px;border:1px solid #e0e0e0;font-size:12px;cursor:pointer;font-family:inherit">전체선택</button>
+      <button onclick="document.querySelectorAll('.bulk-inv-chk').forEach(e=>e.checked=false)" style="padding:4px 10px;border-radius:6px;border:1px solid #e0e0e0;font-size:12px;cursor:pointer;font-family:inherit">전체해제</button>
+    </div>
+    <div style="max-height:300px;overflow-y:auto;border:1px solid #f0f0f0;border-radius:8px">
+      ${active.map(c=>`<label style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid #f5f5f5;cursor:pointer">
+        <input type="checkbox" class="bulk-inv-chk" data-id="${c.id}" checked>
+        <span style="flex:1;font-weight:600;font-size:13px">${esc(c.name)}</span>
+        <span style="color:#888;font-size:12px">${esc(c.rep||'')}</span>
+        <span style="color:#4f8ef7;font-size:13px;font-weight:700">${(c.fee||0).toLocaleString()}원</span>
+      </label>`).join('')||'<div style="padding:20px;text-align:center;color:#aaa">대상 거래처 없음</div>'}
+    </div>
+    <button onclick="doBulkInvoice()" style="margin-top:14px;width:100%;padding:12px;background:#4f8ef7;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">🖨 선택 거래처 청구서 출력</button>
+  </div></div>`);
+}
+function doBulkInvoice() {
+  const ym=document.getElementById('bulk-inv-ym')?.value||G.feesYM||'';
+  const ids=[...document.querySelectorAll('.bulk-inv-chk:checked')].map(el=>Number(el.dataset.id));
+  if(!ids.length){alert('거래처를 선택해주세요');return;}
+  const clients=ids.map(id=>G.clients.find(c=>c.id===id)).filter(Boolean);
+  const s=G.settings||{};
+  const ymFmt=ym?ym.slice(0,4)+'년 '+Number(ym.slice(5))+'월':'';
+  const pages=clients.map(c=>`<div style="page-break-after:always;padding:48px;font-family:'Malgun Gothic',sans-serif;max-width:620px;margin:0 auto">
+    <div style="text-align:center;font-size:22px;font-weight:900;margin-bottom:28px;letter-spacing:4px;border-bottom:3px solid #1a1a2e;padding-bottom:16px">수 수 료 청 구 서</div>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:24px;font-size:13px">
+      <tr><td style="padding:8px 12px;border:1px solid #ccc;background:#f5f5f5;width:110px;font-weight:700">거 래 처</td><td style="padding:8px 12px;border:1px solid #ccc;font-size:15px;font-weight:700">${esc(c.name)}</td><td style="padding:8px 12px;border:1px solid #ccc;background:#f5f5f5;width:90px;font-weight:700">대 표 자</td><td style="padding:8px 12px;border:1px solid #ccc">${esc(c.rep||'')}</td></tr>
+      <tr><td style="padding:8px 12px;border:1px solid #ccc;background:#f5f5f5;font-weight:700">청 구 기 간</td><td colspan="3" style="padding:8px 12px;border:1px solid #ccc">${ymFmt}</td></tr>
+      <tr><td style="padding:8px 12px;border:1px solid #ccc;background:#f5f5f5;font-weight:700">청 구 금 액</td><td colspan="3" style="padding:8px 12px;border:1px solid #ccc;font-size:20px;font-weight:900;color:#1565c0">${(c.fee||0).toLocaleString()} 원</td></tr>
+    </table>
+    <div style="background:#f8f9ff;border-radius:8px;padding:16px;font-size:13px;line-height:2">
+      <div><b>입금 계좌:</b> ${esc(s.bank||'')} ${esc(s.account||'')} (예금주: ${esc(s.accountHolder||'')})</div>
+      <div><b>연 락 처:</b> ${esc(s.phone||'')} / ${esc(s.fax||'')} / ${esc(s.email||'')}</div>
+    </div>
+    <div style="margin-top:32px;text-align:right;font-size:13px;color:#555">${new Date().toLocaleDateString('ko-KR')}<br><br>${esc(s.name||'')} 드림</div>
+  </div>`).join('');
+  const w=window.open('','_blank');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>일괄청구서_${ymFmt}</title><style>@media print{.no-print{display:none!important}}</style></head><body>
+    <div class="no-print" style="position:fixed;top:0;left:0;right:0;background:#1a1a2e;color:#fff;padding:8px 16px;display:flex;gap:10px;align-items:center;z-index:999">
+      <button onclick="window.print()" style="padding:7px 18px;background:#4f8ef7;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">🖨 인쇄</button>
+      <span style="font-size:13px">${clients.length}개 거래처 | ${ymFmt}</span>
+    </div>
+    <div style="padding-top:48px">${pages}</div>
+  </body></html>`);
+  w.document.close();
+}
+
+// ══════════════════════════════════════════════════════
+// 미수금 일괄 안내문
+// ══════════════════════════════════════════════════════
+function openBulkReminder() {
+  const thisYM=(()=>{const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');})();
+  const unpaid=G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&getDealTypes(c).some(d=>['기장','고문','성실'].includes(d))&&(c.fee||0)>0&&!(G.monthlyFees[c.id]||{})[thisYM]);
+  const s=G.settings||{};
+  showModal(`<div style="max-width:580px">
+  <div class="modal-header"><h3>📨 미수금 일괄 안내문</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+  <div class="modal-body">
+    <div style="background:#fff3e0;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:#e65100">
+      이달(${thisYM}) 미수 거래처 <b>${unpaid.length}개</b> — 복사 버튼으로 문자 내용을 복사하세요
+    </div>
+    ${unpaid.length===0?'<div style="text-align:center;color:#aaa;padding:24px;font-size:14px">🎉 미수금 거래처가 없습니다</div>':
+      unpaid.map(c=>{
+        const msg=`[${s.name||'세무사무소'}] ${c.rep||c.name}님, ${thisYM.slice(5)}월 기장료 ${(c.fee||0).toLocaleString()}원 납부 부탁드립니다. 계좌: ${s.bank||''} ${s.account||''}`;
+        return `<div style="margin-bottom:10px;background:#f8f9ff;border-radius:8px;padding:10px 14px">
+          <div style="font-weight:700;font-size:13px;margin-bottom:6px">${esc(c.name)} <span style="font-weight:400;color:#888;font-size:12px">(${esc(c.rep||'')})</span></div>
+          <div class="sms-text-${c.id}" style="font-size:12px;background:#fff;border:1px solid #e0e0e0;border-radius:6px;padding:8px 10px;line-height:1.6;word-break:break-all">${esc(msg)}</div>
+          <button onclick="(function(el,btn){navigator.clipboard.writeText(el.textContent).then(()=>{btn.textContent='✅ 복사됨';setTimeout(()=>btn.textContent='📋 복사',2000)}).catch(()=>{})})(this.previousElementSibling,this)" style="margin-top:6px;padding:3px 12px;border-radius:6px;border:1px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;font-size:11px;cursor:pointer;font-family:inherit">📋 복사</button>
+        </div>`;
+      }).join('')}
+  </div></div>`);
+}
+
+// ══════════════════════════════════════════════════════
+// 신고목록 인쇄
+// ══════════════════════════════════════════════════════
+function printJulgaeList() {
+  const period=(G.periods||[])[G.julgaePeriodIdx||0];
+  if(!period){alert('신고 기간을 먼저 선택해주세요');return;}
+  const pKey2=period.id+'|'+(period.reportType||period.type);
+  const clients=getJulgaeClients(period)||[];
+  const s=G.settings||{};
+  const rows=clients.map((c,i)=>{
+    const v=julgaeVal(pKey2,c.id);
+    return `<tr>
+      <td style="text-align:center">${i+1}</td>
+      <td style="font-weight:700">${esc(c.name)}</td>
+      <td>${esc(c.rep||'')}</td>
+      <td style="text-align:center">${getManagers(c).join(', ')||'-'}</td>
+      <td style="text-align:center">${v.d?'✓':''}</td>
+      <td style="text-align:center">${v.b?'✓':''}</td>
+      <td style="text-align:center">${v.a?'✓':''}</td>
+      <td style="text-align:right">${(v.fee||0).toLocaleString()}</td>
+      <td style="text-align:center">${v.s?'✓':''}</td>
+    </tr>`;
+  }).join('');
+  const doneCount=clients.filter(c=>julgaeVal(pKey2,c.id).a).length;
+  const w=window.open('','_blank');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(period.label)} 신고목록</title>
+  <style>body{font-family:'Malgun Gothic',sans-serif;font-size:12px;margin:24px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:5px 8px}th{background:#f0f0f0;font-weight:700;text-align:center}tr:nth-child(even){background:#fafafa}@media print{.no-print{display:none!important}}</style>
+  </head><body>
+  <div class="no-print" style="margin-bottom:12px"><button onclick="window.print()" style="padding:6px 16px;background:#4f8ef7;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px">🖨 인쇄</button></div>
+  <div style="margin-bottom:12px">
+    <div style="font-size:18px;font-weight:900;margin-bottom:4px">${esc(period.label)} 신고 목록</div>
+    <div style="font-size:12px;color:#666">${esc(s.name||'')} | 출력일: ${new Date().toLocaleDateString('ko-KR')} | 총 ${clients.length}개 거래처 | 완료 ${doneCount}개 (${clients.length>0?Math.round(doneCount/clients.length*100):0}%)</div>
+  </div>
+  <table>
+    <thead><tr><th width="32">번</th><th>거래처명</th><th>대표자</th><th>담당자</th><th width="40">자료</th><th width="40">기장</th><th width="40">결재</th><th width="90">수수료(원)</th><th width="40">수금</th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="9" style="text-align:center;padding:20px;color:#aaa">대상 거래처 없음</td></tr>'}</tbody>
+  </table>
+  </body></html>`);
+  w.document.close();
+}
+
+// ══════════════════════════════════════════════════════
+// 세금계산서 발행 여부
+// ══════════════════════════════════════════════════════
+function toggleTaxInvoice(clientId, ym) {
+  if(!G.taxInvoice) G.taxInvoice={};
+  if(!G.taxInvoice[clientId]) G.taxInvoice[clientId]={};
+  G.taxInvoice[clientId][ym]=!G.taxInvoice[clientId][ym];
+  saveToLS();
+  renderFees();
+}
+
+// ══════════════════════════════════════════════════════
+// 수수료 자동 인상 도우미
+// ══════════════════════════════════════════════════════
+function openFeeRaiseHelper() {
+  const active=G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&(c.fee||0)>0);
+  window._feeRaiseClients=active;
+  showModal(`<div style="max-width:560px">
+  <div class="modal-header"><h3>📈 수수료 자동 인상 도우미</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+  <div class="modal-body">
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;background:#f8f9ff;padding:12px 16px;border-radius:10px;flex-wrap:wrap">
+      <label style="font-size:13px;color:#555">인상률</label>
+      <input type="number" id="raise-pct" value="5" min="1" max="100" style="width:64px;padding:6px;border:1px solid #e0e0e0;border-radius:6px;font-size:13px;font-family:inherit" oninput="previewFeeRaise()">
+      <span style="font-size:13px;color:#555">%</span>
+      <label style="font-size:13px;color:#555;margin-left:8px">반올림</label>
+      <select id="raise-round" onchange="previewFeeRaise()" style="padding:6px;border:1px solid #e0e0e0;border-radius:6px;font-size:13px;font-family:inherit">
+        <option value="1000">1,000원</option>
+        <option value="10000">10,000원</option>
+        <option value="100">100원</option>
+        <option value="1">1원</option>
+      </select>
+    </div>
+    <div id="raise-preview" style="max-height:300px;overflow-y:auto;border:1px solid #f0f0f0;border-radius:8px"></div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button onclick="applyFeeRaise()" style="flex:1;padding:11px;background:#e53935;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">⚡ 일괄 적용</button>
+      <button onclick="closeModal()" style="padding:11px 20px;background:#f5f5f5;color:#555;border:none;border-radius:10px;font-size:14px;cursor:pointer;font-family:inherit">취소</button>
+    </div>
+  </div></div>`);
+  previewFeeRaise();
+}
+function previewFeeRaise() {
+  const pct=Number(document.getElementById('raise-pct')?.value)||5;
+  const roundTo=Number(document.getElementById('raise-round')?.value)||1000;
+  const clients=window._feeRaiseClients||[];
+  const rows=clients.map(c=>{
+    const newFee=Math.round((c.fee||0)*(1+pct/100)/roundTo)*roundTo;
+    const diff=newFee-(c.fee||0);
+    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #f5f5f5">
+      <span style="flex:1;font-weight:600;font-size:13px">${esc(c.name)}</span>
+      <span style="color:#888;font-size:12px">${(c.fee||0).toLocaleString()}원</span>
+      <span style="color:#aaa">→</span>
+      <span style="color:#1565c0;font-weight:700;font-size:13px">${newFee.toLocaleString()}원</span>
+      <span style="color:#2e7d32;font-size:11px;min-width:60px;text-align:right">+${diff.toLocaleString()}</span>
+    </div>`;
+  }).join('');
+  const preview=document.getElementById('raise-preview');
+  if(preview) preview.innerHTML=rows||'<div style="padding:16px;text-align:center;color:#aaa">대상 거래처 없음</div>';
+}
+function applyFeeRaise() {
+  if(!confirm('수수료를 인상하시겠습니까?\n이 작업은 되돌릴 수 없습니다.'))return;
+  const pct=Number(document.getElementById('raise-pct')?.value)||5;
+  const roundTo=Number(document.getElementById('raise-round')?.value)||1000;
+  (window._feeRaiseClients||[]).forEach(c=>{
+    const cl=G.clients.find(x=>x.id===c.id);
+    if(cl) cl.fee=Math.round((cl.fee||0)*(1+pct/100)/roundTo)*roundTo;
+  });
+  saveToLS();
+  closeModal();
+  renderClients();
+  alert('수수료 인상이 완료되었습니다.');
 }
 
 // ══════════════════════════════════════════════════════
@@ -4292,6 +4715,9 @@ async function loadFromFirebase() {
       G.settings    = data.settings    ? JSON.parse(data.settings)    : G.settings;
       G.monthlyFees = data.monthlyFees ? JSON.parse(data.monthlyFees) : {};
       G.invoiceData = data.invoiceData ? JSON.parse(data.invoiceData) : {};
+      G.clientNotes = data.clientNotes ? JSON.parse(data.clientNotes) : {};
+      G.taxInvoice  = data.taxInvoice  ? JSON.parse(data.taxInvoice)  : {};
+      G.favorites   = data.favorites   ? JSON.parse(data.favorites)   : [];
     } else {
       // 신규 계정: 로컬스토리지 데이터 마이그레이션 시도
       const saved = localStorage.getItem('tm_clients');
@@ -4307,6 +4733,9 @@ async function loadFromFirebase() {
         G.monthlyFees = smf ? JSON.parse(smf) : {};
         const sid = localStorage.getItem('tm_invoiceData');
         G.invoiceData = sid ? JSON.parse(sid) : {};
+        G.clientNotes = JSON.parse(localStorage.getItem('tm_clientNotes')||'{}');
+        G.taxInvoice  = JSON.parse(localStorage.getItem('tm_taxInvoice')||'{}');
+        G.favorites   = JSON.parse(localStorage.getItem('tm_favorites')||'[]');
         saveToLS(); // Firebase에 업로드
       } else {
         const json = await decompressB64(CLIENTS_B64);
@@ -4328,6 +4757,9 @@ async function loadFromFirebase() {
     G.monthlyFees = smf ? JSON.parse(smf) : {};
     const sid2 = localStorage.getItem('tm_invoiceData');
     G.invoiceData = sid2 ? JSON.parse(sid2) : {};
+    G.clientNotes = JSON.parse(localStorage.getItem('tm_clientNotes')||'{}');
+    G.taxInvoice  = JSON.parse(localStorage.getItem('tm_taxInvoice')||'{}');
+    G.favorites   = JSON.parse(localStorage.getItem('tm_favorites')||'[]');
   }
   migrateJulgae();
   if (G.settings.managers) MANAGERS = ['전체', ...G.settings.managers];
