@@ -4143,7 +4143,10 @@ function printJulgaeList() {
   const period=(G.periods||[])[G.julgaePeriodIdx||0];
   if(!period){alert('신고 기간을 먼저 선택해주세요');return;}
   const pKey2=period.id+'|'+(period.reportType||period.type);
-  const clients=getJulgaeClients(period)||[];
+  const allClients = period.enrolled?.length
+    ? period.enrolled.map(id=>G.clients.find(c=>c.id===id)).filter(Boolean)
+    : applyReportFilter(G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'), period);
+  const clients = allClients;
   const s=G.settings||{};
   const rows=clients.map((c,i)=>{
     const v=julgaeVal(pKey2,c.id);
