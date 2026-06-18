@@ -3358,6 +3358,29 @@ function renderJulgae() {
     ['j_fee','수수료청구'],['j_collect','수금'],['j_link','자료링크'],
   ]);
 
+  // 주민번호/법인등록번호 기준 그룹화 (소득세·법인세·성실·사업장 유형)
+  const _jGrpNorm = c => (c.jumin||'').replace(/[-\s]/g,'');
+  const renderItems = [];
+  if (isIncomeType || isSajupType) {
+    const jMap = {};
+    clients.forEach(c => { const k=_jGrpNorm(c); if(k)(jMap[k]=jMap[k]||[]).push(c); });
+    const seenGrp = new Set();
+    clients.forEach(c => {
+      const k = _jGrpNorm(c);
+      if (!k || !jMap[k] || jMap[k].length <= 1) {
+        renderItems.push({c, isGroupHeader:false, isGroupChild:false});
+      } else if (!seenGrp.has(k)) {
+        seenGrp.add(k);
+        const gc = jMap[k];
+        const expanded = !!(G.julgaeExpandedGroups||{})[k];
+        renderItems.push({c:gc[0], isGroupHeader:true, groupKey:k, groupClients:gc, expanded});
+        if (expanded) gc.forEach(m => renderItems.push({c:m, isGroupHeader:false, isGroupChild:true, groupKey:k}));
+      }
+    });
+  } else {
+    clients.forEach(c => renderItems.push({c, isGroupHeader:false, isGroupChild:false}));
+  }
+
   document.getElementById('page-julgae').innerHTML = `
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
     <h2 style="font-size:20px;font-weight:800">신고 및 결재</h2>
@@ -3559,7 +3582,8 @@ function renderJulgae() {
       <th style="width:44px;text-align:center;padding:3px;${_hcStyle('j_link')}"><div style="display:flex;align-items:center"><span style="font-size:11px">자료링크</span>${_hcBtn('j_link')}</div></th>
     </tr></thead>
     <tbody>
-    ${clients.map((c, i) => {
+    ${renderItems.map((item, i) => {
+      const c = item.c;
       const v = julgaeVal(pKey2, c.id);
       const prev1 = prevMap1[c.id];
       const prev2 = prevMap2[c.id];
@@ -3575,7 +3599,7 @@ function renderJulgae() {
       ].join('');
       const autoFee  = v.fee       || (c[feeFieldKey]   || 0);
       const autoFee2 = v.feeSeongsi || (c.feeSeongsi     || 0);
-      const rowBg = v.s?'#e8f5e9':v.a?'#f1f8e9':'#fff';
+      const rowBg = item.isGroupHeader?'#f3e5f5':item.isGroupChild?'#fdf8fe':v.s?'#e8f5e9':v.a?'#f1f8e9':'#fff';
       const margin = (v.revenue&&v.income) ? (v.income/v.revenue*100).toFixed(1) : null;
       const _revVal4bosu = isVatType ? (v.salesAmount||0) : (v.revenue||0);
       const _bosuRec = getBosuFeeRec(_revVal4bosu, period.reportType);
@@ -3585,7 +3609,12 @@ function renderJulgae() {
       return `<tr id="jr-${pKey2}-${c.id}" style="background:${rowBg}">
         ${G.julgaeBulkMode?`<td style="text-align:center;width:32px" onclick="event.stopPropagation();toggleJulgaeSelect(${c.id})"><input type="checkbox" ${(G.julgaeBulkSelected||[]).includes(c.id)?'checked':''} style="width:16px;height:16px;cursor:pointer" onclick="event.stopPropagation();toggleJulgaeSelect(${c.id})"></td>`:''}
         <td style="color:#aaa;font-size:11px">${i+1}</td>
-        <td><div class="td-name">${esc(c.name)}</div></td>
+        <td>${item.isGroupHeader
+          ?`<div style="display:flex;align-items:center;gap:6px"><button onclick="event.stopPropagation();toggleJulgaeGroup('${item.groupKey}')" style="border:none;background:none;cursor:pointer;font-size:13px;padding:0 2px;color:#7b1fa2">${item.expanded?'▼':'▶'}</button><div class="td-name">${esc(c.name)}</div><span style="background:#7b1fa2;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;white-space:nowrap">외 ${item.groupClients.length-1}개</span></div>`
+          :item.isGroupChild
+            ?`<div style="display:flex;align-items:center;gap:4px;padding-left:22px"><span style="color:#ccc;font-size:11px">└</span><div class="td-name" style="font-size:12px">${esc(c.name)}</div></div>`
+            :`<div class="td-name">${esc(c.name)}</div>`
+        }</td>
         <td style="font-size:12px;color:#444;${hc['j_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
         <td style="color:#555;font-size:12px;${hc['j_manager']?'display:none':''}">${getManagers(c).join(', ')||'-'}</td>
         <td style="text-align:center;${hc['j_data']?'display:none':''}" onclick="toggleJulgaeField('${pKey2}',${c.id},'d')">
@@ -3635,11 +3664,14 @@ function renderJulgae() {
           <div class="chk ${v.s?'on':''}" style="margin:0 auto;width:24px;height:24px;${v.s?'background:#c8e6c9;border-color:#2e7d32;color:#2e7d32':''}">${v.s?'💰':''}</div>
         </td>
         <td style="text-align:center;padding:4px;${hc['j_link']?'display:none':''}">
-          ${(()=>{const lk=(G.julgaeLinks||{})[pKey2+'_'+c.id];return lk?`<a href="${esc(lk)}" target="_blank" title="${esc(lk)}" style="font-size:14px;text-decoration:none">🔗</a><button onclick="event.stopPropagation();openJulgaeLink('${pKey2}',${c.id})" style="font-size:10px;padding:1px 4px;border:none;background:none;cursor:pointer;color:#888" title="링크 수정">✎</button>`:`<button onclick="event.stopPropagation();openJulgaeLink('${pKey2}',${c.id})" style="font-size:11px;padding:2px 6px;border-radius:5px;border:1px solid #e0e0e0;background:#f9f9f9;cursor:pointer;font-family:inherit;color:#aaa">+</button>`;})()}
+          ${item.isGroupChild
+            ?`<button onclick="event.stopPropagation();removeFromJulgaeGroup('${pKey2}',${c.id})" style="font-size:11px;padding:2px 7px;border-radius:6px;border:1.5px solid #e53935;background:#ffebee;color:#e53935;cursor:pointer;font-family:inherit" title="이 거래처를 목록에서 제거">✕</button>`
+            :(()=>{const lk=(G.julgaeLinks||{})[pKey2+'_'+c.id];return lk?`<a href="${esc(lk)}" target="_blank" title="${esc(lk)}" style="font-size:14px;text-decoration:none">🔗</a><button onclick="event.stopPropagation();openJulgaeLink('${pKey2}',${c.id})" style="font-size:10px;padding:1px 4px;border:none;background:none;cursor:pointer;color:#888" title="링크 수정">✎</button>`:`<button onclick="event.stopPropagation();openJulgaeLink('${pKey2}',${c.id})" style="font-size:11px;padding:2px 6px;border-radius:5px;border:1px solid #e0e0e0;background:#f9f9f9;cursor:pointer;font-family:inherit;color:#aaa">+</button>`;})()
+          }
         </td>
       </tr>`;
     }).join('')}
-    ${clients.length===0?`<tr><td colspan="${totalCols}" style="text-align:center;padding:40px;color:#aaa">해당 조건의 거래처가 없습니다</td></tr>`:''}
+    ${renderItems.length===0?`<tr><td colspan="${totalCols}" style="text-align:center;padding:40px;color:#aaa">해당 조건의 거래처가 없습니다</td></tr>`:''}
     </tbody>
   </table></div>
   ${G.julgaeBulkMode&&(G.julgaeBulkSelected||[]).length?`
@@ -3654,6 +3686,24 @@ function renderJulgae() {
   </div>`:''}`}
   ` : ''}
   `}`;
+}
+
+function toggleJulgaeGroup(key) {
+  if (!G.julgaeExpandedGroups) G.julgaeExpandedGroups = {};
+  G.julgaeExpandedGroups[key] = !G.julgaeExpandedGroups[key];
+  renderJulgae();
+}
+
+function removeFromJulgaeGroup(pKey2, clientId) {
+  const period = G.periods[G.julgaePeriodIdx];
+  if (!period) return;
+  if (!period.enrolled || period.enrolled.length === 0) {
+    const base = G.clients.filter(c => c.status !== '해지' && c.status !== '폐업');
+    period.enrolled = applyReportFilter(base, period).map(c => c.id);
+  }
+  period.enrolled = period.enrolled.filter(id => id !== clientId);
+  saveToLS();
+  renderJulgae();
 }
 
 function toggleJulgaeField(pKey, clientId, field) {
@@ -3889,31 +3939,7 @@ function saveEnrollment(pKey) {
     }
   }
 
-  const isCorpTax = period.reportType === 'corp';
-  if (isIncome || isCorpTax) {
-    const juminGroups = {};
-    enrolledClients.forEach(c => {
-      const key = (c.jumin||'').replace(/[-\s]/g,'');
-      if (!key) return;
-      if (!juminGroups[key]) juminGroups[key] = [];
-      juminGroups[key].push(c);
-    });
-    const dups = Object.values(juminGroups).filter(g => g.length > 1);
-    if (dups.length > 0) {
-      const lbl = isCorpTax ? '법인등록번호' : '주민번호';
-      const taxLabel = isCorpTax ? '법인세는 법인별로' : '소득세는 개인별로';
-      const dupRows = dups.map(g => `<div style="padding:6px 10px;background:#fff8e1;border-radius:6px;font-size:13px;color:#5d4037">· ${esc(g.map(c=>c.name).join(', '))}</div>`).join('');
-      showModal(`<div style="max-width:420px">
-        <div class="modal-header"><h3 style="color:#e65100">⚠ 중복 신고 감지</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
-        <div class="modal-body">
-          <p style="font-size:14px;margin-bottom:12px">${esc(taxLabel)} 신고합니다.<br>동일 <strong>${esc(lbl)}</strong>를 가진 거래처가 중복 포함되어 있습니다.</p>
-          <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">${dupRows}</div>
-          <p style="font-size:12px;color:#888">중복 거래처를 직접 확인하고 제거해 주세요.</p>
-          <button onclick="closeModal()" style="width:100%;padding:11px;background:#e65100;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">확인</button>
-        </div>
-      </div>`);
-    }
-  }
+  // 주민번호/법인등록번호 중복은 renderJulgae에서 자동 그룹화로 처리됨
 
   // 전체 선택 시 enrolled를 비워서 "자동 분류" 상태로 복귀
   G.periods[idx].enrolled = checked.length === total ? [] : checked;
