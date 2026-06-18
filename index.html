@@ -374,6 +374,8 @@ let G = {
   julgaeDataFilter: '전체',
   julgaeBookFilter: '전체',
   julgaeDoneFilter: '전체',
+  julgaeSort: 'name',
+  julgaeSortDir: 'asc',
   dashMonthlyView: null,
   dashFilingView: null,
   clientPage: 0,
@@ -3331,16 +3333,26 @@ function renderJulgae() {
   const _jDir  = G.julgaeSortDir === 'desc' ? -1 : 1;
   const _taxOrder = {'법인':0, '개인':1};
   const _statusScore = c => { const v=julgaeVal(pKey2,c.id); return (v.s?8:0)+(v.a?4:0)+(v.b?2:0)+(v.d?1:0); };
+  const _contractPrio = {'기장_일반':0,'기장_간이':1,'기장_면세':2,'신고대리_부가세':10,'신고대리_면세':11,'종소세신고대리':12,'법인세':20,'세무조정':21,'연말정산':30,'원천세':31};
+  const _contractScore = c => { const cs=c.contracts||[]; return cs.length?Math.min(...cs.map(k=>_contractPrio[k]??50)):999; };
   clients = [...clients].sort((a, b) => {
     let d = 0;
-    if (_jSort === 'taxType')   d = ((_taxOrder[a.taxType]??2) - (_taxOrder[b.taxType]??2));
+    if (_jSort === 'taxType')       d = ((_taxOrder[a.taxType]??2) - (_taxOrder[b.taxType]??2));
     else if (_jSort === 'manager')  d = (getManagers(a)[0]||'힙').localeCompare(getManagers(b)[0]||'힙','ko');
-    else if (_jSort === 'contract') d = ((a.contracts||[])[0]||'힙').localeCompare((b.contracts||[])[0]||'힙','ko');
+    else if (_jSort === 'contract') d = _contractScore(a) - _contractScore(b);
     else if (_jSort === 'status')   d = _statusScore(a) - _statusScore(b);
     else if (_jSort === 'fee')      d = _jFeeSum(b) - _jFeeSum(a);
+    else if (_jSort === 'contractDate') d = (a.contractDate||'').localeCompare(b.contractDate||'');
     else d = a.name.localeCompare(b.name, 'ko');
     return d !== 0 ? _jDir * d : a.name.localeCompare(b.name, 'ko');
   });
+
+  // 구분선 삽입 헬퍼 (taxType·manager 정렬 시)
+  const _needsSep = _jSort === 'taxType' || _jSort === 'manager';
+  const _getSepLabel = c => _jSort === 'taxType'
+    ? (c.taxType === '법인' ? '법인' : '개인')
+    : (getManagers(c)[0] || '담당자 미지정');
+  let _sepPrev = null;
 
   const niInput = (cid, field, val, extraStyle='') =>
     `<input type="number" class="julgae-num-input" value="${val||''}" placeholder="0"
@@ -3377,6 +3389,13 @@ function renderJulgae() {
   // 주민번호/법인등록번호 기준 그룹화 (소득세·법인세·성실·사업장 유형)
   const _jGrpNorm = c => (c.jumin||'').replace(/[-\s]/g,'');
   const renderItems = [];
+  const _pushClient = (c, opts={}) => {
+    if (_needsSep) {
+      const sk = _getSepLabel(c);
+      if (sk !== _sepPrev) { renderItems.push({isSeparator:true, label:sk}); _sepPrev = sk; }
+    }
+    renderItems.push({c, isGroupHeader:false, isGroupChild:false, ...opts});
+  };
   if (isIncomeType || isSajupType) {
     const jMap = {};
     clients.forEach(c => { const k=_jGrpNorm(c); if(k)(jMap[k]=jMap[k]||[]).push(c); });
@@ -3384,17 +3403,18 @@ function renderJulgae() {
     clients.forEach(c => {
       const k = _jGrpNorm(c);
       if (!k || !jMap[k] || jMap[k].length <= 1) {
-        renderItems.push({c, isGroupHeader:false, isGroupChild:false});
+        _pushClient(c);
       } else if (!seenGrp.has(k)) {
         seenGrp.add(k);
         const gc = jMap[k];
         const expanded = !!(G.julgaeExpandedGroups||{})[k];
+        if (_needsSep) { const sk=_getSepLabel(gc[0]); if(sk!==_sepPrev){renderItems.push({isSeparator:true,label:sk});_sepPrev=sk;} }
         renderItems.push({c:gc[0], isGroupHeader:true, groupKey:k, groupClients:gc, expanded});
         if (expanded) gc.forEach(m => renderItems.push({c:m, isGroupHeader:false, isGroupChild:true, groupKey:k}));
       }
     });
   } else {
-    clients.forEach(c => renderItems.push({c, isGroupHeader:false, isGroupChild:false}));
+    clients.forEach(c => _pushClient(c));
   }
 
   document.getElementById('page-julgae').innerHTML = `
@@ -3564,15 +3584,16 @@ function renderJulgae() {
 
   <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap">
     <span style="font-size:12px;color:#888;font-weight:600">정렬:</span>
-    <select onchange="G.julgaeSort=this.value;renderJulgae()" style="font-size:12px;padding:3px 8px;border-radius:6px;border:1px solid #e0e0e0;font-family:inherit;cursor:pointer">
+    <select onchange="G.julgaeSort=this.value;try{localStorage.setItem('tm_uiPrefs',JSON.stringify({julgaeSort:G.julgaeSort,julgaeSortDir:G.julgaeSortDir}))}catch(e){}renderJulgae()" style="font-size:12px;padding:3px 8px;border-radius:6px;border:1px solid #e0e0e0;font-family:inherit;cursor:pointer">
       <option value="name" ${(G.julgaeSort||'name')==='name'?'selected':''}>거래처명</option>
       <option value="taxType" ${G.julgaeSort==='taxType'?'selected':''}>법인/개인</option>
       <option value="manager" ${G.julgaeSort==='manager'?'selected':''}>담당자별</option>
       <option value="contract" ${G.julgaeSort==='contract'?'selected':''}>수임내용별</option>
+      <option value="contractDate" ${G.julgaeSort==='contractDate'?'selected':''}>수임일자</option>
       <option value="status" ${G.julgaeSort==='status'?'selected':''}>진행상태</option>
       <option value="fee" ${G.julgaeSort==='fee'?'selected':''}>수수료</option>
     </select>
-    <button onclick="G.julgaeSortDir=(G.julgaeSortDir||'asc')==='asc'?'desc':'asc';renderJulgae()" style="padding:3px 10px;border-radius:6px;border:1px solid ${(G.julgaeSortDir||'asc')==='desc'?'#4f8ef7':'#e0e0e0'};background:${(G.julgaeSortDir||'asc')==='desc'?'#e8f0fe':'#f5f5f5'};color:${(G.julgaeSortDir||'asc')==='desc'?'#1565c0':'#555'};font-size:12px;cursor:pointer;font-family:inherit">
+    <button onclick="G.julgaeSortDir=(G.julgaeSortDir||'asc')==='asc'?'desc':'asc';try{localStorage.setItem('tm_uiPrefs',JSON.stringify({julgaeSort:G.julgaeSort,julgaeSortDir:G.julgaeSortDir}))}catch(e){}renderJulgae()" style="padding:3px 10px;border-radius:6px;border:1px solid ${(G.julgaeSortDir||'asc')==='desc'?'#4f8ef7':'#e0e0e0'};background:${(G.julgaeSortDir||'asc')==='desc'?'#e8f0fe':'#f5f5f5'};color:${(G.julgaeSortDir||'asc')==='desc'?'#1565c0':'#555'};font-size:12px;cursor:pointer;font-family:inherit">
       ${(G.julgaeSortDir||'asc')==='asc'?'↑ 오름차순':'↓ 내림차순'}
     </button>
   </div>
@@ -3613,6 +3634,7 @@ function renderJulgae() {
     </tr></thead>
     <tbody>
     ${renderItems.map((item, i) => {
+      if (item.isSeparator) return `<tr><td colspan="${totalCols}" style="background:#ede7f6;padding:5px 14px;font-size:12px;font-weight:700;color:#4a148c;letter-spacing:.5px;border-top:2px solid #ce93d8">${esc(item.label)}</td></tr>`;
       const c = item.c;
       const v = julgaeVal(pKey2, c.id);
       const prev1 = prevMap1[c.id];
@@ -7027,6 +7049,7 @@ async function loadFromFirebase() {
   }
   // Apply dark mode if saved
   if (localStorage.getItem('tm_darkMode')) { G.darkMode=true; document.body.classList.add('dark-mode'); }
+  try { const _up=JSON.parse(localStorage.getItem('tm_uiPrefs')||'{}'); if(_up.julgaeSort)G.julgaeSort=_up.julgaeSort; if(_up.julgaeSortDir)G.julgaeSortDir=_up.julgaeSortDir; } catch(e){}
   migrateJulgae();
   if (G.settings.managers) MANAGERS = ['전체', ...G.settings.managers];
   updateBadge();
