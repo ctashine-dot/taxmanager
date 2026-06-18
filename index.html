@@ -257,6 +257,7 @@ body.dark-mode .overlay { background: rgba(0,0,0,.65); }
     <button class="hbtn blue" onclick="openExcel()">↓ 엑셀</button>
     <button class="hbtn" id="save-btn" onclick="manualSave()" style="background:rgba(46,125,50,.3);color:#81c784">💾 저장</button>
     <span id="save-toast" style="display:none;font-size:12px;color:#81c784;font-weight:700">✔ 저장됨</span>
+    <span id="save-error-toast" style="display:none;font-size:12px;color:#e53935;font-weight:700;margin-left:8px"></span>
     <span id="user-name" style="display:none;font-size:12px;color:#aaa;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
     <button class="hbtn" id="logout-btn" onclick="signOutUser()" style="display:none;background:rgba(255,255,255,.08);color:#aaa">로그아웃</button>
   </div>
@@ -415,6 +416,7 @@ let G = {
   julgaeBulkMode: false,
   julgaeBulkSelected: [],
   filterRisk: '',
+  clientSort: { field: 'n', dir: 'asc' },
   periodNotes: {},
   julgaeLinks: {},
   feePayments: {},
@@ -576,7 +578,10 @@ function saveToLS() {
     localStorage.setItem('tm_julgaeLinks', JSON.stringify(G.julgaeLinks||{}));
     localStorage.setItem('tm_feePayments', JSON.stringify(G.feePayments||{}));
     localStorage.setItem('tm_filterPresets', JSON.stringify(G.filterPresets||[]));
-  } catch(e) {}
+  } catch(e) {
+    console.error('로컬 저장 실패:', e);
+    showSaveError('로컬 저장 공간이 부족합니다');
+  }
   if (G.user) {
     fbDb.ref('taxmanager/' + G.user.uid).set({
       clients:     JSON.stringify(G.clients),
@@ -599,8 +604,19 @@ function saveToLS() {
       julgaeLinks: JSON.stringify(G.julgaeLinks||{}),
       feePayments: JSON.stringify(G.feePayments||{}),
       filterPresets: JSON.stringify(G.filterPresets||[]),
-    }).catch(e => console.error('Firebase 저장 실패:', e));
+    }).catch(e => {
+      console.error('Firebase 저장 실패:', e);
+      showSaveError('클라우드 저장 실패 — 로컬에만 저장됨');
+    });
   }
+}
+
+function showSaveError(msg) {
+  const el = document.getElementById('save-error-toast');
+  if (!el) return;
+  el.textContent = '⚠ ' + msg;
+  el.style.display = 'inline';
+  setTimeout(()=>{ el.style.display='none'; }, 4000);
 }
 
 let MANAGERS = ['전체','이슬빈','이현주','정여주','최수이'];
@@ -781,6 +797,20 @@ function filteredClients() {
       return 30;
     };
     return list.sort((a, b) => score(b) - score(a));
+  }
+
+  // 정렬 적용
+  const {field, dir} = G.clientSort || {field:'n', dir:'asc'};
+  if (field !== 'n' || dir !== 'asc') {
+    list.sort((a,b) => {
+      let av, bv;
+      if (field === 'n') { av = a.name||''; bv = b.name||''; return dir==='asc' ? av.localeCompare(bv,'ko') : bv.localeCompare(av,'ko'); }
+      if (field === 'f') { av = a.fee||0; bv = b.fee||0; return dir==='asc' ? av-bv : bv-av; }
+      if (field === 'm') { av = getManagers(a)[0]||''; bv = getManagers(b)[0]||''; return dir==='asc' ? av.localeCompare(bv,'ko') : bv.localeCompare(av,'ko'); }
+      if (field === 'o') { av = a.taxOffice||''; bv = b.taxOffice||''; return dir==='asc' ? av.localeCompare(bv,'ko') : bv.localeCompare(av,'ko'); }
+      return 0;
+    });
+    return list;
   }
 
   return list.sort((a, b) => {
@@ -1242,6 +1272,7 @@ function renderClients() {
     <h2 style="font-size:20px;font-weight:800">거래처 목록</h2>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       ${hiddenChips}
+      ${(()=>{const sortLabels={n:'이름',f:'수수료',m:'담당자',o:'지역'};const sortDir=(G.clientSort||{dir:'asc'}).dir;const sortField=(G.clientSort||{field:'n'}).field;return`<span style="font-size:12px;color:#888">정렬:</span><select style="font-size:12px;padding:5px 8px;border:1.5px solid #e0e0e0;border-radius:8px;background:#f5f5f5;cursor:pointer;font-family:inherit" onchange="G.clientSort={field:this.value.split('_')[0],dir:this.value.split('_')[1]};G.clientPage=0;renderClients()">${['n_asc','n_desc','f_asc','f_desc','m_asc','m_desc','o_asc'].map(v=>{const [f,d]=v.split('_');const label=sortLabels[f]+(d==='asc'?'↑':'↓');return\`<option value="\${v}"\${sortField===f&&sortDir===d?' selected':''}>\${label}</option>\`;}).join('')}</select>`;})()}
       <button class="btn-sm" style="background:${G.editMode?'#e8f5e9':'#f5f5f5'};color:${G.editMode?'#2e7d32':'#888'};border:2px solid ${G.editMode?'#43a047':'#e0e0e0'}" onclick="toggleEditMode()">${G.editMode?'✓ 수정모드 ON':'✏ 수정모드'}</button>
       <button class="btn-sm" style="background:${G.showTerminated?'#fff3e0':'#f5f5f5'};color:${G.showTerminated?'#e65100':'#888'};border:2px solid ${G.showTerminated?'#ffcc02':'#e0e0e0'}" onclick="toggleTerminated()">${G.showTerminated?'▲ 해지·폐업 숨기기':'해지·폐업 보기 ('+terminated+')'}</button>
       <button class="btn-sm" style="background:${G.showFavorites?'#fff8e1':'#f5f5f5'};color:${G.showFavorites?'#f57c00':'#888'};border:2px solid ${G.showFavorites?'#ffd54f':'#e0e0e0'}" onclick="G.showFavorites=!G.showFavorites;G.clientPage=0;renderClients()">⭐ 즐겨찾기${G.showFavorites?' ON':''}</button>
@@ -1250,6 +1281,7 @@ function renderClients() {
       <button class="btn-sm" style="background:#f0f8ff;color:#1565c0;border:1.5px solid #90caf9" onclick="openImportModal()">📥 세무사랑 가져오기</button>
       <button class="btn-sm" style="background:#f3e5f5;color:#6a1b9a;border:1.5px solid #ce93d8" onclick="openFilterPresets(this)">⭐ 프리셋${(G.filterPresets||[]).length?' ('+(G.filterPresets||[]).length+')':''}</button>
       <button class="btn-sm" style="background:${G.bulkMode?'#e8f5e9':'#f5f5f5'};color:${G.bulkMode?'#2e7d32':'#888'};border:2px solid ${G.bulkMode?'#43a047':'#e0e0e0'}" onclick="G.bulkMode=!G.bulkMode;G.selectedClients=[];renderClients()">☑ 일괄편집${G.bulkMode?' ON':''}</button>
+      ${(()=>{const hasFilter=G.searchText||G.clientRepSearch||(G.filterManagers||[]).length||(G.filterTaxTypes||[]).length||(G.filterVatTypes||[]).length||(G.filterFeeStatuses||[]).length||(G.filterDealTypes||[]).length||(G.filterCMS||[]).length||(G.filterTags||[]).length||G.filterRisk||G.showFavorites;return hasFilter?`<button class="btn-sm" style="background:#fdecea;color:#c62828;border:1.5px solid #ef9a9a;font-weight:700" onclick="G.searchText='';G.clientRepSearch='';G.filterManagers=[];G.filterTaxTypes=[];G.filterVatTypes=[];G.filterFeeStatuses=[];G.filterDealTypes=[];G.filterCMS=[];G.filterTags=[];G.filterRisk='';G.showFavorites=false;G.clientPage=0;renderClients()">✕ 필터초기화</button>`:'';})()}
       <button class="btn-primary btn-sm" onclick="openForm(null)" style="padding:8px 14px">+ 거래처 추가</button>
     </div>
   </div>
@@ -1315,6 +1347,7 @@ function renderClients() {
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">수임일자</div>${em?iInput('contractDate',c.contractDate,'type="date"'):`<div style="font-weight:600">${esc(c.contractDate||'-')}</div>`}</div>
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">사업자번호</div>${em?iInput('bizNo',c.bizNo,'placeholder="000-00-00000" style="width:130px"'):`<div style="font-weight:600;font-family:monospace">${esc(c.bizNo||'-')}</div>`}</div>
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">${c.taxType==='법인'?'법인등록번호':'주민번호'}</div>${em?iInput('jumin',c.jumin,'placeholder="000000-0000000" style="width:150px"'):`<div style="font-weight:600;font-family:monospace">${c.jumin?esc(c.jumin.slice(0,6)+'-'+c.jumin.slice(6,7)+'••••••'):'-'}</div>`}</div>
+            ${(()=>{const regNos=[];if(c.bizNo)regNos.push(`<span style="font-size:11px;color:#555"><b>사업자</b> ${esc(c.bizNo)}</span>`);if(c.taxType==='법인'&&c.jumin)regNos.push(`<span style="font-size:11px;color:#555"><b>법인</b> ${esc(c.jumin.slice(0,6)+'-'+c.jumin.slice(6,7)+'••••••')}</span>`);else if(c.taxType!=='법인'&&c.jumin)regNos.push(`<span style="font-size:11px;color:#555"><b>주민</b> ${esc(c.jumin.slice(0,6)+'-'+c.jumin.slice(6,7)+'••••••')}</span>`);return regNos.length?`<div style="flex-basis:100%;display:flex;flex-wrap:wrap;gap:10px;padding:6px 10px;background:#f0f4ff;border-radius:6px;margin-top:4px">${regNos.join('')}</div>`:'';})()}
             ${c.status==='해지'||c.status==='폐업'?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">해지/폐업일</div><div style="font-weight:600;color:#c62828">${esc(c.terminationDate||'-')}</div></div>`:''}
             ${contracts?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">수임항목</div><div style="font-size:12px;color:#555">${esc(contracts)}</div></div>`:''}
             ${c.memo?`<div style="max-width:240px"><div style="font-size:11px;color:#888;margin-bottom:3px">메모</div><div style="font-size:12px;color:#555">${esc(c.memo)}</div></div>`:''}
@@ -5259,25 +5292,116 @@ function doBulkInvoice() {
 // 미수금 일괄 안내문
 // ══════════════════════════════════════════════════════
 function openBulkReminder() {
-  const thisYM=(()=>{const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');})();
-  const unpaid=G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&getDealTypes(c).some(d=>['기장','고문','성실'].includes(d))&&(c.fee||0)>0&&!(G.monthlyFees[c.id]||{})[thisYM]);
-  const s=G.settings||{};
-  showModal(`<div style="max-width:580px">
-  <div class="modal-header"><h3>📨 미수금 일괄 안내문</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+  const thisYM = (()=>{const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');})();
+  const prevYMs = [1,2,3].map(i=>{
+    const d=new Date(); d.setMonth(d.getMonth()-i);
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  });
+
+  const feeTargets = G.clients.filter(c=>
+    c.status!=='해지'&&c.status!=='폐업'&&
+    (c.fee||0)>0&&
+    getDealTypes(c).some(d=>['기장','고문','성실'].includes(d))
+  );
+
+  const unpaidByClient = feeTargets.map(c=>{
+    const unpaidMonths = [thisYM,...prevYMs].filter(ym=>!(G.monthlyFees[c.id]||{})[ym]);
+    const total = unpaidMonths.length * (c.fee||0);
+    return {...c, unpaidMonths, total};
+  }).filter(c=>c.unpaidMonths.length>0);
+
+  const s = G.settings||{};
+
+  showModal(`<div style="max-width:620px;width:100%">
+  <div class="modal-header"><h3>📨 미수금 안내문</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
   <div class="modal-body">
-    <div style="background:#fff3e0;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px;color:#e65100">
-      이달(${thisYM}) 미수 거래처 <b>${unpaid.length}개</b> — 복사 버튼으로 문자 내용을 복사하세요
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+      <div style="background:#fff3e0;border-radius:8px;padding:8px 14px;font-size:13px;color:#e65100;flex:1">
+        미수금 거래처 <b>${unpaidByClient.length}개</b> · 총 <b>${unpaidByClient.reduce((s,c)=>s+c.total,0).toLocaleString()}원</b>
+      </div>
+      <button onclick="brGenAll()" style="padding:8px 16px;border-radius:8px;border:none;background:#1565c0;color:#fff;font-size:13px;cursor:pointer;font-family:inherit;white-space:nowrap">✦ 전체 AI 생성</button>
+      <button onclick="brCopyAll()" style="padding:8px 16px;border-radius:8px;border:1px solid #ccc;background:#f5f5f5;font-size:13px;cursor:pointer;font-family:inherit;white-space:nowrap">📋 전체 복사</button>
     </div>
-    ${unpaid.length===0?'<div style="text-align:center;color:#aaa;padding:24px;font-size:14px">🎉 미수금 거래처가 없습니다</div>':
-      unpaid.map(c=>{
-        const msg=`[${s.name||'세무사무소'}] ${c.rep||c.name}님, ${thisYM.slice(5)}월 기장료 ${(c.fee||0).toLocaleString()}원 납부 부탁드립니다. 계좌: ${s.bank||''} ${s.account||''}`;
-        return `<div style="margin-bottom:10px;background:#f8f9ff;border-radius:8px;padding:10px 14px">
-          <div style="font-weight:700;font-size:13px;margin-bottom:6px">${esc(c.name)} <span style="font-weight:400;color:#888;font-size:12px">(${esc(c.rep||'')})</span></div>
-          <div class="sms-text-${c.id}" style="font-size:12px;background:#fff;border:1px solid #e0e0e0;border-radius:6px;padding:8px 10px;line-height:1.6;word-break:break-all">${esc(msg)}</div>
-          <button onclick="(function(el,btn){navigator.clipboard.writeText(el.textContent).then(()=>{btn.textContent='✅ 복사됨';setTimeout(()=>btn.textContent='📋 복사',2000)}).catch(()=>{})})(this.previousElementSibling,this)" style="margin-top:6px;padding:3px 12px;border-radius:6px;border:1px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;font-size:11px;cursor:pointer;font-family:inherit">📋 복사</button>
-        </div>`;
-      }).join('')}
+    <div style="margin-bottom:10px;display:flex;gap:8px;align-items:center">
+      <label style="font-size:12px;color:#666;white-space:nowrap">문체</label>
+      <select id="br-tone" style="font-size:12px;padding:4px 8px;border:1px solid #ddd;border-radius:6px;font-family:inherit">
+        <option value="정중">정중</option>
+        <option value="친근">친근</option>
+        <option value="간결">간결</option>
+      </select>
+    </div>
+    <div id="br-list" style="display:flex;flex-direction:column;gap:8px;max-height:480px;overflow-y:auto">
+      ${unpaidByClient.length===0
+        ? '<div style="text-align:center;color:#aaa;padding:32px;font-size:14px">🎉 미수금 거래처가 없습니다</div>'
+        : unpaidByClient.map(c=>{
+            const defaultMsg = `[${esc(s.name||'세무사무소')}] ${esc(c.rep||c.name)}님, ${c.unpaidMonths.map(m=>m.slice(5)+'월').join('·')} 기장료 ${c.total.toLocaleString()}원 납부 부탁드립니다.\n계좌: ${s.bank||''} ${s.account||''} (${s.accountHolder||''})`;
+            return `<div style="background:#f8f9ff;border-radius:10px;padding:12px 14px;border:1px solid #e8eaf6" data-cid="${c.id}">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                <div>
+                  <span style="font-weight:700;font-size:13px">${esc(c.name)}</span>
+                  <span style="color:#888;font-size:11px;margin-left:6px">${esc(c.rep||'')}</span>
+                  <span style="margin-left:8px;font-size:11px;background:#fff3e0;color:#e65100;padding:2px 7px;border-radius:12px">${c.unpaidMonths.length}개월 미납 · ${c.total.toLocaleString()}원</span>
+                </div>
+                <div style="display:flex;gap:6px">
+                  <button onclick="brGenOne(${c.id})" style="padding:3px 10px;border-radius:6px;border:1px solid #1565c0;background:#e8f0fe;color:#1565c0;font-size:11px;cursor:pointer;font-family:inherit">✦ AI</button>
+                  <button onclick="brCopyOne(${c.id})" style="padding:3px 10px;border-radius:6px;border:1px solid #ccc;background:#f5f5f5;font-size:11px;cursor:pointer;font-family:inherit">복사</button>
+                </div>
+              </div>
+              <textarea id="br-msg-${c.id}" style="width:100%;border:1px solid #e0e0e0;border-radius:6px;padding:8px;font-size:12px;font-family:inherit;resize:vertical;line-height:1.6;box-sizing:border-box" rows="3">${defaultMsg}</textarea>
+            </div>`;
+          }).join('')}
+    </div>
   </div></div>`);
+
+  window._brClients = unpaidByClient;
+  window._brSettings = s;
+}
+
+async function brGenOne(cid) {
+  const c = (window._brClients||[]).find(x=>x.id===cid);
+  if (!c) return;
+  const s = window._brSettings||{};
+  const tone = document.getElementById('br-tone')?.value||'정중';
+  const ta = document.getElementById(`br-msg-${cid}`);
+  if (!ta) return;
+  ta.value = '생성 중...';
+  try {
+    const prompt = `세무사 사무소에서 기장료 미납 거래처에 보내는 수금 요청 문자를 작성해주세요.
+거래처: ${c.name} (대표자: ${c.rep||''}), 미납금액: ${c.total.toLocaleString()}원 (${c.unpaidMonths.map(m=>m.slice(5)+'월').join('·')} 미납)
+사무소: ${s.name||'세무사무소'}, 계좌: ${s.bank||''} ${s.account||''} (${s.accountHolder||''})
+조건: ${tone}한 어투, SMS 100자 이내, 금액 강조, 본문만, 마크다운 없이`;
+    const res = await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',headers:{'Content-Type':'application/json','x-api-key':(G.settings?.aiKey||''),'anthropic-version':'2023-06-01'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:200,messages:[{role:'user',content:prompt}]})
+    });
+    const data = await res.json();
+    ta.value = (data.content?.map(b=>b.text||'').join('')||'생성 실패').trim();
+  } catch(e) { ta.value = '생성 실패. 다시 시도해주세요.'; }
+}
+
+async function brGenAll() {
+  const clients = window._brClients||[];
+  for (const c of clients) {
+    await brGenOne(c.id);
+  }
+}
+
+function brCopyOne(cid) {
+  const ta = document.getElementById(`br-msg-${cid}`);
+  if (!ta) return;
+  navigator.clipboard.writeText(ta.value).then(()=>{
+    const card = ta.closest('[data-cid]');
+    const btn = card ? card.querySelector('button:last-child') : null;
+    if(btn){btn.textContent='✓';setTimeout(()=>btn.textContent='복사',1500);}
+  });
+}
+
+function brCopyAll() {
+  const all = (window._brClients||[]).map(c=>{
+    const ta = document.getElementById(`br-msg-${c.id}`);
+    return ta ? `▶ ${c.name}\n${ta.value}` : '';
+  }).filter(Boolean).join('\n\n');
+  navigator.clipboard.writeText(all).then(()=>alert('전체 복사됨'));
 }
 
 // ══════════════════════════════════════════════════════
@@ -5509,6 +5633,10 @@ function openExcel() {
       <div class="card-title">↓ 엑셀 내보내기</div>
       <p style="font-size:13px;color:#555;margin-bottom:12px">현재 거래처 <b>${G.clients.length}개</b>를 엑셀로 내려받습니다</p>
       <button class="btn-primary" onclick="exportExcel()">📥 엑셀 내보내기</button>
+      <div style="margin-top:10px">
+        <button class="btn-primary" style="width:100%;font-size:13px;background:#217346" onclick="exportClientsExcel()">📊 거래처 목록 엑셀로 내보내기</button>
+        <div style="font-size:11px;color:#888;margin-top:4px">현재 필터 조건의 거래처를 엑셀 파일로 내보냅니다</div>
+      </div>
     </div>
     <div class="card" style="background:#fff8e1;border:1.5px solid #ffe082">
       <div class="card-title">↑ 엑셀 가져오기</div>
@@ -5554,6 +5682,28 @@ function downloadTemplate() {
   ws2['!cols'] = [{wch:16},{wch:24},{wch:36}];
   XLSX.utils.book_append_sheet(wb, ws2, '작성안내');
   XLSX.writeFile(wb, '거래처가져오기_양식.xlsx');
+}
+
+function exportClientsExcel() {
+  const list = filteredClients();
+  const wb = XLSX.utils.book_new();
+  const rows = [['No','상호','대표자','전화번호','구분','과세유형','업종','담당자','기장료','계약유형','사업자번호','법인/주민번호','지역','상태','메모']];
+  list.forEach(c => {
+    rows.push([
+      c.id, c.name, c.rep, c.phone, c.taxType, c.vatType, c.bizType,
+      getManagers(c).join(', '), c.fee||0,
+      (c.contracts||[]).map(k=>contractLabel(k)).join(', '),
+      c.bizNo||'',
+      c.jumin ? c.jumin.slice(0,6)+'-'+c.jumin.slice(6,7)+'••••••' : '',
+      c.taxOffice||'', c.status||'', c.memo||''
+    ]);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [6,28,12,16,8,9,14,10,11,24,16,20,10,8,30].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, ws, '거래처목록');
+  const ym = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `거래처목록_${ym}.xlsx`);
+  closeModal();
 }
 
 function exportBackup() {
