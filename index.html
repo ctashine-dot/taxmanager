@@ -334,7 +334,7 @@ async function decompressB64(b64) {
 
 function expandClients(mini) {
   return mini.map(m => ({
-    id: m.i, name: m.n, rep: m.r, bizNo: '', jumin: '', relatedGroup: '', groupMain: false, phone: m.p || '', email: '',
+    id: m.i, name: m.n, rep: m.r, bizNo: m.bn || '', jumin: m.crn || m.idn || '', relatedGroup: '', groupMain: false, phone: m.p || '', email: '',
     taxType: m.t, vatType: m.v, bizType: m.b || '', taxOffice: m.o || '',
     manager: m.m || '', fee: m.f || 0, feeSingo: m.fs || 0, feeJojung: m.fj || 0, feeSeongsi: m.fse || 0,
     feeStatus: '청구완료', cms: m.cms || false, contracts: m.c || [],
