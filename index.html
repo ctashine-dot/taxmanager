@@ -125,6 +125,7 @@ input.finput:focus,select.fsel:focus,textarea.ftarea:focus{border-color:#4f8ef7}
 #loading{text-align:center;padding:60px 20px;color:#888}
 #loading .spin{font-size:40px;display:block;margin-bottom:12px;animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+@keyframes toastIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 
 /* ── 반응형 */
 @media(max-width:600px){
@@ -938,7 +939,7 @@ function getMissingFields(c) {
 
 function showMissingClientsModal() {
   const list = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&getMissingFields(c).length>0);
-  if (!list.length) { alert('기재사항 누락 업체가 없습니다.'); return; }
+  if (!list.length) { toast('기재사항 누락 업체가 없습니다.','info'); return; }
   const TAX_TYPES = ['개인','법인'];
   const VAT_TYPES = ['일반','간이','면세','비과세'];
   showModal(`<div style="max-width:580px;width:min(580px,97vw)">
@@ -1524,7 +1525,7 @@ function openTagFilterDropdown(btn) {
   const existing = document.getElementById('tag-filter-popup');
   if (existing) { existing.remove(); return; }
   const allTags = [...new Set(Object.values(G.clientTags||{}).flat())].sort();
-  if (!allTags.length) { alert('등록된 태그가 없습니다'); return; }
+  if (!allTags.length) { toast('등록된 태그가 없습니다','info'); return; }
   const popup = document.createElement('div');
   popup.id = 'tag-filter-popup';
   popup.style.cssText = 'position:absolute;background:#fff;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,.15);padding:12px;z-index:200;min-width:180px;max-height:300px;overflow-y:auto';
@@ -1980,7 +1981,7 @@ function gcSelectClient(id) {
 
 function doGroupConnect() {
   const name = (document.getElementById('gc-name')?.value||'').trim();
-  if (!name) return alert('그룹명을 입력하거나 기존 그룹을 선택해주세요');
+  if (!name) { toast('그룹명을 입력하거나 기존 그룹을 선택해주세요','warning'); return; }
   const reason = (document.getElementById('gc-reason')?.value||'').trim();
   const c = G.clients.find(x=>x.id===window._gcTargetId);
   if (!c) return;
@@ -2196,7 +2197,7 @@ function doGroupEdit() {
   if (window._geMembers.length<=1) {
     c.relatedGroup=''; c.soloGroup=true;
   } else {
-    if (!name) return alert('그룹명을 입력해주세요');
+    if (!name) { toast('그룹명을 입력해주세요','warning'); return; }
     window._geMembers.forEach(id=>{
       const cl=G.clients.find(x=>x.id===id);
       if (cl) { cl.relatedGroup=name; cl.soloGroup=false; cl.groupMain=(id===window._geMainId); }
@@ -2309,7 +2310,7 @@ function toggleClientSelect(id) {
 
 function openBulkManagerChange() {
   const ids = G.selectedClients || [];
-  if (!ids.length) { alert('거래처를 선택해주세요'); return; }
+  if (!ids.length) { toast('거래처를 선택해주세요','warning'); return; }
   const managers = G.settings?.managers || [];
   showModal(`<div style="max-width:400px">
   <div class="modal-header"><h3>👥 일괄 담당자 변경 (${ids.length}개)</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
@@ -2347,7 +2348,7 @@ function openAssignManagerModal() {
   const unassigned = G.clients
     .filter(c => c.status!=='해지' && c.status!=='폐업' && getManagers(c).length===0)
     .sort((a,b) => a.name.localeCompare(b.name, 'ko'));
-  if (!unassigned.length) { alert('담당자 미지정 거래처가 없습니다.'); return; }
+  if (!unassigned.length) { toast('담당자 미지정 거래처가 없습니다.','info'); return; }
   showModal(`<div style="max-width:520px;width:90vw">
   <div class="modal-header">
     <h3>👤 담당자 미지정 배정 <span style="font-size:13px;font-weight:400;color:#888">(${unassigned.length}개)</span></h3>
@@ -2390,9 +2391,9 @@ function amgrSelectAll(v) {
 }
 function saveAssignManager() {
   const mgr = document.getElementById('amgr-sel')?.value;
-  if (!mgr) { alert('담당자를 선택해주세요'); return; }
+  if (!mgr) { toast('담당자를 선택해주세요','warning'); return; }
   const checked = [...document.querySelectorAll('[data-amgr-id]:checked')].map(el => Number(el.dataset.amgrId));
-  if (!checked.length) { alert('배정할 거래처를 선택해주세요'); return; }
+  if (!checked.length) { toast('배정할 거래처를 선택해주세요','warning'); return; }
   if (!G.managerHistory) G.managerHistory = {};
   checked.forEach(id => {
     const c = G.clients.find(x => x.id===id);
@@ -2406,7 +2407,7 @@ function saveAssignManager() {
   saveToLS();
   closeModal();
   renderDashboard();
-  alert(`${mgr} 담당자로 ${checked.length}개 업체 배정 완료`);
+  toast(`${mgr} 담당자로 ${checked.length}개 업체 배정 완료`,'success');
 }
 
 // ══════════════════════════════════════════════════════
@@ -2808,8 +2809,8 @@ window.toggleContract = function(key) {
 
 window.saveForm = function(id) {
   const d = window._formData;
-  if (!d.name?.trim()) return alert('거래처명은 필수입니다');
-  if (!d.rep?.trim()) return alert('대표자명은 필수입니다');
+  if (!d.name?.trim()) { toast('거래처명은 필수입니다','warning'); return; }
+  if (!d.rep?.trim()) { toast('대표자명은 필수입니다','warning'); return; }
 
   // 상호+대표자 중복 검사
   const nameDup = G.clients.find(c =>
@@ -4357,7 +4358,7 @@ function applyPeriodTemplate(tplKey) {
 
 function savePeriod() {
   const label = document.getElementById('p-label').value.trim();
-  if (!label) return alert('리스트 이름을 입력해주세요');
+  if (!label) { toast('리스트 이름을 입력해주세요','warning'); return; }
   if (G.periods.some(p=>p.label===label)) {
     if (!confirm(`"${label}" 리스트가 이미 있습니다.\n그래도 새로 추가하시겠습니까?`)) return;
   }
@@ -4403,7 +4404,7 @@ function copyPeriod(pKey) {
   G.julgaePeriodIdx = G.periods.length - 1;
   saveToLS();
   renderJulgae();
-  alert(`"${newLabel}" 신고기간이 생성됐습니다.\n(자료/기장/결재/수금은 초기화됨)`);
+  toast(`"${newLabel}" 신고기간이 생성됐습니다.`,'success');
 }
 
 // ══════════════════════════════════════════════════════
@@ -4598,7 +4599,7 @@ async function runChecklistAI() {
   const period = G.periods[pIdx];
   if (!period) return;
   const checked = [...document.querySelectorAll('[data-cl-id]:checked')].map(el=>Number(el.dataset.clId));
-  if (!checked.length) return alert('거래처를 선택해주세요');
+  if (!checked.length) { toast('거래처를 선택해주세요','warning'); return; }
   const results = document.getElementById('cl-results');
   results.innerHTML = `<div style="text-align:center;padding:16px;color:#888">${spinnerHTML}AI 생성 중...</div>`;
   const sys = `당신은 한국 세무사 사무소의 신고 업무 전문가입니다. 거래처별 맞춤 신고 체크리스트를 작성합니다.
@@ -4926,7 +4927,7 @@ function doImport() {
       }
     });
     saveToLS(); closeModal(); renderClients();
-    alert(`거래처 가져오기 완료!\n• 신규 추가: ${added}개\n• 업데이트: ${updated}개\n• 건너뜀: ${skipped}개`);
+    toast(`거래처 가져오기 완료!\n• 신규 추가: ${added}개\n• 업데이트: ${updated}개\n• 건너뜀: ${skipped}개`,'success',5000);
   } else {
     if (!G.invoiceData) G.invoiceData = {};
     let matched=0, unmatched=0;
@@ -4949,7 +4950,7 @@ function doImport() {
       matched++;
     });
     saveToLS(); closeModal();
-    alert(`세금계산서 현황 가져오기 완료!\n• 매칭 성공: ${matched}개\n• 미매칭: ${unmatched}개${unmatched>0?'\n  (사업자번호/상호명으로 거래처를 찾을 수 없는 행)':''}`);
+    toast(`세금계산서 현황 가져오기 완료!\n• 매칭 성공: ${matched}개\n• 미매칭: ${unmatched}개${unmatched>0?'\n  (사업자번호/상호명으로 거래처를 찾을 수 없는 행)':''}`,'success',5000);
   }
 }
 
@@ -4984,7 +4985,7 @@ function openAINotice() {
 
 async function runAINotice() {
   const chips = document.querySelectorAll('.nc-chip.on');
-  if (!chips.length) return alert('거래처를 선택해 주세요');
+  if (!chips.length) { toast('거래처를 선택해 주세요','warning'); return; }
   const type = document.getElementById('notice-type').value;
   const tone = document.getElementById('notice-tone').value;
   const deadline = document.getElementById('notice-deadline').value;
@@ -5139,7 +5140,7 @@ function openAIReminder() {
 
 async function runAIReminder() {
   const chips = document.querySelectorAll('.sc-chip.on');
-  if (!chips.length) return alert('거래처를 선택해 주세요');
+  if (!chips.length) { toast('거래처를 선택해 주세요','warning'); return; }
   const type = document.getElementById('sms-type').value;
   const tone = document.getElementById('sms-tone').value;
   const deadline = document.getElementById('sms-deadline').value;
@@ -5288,7 +5289,7 @@ async function tcSendChat() {
 
 async function tcFetchAI(msgs) {
   const key = getAIKey();
-  if (!key) { alert('⚙ 설정에서 Claude AI API 키를 먼저 입력해주세요'); return ''; }
+  if (!key) { toast('⚙ 설정에서 Claude AI API 키를 먼저 입력해주세요','warning'); return ''; }
   const resp = await fetch('https://api.anthropic.com/v1/messages', {
     method:'POST',
     headers:aiHeaders(),
@@ -5400,7 +5401,7 @@ function openVatReviewer() {
 
 async function runVatReview() {
   const input = document.getElementById('vat-input').value.trim();
-  if (!input) return alert('신고서 수치를 입력해 주세요.');
+  if (!input) { toast('신고서 수치를 입력해 주세요.','warning'); return; }
   const bizType = document.getElementById('vat-biz-type').value;
   const period = document.getElementById('vat-period').value;
   const resultDiv = document.getElementById('vat-result');
@@ -5460,7 +5461,7 @@ function openCorpTaxReviewer() {
 
 async function runCorpTaxReview() {
   const input = document.getElementById('corp-input').value.trim();
-  if (!input) return alert('신고서 수치를 입력해 주세요.');
+  if (!input) { toast('신고서 수치를 입력해 주세요.','warning'); return; }
   const taxType = document.getElementById('corp-tax-type').value;
   const year = document.getElementById('corp-year').value.trim() || new Date().getFullYear()-1;
   const resultDiv = document.getElementById('corp-result');
@@ -5630,7 +5631,7 @@ function openBulkInvoice() {
 function doBulkInvoice() {
   const ym=document.getElementById('bulk-inv-ym')?.value||G.feesYM||'';
   const ids=[...document.querySelectorAll('.bulk-inv-chk:checked')].map(el=>Number(el.dataset.id));
-  if(!ids.length){alert('거래처를 선택해주세요');return;}
+  if(!ids.length){toast('거래처를 선택해주세요','warning');return;}
   const clients=ids.map(id=>G.clients.find(c=>c.id===id)).filter(Boolean);
   const s=G.settings||{};
   const ymFmt=ym?ym.slice(0,4)+'년 '+Number(ym.slice(5))+'월':'';
@@ -5771,7 +5772,7 @@ function brCopyAll() {
     const ta = document.getElementById(`br-msg-${c.id}`);
     return ta ? `▶ ${c.name}\n${ta.value}` : '';
   }).filter(Boolean).join('\n\n');
-  navigator.clipboard.writeText(all).then(()=>alert('전체 복사됨'));
+  navigator.clipboard.writeText(all).then(()=>toast('전체 복사됨','success'));
 }
 
 // ══════════════════════════════════════════════════════
@@ -5779,7 +5780,7 @@ function brCopyAll() {
 // ══════════════════════════════════════════════════════
 function printJulgaeList() {
   const period=(G.periods||[])[G.julgaePeriodIdx||0];
-  if(!period){alert('신고 기간을 먼저 선택해주세요');return;}
+  if(!period){toast('신고 기간을 먼저 선택해주세요','warning');return;}
   const pKey2=period.id+'|'+(period.reportType||period.type);
   const allClients = period.enrolled?.length
     ? period.enrolled.map(id=>G.clients.find(c=>c.id===id)).filter(Boolean)
@@ -5887,7 +5888,7 @@ function applyFeeRaise() {
   saveToLS();
   closeModal();
   renderClients();
-  alert('수수료 인상이 완료되었습니다.');
+  toast('수수료 인상이 완료되었습니다.','success');
 }
 
 // ══════════════════════════════════════════════════════
@@ -5904,7 +5905,7 @@ function openSmsTemplates() {
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
         <input type="text" value="${esc(t.name)}" onchange="G.settings.smsTemplates[${i}].name=this.value;saveToLS()" style="font-weight:700;font-size:13px;border:none;padding:0;font-family:inherit;width:60%;background:transparent;color:#333">
         <div style="display:flex;gap:6px">
-          <button onclick="navigator.clipboard?.writeText(G.settings.smsTemplates[${i}].text);alert('복사됨!')" style="padding:4px 10px;border-radius:6px;border:1px solid #e0e0e0;background:#f5f5f5;font-size:11px;cursor:pointer;font-family:inherit">📋 복사</button>
+          <button onclick="navigator.clipboard?.writeText(G.settings.smsTemplates[${i}].text);toast('복사됨!','success')" style="padding:4px 10px;border-radius:6px;border:1px solid #e0e0e0;background:#f5f5f5;font-size:11px;cursor:pointer;font-family:inherit">📋 복사</button>
           <button onclick="G.settings.smsTemplates.splice(${i},1);saveToLS();openSmsTemplates()" style="padding:4px 8px;border-radius:6px;border:1px solid #fca5a5;background:#fef2f2;color:#e53935;font-size:11px;cursor:pointer;font-family:inherit">삭제</button>
         </div>
       </div>
@@ -6295,7 +6296,7 @@ function aiHeaders() {
 }
 async function aiCall(system, userMsg, maxTokens=800) {
   const key = getAIKey();
-  if (!key) { alert('⚙ 설정에서 Claude AI API 키를 먼저 입력해주세요 (설정 → Claude AI API 키)'); return null; }
+  if (!key) { toast('⚙ 설정에서 Claude AI API 키를 먼저 입력해주세요 (설정 → Claude AI API 키)','warning'); return null; }
   const body = {model:'claude-sonnet-4-6', max_tokens:maxTokens, messages:[{role:'user', content:userMsg}]};
   if (system) body.system = system;
   const ctrl = new AbortController();
@@ -6376,7 +6377,7 @@ function suggestFeeFromBosuTable() {
   const revenueStr = prompt('이 거래처의 연매출액을 입력하세요 (원, 숫자만)\n예: 150000000 (1억 5천만)');
   if (revenueStr === null) return;
   const revenue = parseInt(revenueStr.replace(/,/g,''))||0;
-  if (revenue <= 0) { alert('유효한 금액을 입력하세요'); return; }
+  if (revenue <= 0) { toast('유효한 금액을 입력하세요','warning'); return; }
   const row = jangRows.find(r=>revenue<r.max) || jangRows[jangRows.length-1];
   const suggested = taxType==='법인' ? row.corp : row.indiv;
   const box = document.getElementById('fee-suggestion-box');
@@ -6477,7 +6478,7 @@ function saveBosuTable() {
   G.settings.bosuTable = tbl;
   saveToLS();
   closeModal();
-  alert('보수표가 저장됐습니다.');
+  toast('보수표가 저장됐습니다.','success');
 }
 function resetBosuTable() {
   if (!confirm('기본값으로 초기화할까요?')) return;
@@ -6510,6 +6511,17 @@ function toggleField(id, field) {
   updateBadge();
 }
 
+function toast(msg, type='info', ms=3000) {
+  const C={success:'#2e7d32',error:'#c62828',warning:'#e65100',info:'#1565c0'};
+  const B={success:'#e8f5e9',error:'#ffebee',warning:'#fff3e0',info:'#e3f2fd'};
+  let box=document.getElementById('_toast-box');
+  if(!box){box=document.createElement('div');box.id='_toast-box';box.style.cssText='position:fixed;bottom:24px;right:20px;z-index:99999;display:flex;flex-direction:column-reverse;gap:8px;pointer-events:none';document.body.appendChild(box);}
+  const el=document.createElement('div');
+  el.style.cssText=`background:${B[type]};color:${C[type]};border-left:4px solid ${C[type]};border-radius:8px;padding:10px 16px;font-size:13px;line-height:1.5;box-shadow:0 2px 12px rgba(0,0,0,.15);pointer-events:auto;max-width:320px;animation:toastIn .2s ease;white-space:pre-line`;
+  el.textContent=msg;
+  box.appendChild(el);
+  setTimeout(()=>{el.style.cssText+=';opacity:0;transition:opacity .3s';setTimeout(()=>el.remove(),300);},ms);
+}
 function manualSave() {
   saveToLS();
   const toast = document.getElementById('save-toast');
@@ -6732,7 +6744,7 @@ function toggleWithholding(clientId, ym) {
 }
 function openWithholdingModal() {
   const wClients = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&(c.contracts||[]).includes('원천세'));
-  if (!wClients.length) { alert('원천세 수임 거래처가 없습니다'); return; }
+  if (!wClients.length) { toast('원천세 수임 거래처가 없습니다','info'); return; }
   const now4 = new Date();
   const months = Array.from({length:12},(_,i)=>{const d4=new Date(now4.getFullYear(),now4.getMonth()-11+i,1);return d4.getFullYear()+'-'+String(d4.getMonth()+1).padStart(2,'0');});
   const rows = wClients.map(c=>{
@@ -6792,8 +6804,8 @@ function autoCreatePeriods(year) {
     });
     created++;
   });
-  if (created > 0) { saveToLS(); alert(year+'년 신고기간 '+created+'개 자동 생성 완료'); renderJulgae(); }
-  else alert(year+'년 신고기간이 이미 모두 존재합니다');
+  if (created > 0) { saveToLS(); toast(year+'년 신고기간 '+created+'개 자동 생성 완료','success'); renderJulgae(); }
+  else toast(year+'년 신고기간이 이미 모두 존재합니다','info');
 }
 
 function showModal(html) {
@@ -6816,7 +6828,7 @@ function signInWithGoogle() {
 
 function signOutUser() {
   if (!confirm('로그아웃 하시겠습니까?')) return;
-  fbAuth.signOut().catch(err => alert('로그아웃 오류: ' + err.message));
+  fbAuth.signOut().catch(err => toast('로그아웃 오류: ' + err.message,'error'));
 }
 
 function migrateJulgae() {
