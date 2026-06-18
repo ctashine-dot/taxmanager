@@ -712,6 +712,23 @@ function getManagers(c) {
   if (c.manager) return [c.manager];
   return [];
 }
+function getUnpaidStreak(c, currentYM) {
+  if (!c.fee) return 0;
+  const adjYM = (ym, delta) => {
+    const [y,m] = ym.split('-').map(Number);
+    const d = new Date(y, m-1+delta, 1);
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  };
+  let count = 0, checkYM = currentYM;
+  const start = c.contractDate ? c.contractDate.slice(0,7) : '2000-01';
+  while (count < 36) {
+    if (checkYM < start) break;
+    if (G.monthlyFees[c.id]?.[checkYM]) break;
+    count++;
+    checkYM = adjYM(checkYM, -1);
+  }
+  return count;
+}
 function dealSortRankForClient(c) {
   return Math.min(...getDealTypes(c).map(dt => dealSortRank(dt)));
 }
@@ -1013,6 +1030,60 @@ function _renderDashboardInner() {
   <div style="margin-bottom:20px"><h2 style="font-size:22px;font-weight:800">대시보드</h2>
   <p style="color:#888;font-size:13px;margin-top:4px">${new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric'})} 기준</p></div>
 
+  ${(()=>{
+    const now = new Date();
+    const deadlineItems = [];
+    for (const tpl of PERIOD_TEMPLATES) {
+      const dm = tpl.deadline.match(/(\d+)월\s*(\d+)일/);
+      if (!dm) continue;
+      const mo = Number(dm[1])-1, dy = Number(dm[2]);
+      let chosen = null;
+      for (const yr of [now.getFullYear(), now.getFullYear()+1]) {
+        const d = new Date(yr, mo, dy);
+        const diff = Math.round((d - now) / 86400000);
+        if (diff >= -3 && diff <= 60) { chosen = {diff, yr}; break; }
+      }
+      if (!chosen) continue;
+      const {diff, yr} = chosen;
+      const yy = String(yr).slice(2);
+      const matchPeriod = G.periods.find(p => p.reportType===tpl.tpl && (p.label.startsWith(yy+'년')||p.id.endsWith('_'+yr)));
+      let unfinished=0, total=0;
+      if (matchPeriod) {
+        const pKey = matchPeriod.id;
+        const targets = matchPeriod.enrolled?.length>0
+          ? G.clients.filter(c=>matchPeriod.enrolled.includes(c.id))
+          : applyReportFilter(G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'), matchPeriod);
+        total = targets.length;
+        unfinished = targets.filter(c=>!julgaeVal(pKey,c.id).a).length;
+      }
+      deadlineItems.push({tpl, diff, unfinished, total, matchPeriod});
+    }
+    if (!deadlineItems.length) return '';
+    deadlineItems.sort((a,b)=>a.diff-b.diff);
+    const rows = deadlineItems.map(({tpl, diff, unfinished, total, matchPeriod})=>{
+      const overdue=diff<0, urgent=diff>=0&&diff<=7, soon=diff>=0&&diff<=21;
+      const bg=overdue?'#f9f9f9':urgent?'#fdecea':soon?'#fff8e1':'#e8f5e9';
+      const border=overdue?'#e0e0e0':urgent?'#ef9a9a':soon?'#ffe082':'#a5d6a7';
+      const col=overdue?'#bbb':urgent?'#c62828':soon?'#f57f17':'#2e7d32';
+      const dayLabel=diff===0?'D-Day':diff<0?`D+${-diff}`:`D-${diff}`;
+      const pIdx=matchPeriod?G.periods.indexOf(matchPeriod):-1;
+      const statusBadge=matchPeriod
+        ?(unfinished>0?`<span style="color:${col};font-size:11px;white-space:nowrap">미완료 ${unfinished}/${total}</span>`:'<span style="color:#2e7d32;font-size:11px">✓ 완료</span>')
+        :'<span style="color:#aaa;font-size:11px">기간 미생성</span>';
+      const goBtn=pIdx>=0?`<button onclick="G.julgaePeriodIdx=${pIdx};switchTab('julgae')" style="padding:2px 8px;background:#fff;border:1px solid ${border};border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit;color:${col};white-space:nowrap">이동 →</button>`:'';
+      return `<div style="display:flex;align-items:center;gap:8px;padding:7px 12px;background:${bg};border:1px solid ${border};border-radius:8px;font-size:12px">
+        <span style="font-weight:800;color:${col};min-width:40px;text-align:center;font-size:11px">${dayLabel}</span>
+        <span style="flex:1;font-weight:600;color:${overdue?'#999':'inherit'}">${esc(tpl.label)}</span>
+        <span style="color:#aaa;font-size:10px">${tpl.deadline}</span>
+        ${statusBadge} ${goBtn}
+      </div>`;
+    }).join('');
+    return `<div style="margin-bottom:16px">
+      <div style="font-size:13px;font-weight:700;color:#555;margin-bottom:7px">📅 신고 마감일 현황 <span style="font-size:11px;font-weight:400;color:#aaa">(60일 이내)</span></div>
+      <div style="display:flex;flex-direction:column;gap:4px">${rows}</div>
+    </div>`;
+  })()}
+
   <div class="stat-grid">
     <div class="stat-card" style="border-left:4px solid #4f8ef7">
       <div class="stat-label">활성 거래처</div>
@@ -1023,6 +1094,11 @@ function _renderDashboardInner() {
       <div class="stat-label">기재사항 누락</div>
       <div class="stat-value" style="color:#ff7043">${missingClients.length}</div>
       <div class="stat-sub">클릭해서 확인·입력</div>
+    </div>
+    <div class="stat-card" style="border-left:4px solid #f57f17;cursor:pointer" onclick="openAssignManagerModal()">
+      <div class="stat-label">담당자 미지정</div>
+      <div class="stat-value" style="color:#f57f17">${G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&getManagers(c).length===0).length}</div>
+      <div class="stat-sub">클릭해서 배정</div>
     </div>
   </div>
 
@@ -2259,6 +2335,72 @@ function applyBulkManagerChange() {
   renderClients();
 }
 
+function openAssignManagerModal() {
+  const unassigned = G.clients
+    .filter(c => c.status!=='해지' && c.status!=='폐업' && getManagers(c).length===0)
+    .sort((a,b) => a.name.localeCompare(b.name, 'ko'));
+  if (!unassigned.length) { alert('담당자 미지정 거래처가 없습니다.'); return; }
+  showModal(`<div style="max-width:520px;width:90vw">
+  <div class="modal-header">
+    <h3>👤 담당자 미지정 배정 <span style="font-size:13px;font-weight:400;color:#888">(${unassigned.length}개)</span></h3>
+    <button class="close-btn" onclick="closeModal()">✕</button>
+  </div>
+  <div class="modal-body" style="padding-bottom:0">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <label style="font-size:13px;color:#555;font-weight:600">담당자 선택</label>
+      <select id="amgr-sel" class="fsel" style="flex:1;min-width:120px">
+        ${MANAGERS.slice(1).map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join('')}
+      </select>
+      <button onclick="amgrSelectAll(true)" style="padding:5px 10px;border-radius:7px;border:1px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;font-size:12px;cursor:pointer;font-family:inherit">전체 선택</button>
+      <button onclick="amgrSelectAll(false)" style="padding:5px 10px;border-radius:7px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:12px;cursor:pointer;font-family:inherit">전체 해제</button>
+    </div>
+    <div id="amgr-list" style="max-height:320px;overflow-y:auto;border:1px solid #e8e8e8;border-radius:10px;padding:6px 8px;margin-bottom:12px">
+      ${unassigned.map(c=>`
+      <label style="display:flex;align-items:center;gap:8px;padding:6px 4px;cursor:pointer;border-radius:6px;transition:background .1s" onmouseover="this.style.background='#f5f7ff'" onmouseout="this.style.background=''">
+        <input type="checkbox" data-amgr-id="${c.id}" style="width:15px;height:15px;cursor:pointer">
+        <span style="font-weight:600;font-size:13px">${esc(c.name)}</span>
+        <span style="font-size:11px;color:#888">${esc(c.rep||'')}</span>
+        <span style="font-size:10px;color:#bbb;margin-left:auto">${esc(getDealTypes(c).join(', ')||'-')}</span>
+      </label>`).join('')}
+    </div>
+    <div style="display:flex;gap:8px;padding-bottom:14px">
+      <div id="amgr-count" style="flex:1;font-size:12px;color:#888;align-self:center">0개 선택됨</div>
+      <button onclick="saveAssignManager()" style="padding:10px 24px;background:#4f8ef7;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">저장</button>
+    </div>
+  </div></div>`);
+  document.getElementById('amgr-list').addEventListener('change', ()=>{
+    const cnt = document.querySelectorAll('[data-amgr-id]:checked').length;
+    const el = document.getElementById('amgr-count');
+    if (el) el.textContent = cnt + '개 선택됨';
+  });
+}
+function amgrSelectAll(v) {
+  document.querySelectorAll('[data-amgr-id]').forEach(el => el.checked = v);
+  const cnt = v ? document.querySelectorAll('[data-amgr-id]').length : 0;
+  const el = document.getElementById('amgr-count');
+  if (el) el.textContent = cnt + '개 선택됨';
+}
+function saveAssignManager() {
+  const mgr = document.getElementById('amgr-sel')?.value;
+  if (!mgr) { alert('담당자를 선택해주세요'); return; }
+  const checked = [...document.querySelectorAll('[data-amgr-id]:checked')].map(el => Number(el.dataset.amgrId));
+  if (!checked.length) { alert('배정할 거래처를 선택해주세요'); return; }
+  if (!G.managerHistory) G.managerHistory = {};
+  checked.forEach(id => {
+    const c = G.clients.find(x => x.id===id);
+    if (!c) return;
+    const oldStr = getManagers(c).join(', ') || '(없음)';
+    c.managers = [mgr];
+    c.manager = mgr;
+    if (!G.managerHistory[id]) G.managerHistory[id] = [];
+    G.managerHistory[id].push({ date: new Date().toLocaleString('ko-KR'), from: oldStr, to: mgr });
+  });
+  saveToLS();
+  closeModal();
+  renderDashboard();
+  alert(`${mgr} 담당자로 ${checked.length}개 업체 배정 완료`);
+}
+
 // ══════════════════════════════════════════════════════
 // 거래처 상세 모달
 // ══════════════════════════════════════════════════════
@@ -3216,6 +3358,36 @@ function renderJulgae() {
   ${periods.length === 0 ? `<div class="card" style="text-align:center;padding:40px;color:#aaa">
     신고리스트가 없습니다. <b>+ 신고리스트 추가</b> 버튼을 눌러 시작하세요.</div>` : `
 
+  ${(()=>{
+    const tiles = periods.map((p, i) => {
+      const pKey = p.id;
+      let targets;
+      if (p.enrolled?.length > 0) {
+        targets = G.clients.filter(c => p.enrolled.includes(c.id));
+      } else {
+        targets = applyReportFilter(G.clients.filter(c => c.status!=='해지'&&c.status!=='폐업'), p);
+      }
+      const total = targets.length;
+      const done = targets.filter(c => julgaeVal(pKey, c.id).a).length;
+      const pct = total ? Math.round(done/total*100) : 0;
+      const isActive = i === idx;
+      const bg = pct===100?'#e8f5e9':pct>=70?'#e8f0fe':pct>=30?'#fff8e1':'#fdecea';
+      const border = isActive?'#4f8ef7':(pct===100?'#81c784':pct>=70?'#7c4dff':pct>=30?'#ffca28':'#ef9a9a');
+      const col = pct===100?'#2e7d32':pct>=70?'#4527a0':pct>=30?'#e65100':'#c62828';
+      const shortLabel = p.label.replace(/^\d{2}년 /, '').replace('부가세 ', '부가').replace('법인세 신고', '법인세').replace('종합소득세 신고', '종소세').replace('성실신고사업자 신고', '성실신고').replace('사업장현황신고', '사업장현황').replace(' 신고', '').replace('확정신고', '확정').replace('예정신고', '예정');
+      return `<div onclick="G.julgaePeriodIdx=${i};renderJulgae()" style="cursor:pointer;padding:7px 10px;border-radius:8px;border:2px solid ${border};background:${isActive?'#e8f0fe':bg};min-width:80px;text-align:center;transition:box-shadow .1s${isActive?';box-shadow:0 2px 8px rgba(79,142,247,.3)':''}" title="${esc(p.label)} — ${done}/${total} 완료">
+        <div style="font-size:10px;color:${isActive?'#1565c0':'#888'};margin-bottom:3px;font-weight:${isActive?700:400}">${esc(shortLabel)}</div>
+        <div style="font-size:14px;font-weight:800;color:${isActive?'#1565c0':col}">${pct}%</div>
+        <div class="progress-bar" style="height:4px;margin-top:4px"><div class="progress-fill" style="width:${pct}%;background:${border}"></div></div>
+        <div style="font-size:9px;color:#aaa;margin-top:2px">${done}/${total}</div>
+      </div>`;
+    }).join('');
+    return `<div class="card" style="padding:12px 14px;margin-bottom:12px">
+      <div style="font-size:12px;color:#888;margin-bottom:8px;font-weight:600">신고기간 진행 현황 — 클릭하여 이동</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">${tiles}</div>
+    </div>`;
+  })()}
+
   <div style="margin-bottom:16px">
     ${(()=>{
       const byYear = {}; const yearOrder = [];
@@ -3901,8 +4073,12 @@ function renderFees() {
   const monthlyRows = filteredFeeClients.map(c => {
     const collected = G.monthlyFees[c.id]?.[ym] || false;
     const feeHist = ((G.feeHistory||{})[c.id]||{})[ym];
+    const streak = !collected ? getUnpaidStreak(c, ym) : 0;
+    const streakBadge = streak >= 2
+      ? `<span style="font-size:10px;font-weight:700;color:#fff;background:${streak>=6?'#b71c1c':streak>=3?'#e53935':'#ff7043'};border-radius:10px;padding:1px 6px;margin-left:5px;white-space:nowrap">${streak}개월 미납</span>`
+      : '';
     return `<tr style="background:${collected?'#e8f5e9':'#fff'}">
-      <td><div style="font-weight:600;font-size:13px">${esc(c.name)}</div></td>
+      <td><div style="font-weight:600;font-size:13px;display:flex;align-items:center;flex-wrap:wrap;gap:2px">${esc(c.name)}${streakBadge}</div></td>
       <td style="font-size:12px;color:#444;${hc['fm_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
       <td style="${hc['fm_dealType']?'display:none':''}">${getDealTypes(c).map(d=>dealBadge(d)).join('')}</td>
       <td style="color:#555;font-size:12px;${hc['fm_manager']?'display:none':''}">${getManagers(c).join(', ')||'-'}</td>
