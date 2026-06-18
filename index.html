@@ -5420,7 +5420,7 @@ ${input}
   try {
     const result = await aiCall(null, prompt, 1500);
     if (!result) { resultDiv.innerHTML = ''; return; }
-    resultDiv.innerHTML = `<div class="ai-result">${esc(result).replace(/\n/g,'<br>')}</div>`;
+    resultDiv.innerHTML = `<div class="ai-result">${esc(result)}</div>`;
   } catch(e) {
     resultDiv.innerHTML = `<div style="color:#e53935">AI 검토 오류: ${esc(String(e.message||e))}</div>`;
   }
@@ -5481,7 +5481,7 @@ ${input}
   try {
     const result = await aiCall(null, prompt, 1500);
     if (!result) { resultDiv.innerHTML = ''; return; }
-    resultDiv.innerHTML = `<div class="ai-result">${esc(result).replace(/\n/g,'<br>')}</div>`;
+    resultDiv.innerHTML = `<div class="ai-result">${esc(result)}</div>`;
   } catch(e) {
     resultDiv.innerHTML = `<div style="color:#e53935">AI 검토 오류: ${esc(String(e.message||e))}</div>`;
   }
@@ -6298,10 +6298,19 @@ async function aiCall(system, userMsg, maxTokens=800) {
   if (!key) { alert('⚙ 설정에서 Claude AI API 키를 먼저 입력해주세요 (설정 → Claude AI API 키)'); return null; }
   const body = {model:'claude-sonnet-4-6', max_tokens:maxTokens, messages:[{role:'user', content:userMsg}]};
   if (system) body.system = system;
-  const res = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:aiHeaders(),body:JSON.stringify(body)});
-  if (!res.ok) { const e=await res.json().catch(()=>({error:{message:res.statusText}})); throw new Error(e?.error?.message||res.statusText); }
-  const data = await res.json();
-  return data.content?.map(b=>b.text||'').join('') || '';
+  const ctrl = new AbortController();
+  const timer = setTimeout(()=>ctrl.abort(), 30000);
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:aiHeaders(),body:JSON.stringify(body),signal:ctrl.signal});
+    if (!res.ok) { const e=await res.json().catch(()=>({error:{message:res.statusText}})); throw new Error(e?.error?.message||res.statusText); }
+    const data = await res.json();
+    return data.content?.map(b=>b.text||'').join('') || '';
+  } catch(e) {
+    if (e.name==='AbortError') throw new Error('AI 응답 시간 초과 (30초). 다시 시도해주세요.');
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function addMgr() {
@@ -6533,7 +6542,7 @@ function openGlobalSearch() {
   const popup = document.createElement('div');
   popup.id = 'global-search-popup';
   popup.style.cssText = 'position:fixed;top:56px;left:50%;transform:translateX(-50%);z-index:500;background:#fff;border-radius:14px;box-shadow:0 8px 40px rgba(0,0,0,.22);padding:14px;width:min(480px,96vw);max-height:70vh;overflow-y:auto';
-  popup.innerHTML = `<div style="margin-bottom:10px"><input id="global-search-input" type="text" placeholder="거래처명, 대표자, 사업자번호 검색..." style="width:100%;padding:10px 14px;border:1.5px solid #4f8ef7;border-radius:10px;font-size:14px;outline:none;font-family:inherit" oninput="doGlobalSearch(this.value)"></div><div id="global-search-results" style="display:flex;flex-direction:column;gap:4px"></div>`;
+  popup.innerHTML = `<div style="margin-bottom:10px"><input id="global-search-input" type="text" placeholder="거래처명, 대표자, 사업자번호 검색..." style="width:100%;padding:10px 14px;border:1.5px solid #4f8ef7;border-radius:10px;font-size:14px;outline:none;font-family:inherit" oninput="_dGS(this.value)"></div><div id="global-search-results" style="display:flex;flex-direction:column;gap:4px"></div>`;
   document.body.appendChild(popup);
   document.getElementById('global-search-input').focus();
   doGlobalSearch('');
@@ -7034,6 +7043,7 @@ init();
 const _dRC = debounce(renderClients, 220);
 const _dRJ = debounce(renderJulgae, 220);
 const _dRF = debounce(renderFees, 220);
+const _dGS = debounce(doGlobalSearch, 220);
 </script>
 </body>
 </html>
