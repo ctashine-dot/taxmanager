@@ -109,6 +109,8 @@ input.finput:focus,select.fsel:focus,textarea.ftarea:focus{border-color:#4f8ef7}
 .progress-bar{height:6px;background:#f0f0f0;border-radius:3px;overflow:hidden;margin-top:8px}
 .progress-fill{height:100%;background:linear-gradient(90deg,#4f8ef7,#2e7d32);border-radius:3px}
 
+/* ── 필터 팝업 공통 */
+.fpop{position:fixed;z-index:9999;background:#fff;border:1.5px solid #e0e0e0;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);padding:14px;min-width:200px}
 /* ── AI 도구 카드 */
 .tool-card{background:#fff;border-radius:16px;padding:22px;cursor:pointer;text-align:left;box-shadow:0 2px 8px rgba(0,0,0,.07);border:2px solid transparent;transition:box-shadow .15s,border-color .15s;width:100%}
 .tool-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.12)}
@@ -853,6 +855,11 @@ function badge(label, color='gray') {
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+function debounce(fn, ms) {
+  let t;
+  return function(...a){ clearTimeout(t); t=setTimeout(()=>fn.apply(this,a), ms||250); };
+}
+const spinnerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid #ddd;border-top-color:#555;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:6px"></span>';
 function chk(val, onclick='') {
   return `<div class="chk ${val?'on':''}" onclick="${onclick}">${val?'✓':''}</div>`;
 }
@@ -1541,13 +1548,13 @@ function _openClientSearch(field, title, inputId, btnEl) {
   const cur = G[field] || '';
   const pop = document.createElement('div');
   pop.id = 'filter-popup';
-  pop.style.cssText = 'position:fixed;z-index:9999;background:#fff;border:1.5px solid #e0e0e0;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);padding:14px;min-width:200px;';
+  pop.className = 'fpop';
   const rect = btnEl.getBoundingClientRect();
   pop.style.top = Math.min(rect.bottom+6, window.innerHeight-130)+'px';
   pop.style.left = Math.max(8, Math.min(rect.left, window.innerWidth-220))+'px';
   pop.innerHTML = `<div style="font-size:12px;font-weight:800;color:#333;margin-bottom:8px">${title}</div>
     <input id="${inputId}" type="text" value="${cur.replace(/"/g,'&quot;')}" placeholder="${title.replace(' 검색','')}"
-      oninput="G['${field}']=this.value;G.clientPage=0;renderClients()"
+      oninput="G['${field}']=this.value;G.clientPage=0;_dRC()"
       style="width:100%;padding:8px 10px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:14px;font-family:inherit;box-sizing:border-box">
     <div style="display:flex;gap:6px;margin-top:10px">
       <button onclick="G['${field}']='';G.clientPage=0;renderClients();document.getElementById('filter-popup')?.remove();document.removeEventListener('click',_fpOutside);_fpField=null" style="flex:1;padding:7px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:13px;cursor:pointer;font-family:inherit">초기화</button>
@@ -1572,13 +1579,13 @@ function openJulgaeNameSearch(btnEl) {
   _fpField = '__jns';
   const pop = document.createElement('div');
   pop.id = 'filter-popup';
-  pop.style.cssText = 'position:fixed;z-index:9999;background:#fff;border:1.5px solid #e0e0e0;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);padding:14px;min-width:200px;';
+  pop.className = 'fpop';
   const rect = btnEl.getBoundingClientRect();
   pop.style.top = Math.min(rect.bottom+6, window.innerHeight-130)+'px';
   pop.style.left = Math.max(8, Math.min(rect.left, window.innerWidth-220))+'px';
   pop.innerHTML = `<div style="font-size:12px;font-weight:800;color:#333;margin-bottom:8px">거래처명 검색</div>
     <input id="jns-inp" type="text" value="${G.julgaeSearch.replace(/"/g,'&quot;')}" placeholder="거래처명 입력"
-      oninput="G.julgaeSearch=this.value;renderJulgae()"
+      oninput="G.julgaeSearch=this.value;_dRJ()"
       style="width:100%;padding:8px 10px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:14px;font-family:inherit;box-sizing:border-box">
     <div style="display:flex;gap:6px;margin-top:10px">
       <button onclick="G.julgaeSearch='';renderJulgae();document.getElementById('filter-popup')?.remove();document.removeEventListener('click',_fpOutside);_fpField=null" style="flex:1;padding:7px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:13px;cursor:pointer;font-family:inherit">초기화</button>
@@ -1593,13 +1600,13 @@ function openJulgaeRepSearch(btnEl) {
   _fpField = '__jrs';
   const pop = document.createElement('div');
   pop.id = 'filter-popup';
-  pop.style.cssText = 'position:fixed;z-index:9999;background:#fff;border:1.5px solid #e0e0e0;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);padding:14px;min-width:200px;';
+  pop.className = 'fpop';
   const rect = btnEl.getBoundingClientRect();
   pop.style.top = Math.min(rect.bottom+6, window.innerHeight-130)+'px';
   pop.style.left = Math.max(8, Math.min(rect.left, window.innerWidth-220))+'px';
   pop.innerHTML = `<div style="font-size:12px;font-weight:800;color:#333;margin-bottom:8px">대표자명 검색</div>
     <input id="jrs-inp" type="text" value="${G.julgaeRepSearch.replace(/"/g,'&quot;')}" placeholder="대표자명 입력"
-      oninput="G.julgaeRepSearch=this.value;renderJulgae()"
+      oninput="G.julgaeRepSearch=this.value;_dRJ()"
       style="width:100%;padding:8px 10px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:14px;font-family:inherit;box-sizing:border-box">
     <div style="display:flex;gap:6px;margin-top:10px">
       <button onclick="G.julgaeRepSearch='';renderJulgae();document.getElementById('filter-popup')?.remove();document.removeEventListener('click',_fpOutside);_fpField=null" style="flex:1;padding:7px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:13px;cursor:pointer;font-family:inherit">초기화</button>
@@ -1636,13 +1643,13 @@ function openFeesNameSearch(btnEl) {
   const cur=G[FLD]||'';
   const pop=document.createElement('div');
   pop.id='filter-popup';
-  pop.style.cssText='position:fixed;z-index:9999;background:#fff;border:1.5px solid #e0e0e0;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);padding:14px;min-width:200px;';
+  pop.className='fpop';
   const rect=btnEl.getBoundingClientRect();
   pop.style.top=Math.min(rect.bottom+6,window.innerHeight-130)+'px';
   pop.style.left=Math.max(8,Math.min(rect.left,window.innerWidth-220))+'px';
   pop.innerHTML=`<div style="font-size:12px;font-weight:800;color:#333;margin-bottom:8px">거래처명 검색</div>
     <input id="${ID}" type="text" value="${cur.replace(/"/g,'&quot;')}" placeholder="거래처명"
-      oninput="G['${FLD}']=this.value;renderFees()"
+      oninput="G['${FLD}']=this.value;_dRF()"
       style="width:100%;padding:8px 10px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:14px;font-family:inherit;box-sizing:border-box">
     <div style="display:flex;gap:6px;margin-top:10px">
       <button onclick="G['${FLD}']='';renderFees();document.getElementById('filter-popup')?.remove();document.removeEventListener('click',_fpOutside);_fpField=null" style="flex:1;padding:7px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:13px;cursor:pointer;font-family:inherit">초기화</button>
@@ -1659,13 +1666,13 @@ function openFilingNameSearch(btnEl) {
   const cur=G[FLD]||'';
   const pop=document.createElement('div');
   pop.id='filter-popup';
-  pop.style.cssText='position:fixed;z-index:9999;background:#fff;border:1.5px solid #e0e0e0;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);padding:14px;min-width:200px;';
+  pop.className='fpop';
   const rect=btnEl.getBoundingClientRect();
   pop.style.top=Math.min(rect.bottom+6,window.innerHeight-130)+'px';
   pop.style.left=Math.max(8,Math.min(rect.left,window.innerWidth-220))+'px';
   pop.innerHTML=`<div style="font-size:12px;font-weight:800;color:#333;margin-bottom:8px">거래처명 검색</div>
     <input id="${ID}" type="text" value="${cur.replace(/"/g,'&quot;')}" placeholder="거래처명"
-      oninput="G['${FLD}']=this.value;renderFees()"
+      oninput="G['${FLD}']=this.value;_dRF()"
       style="width:100%;padding:8px 10px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:14px;font-family:inherit;box-sizing:border-box">
     <div style="display:flex;gap:6px;margin-top:10px">
       <button onclick="G['${FLD}']='';renderFees();document.getElementById('filter-popup')?.remove();document.removeEventListener('click',_fpOutside);_fpField=null" style="flex:1;padding:7px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:13px;cursor:pointer;font-family:inherit">초기화</button>
@@ -1682,13 +1689,13 @@ function openFeesRepSearch(btnEl) {
   const cur=G[FLD]||'';
   const pop=document.createElement('div');
   pop.id='filter-popup';
-  pop.style.cssText='position:fixed;z-index:9999;background:#fff;border:1.5px solid #e0e0e0;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);padding:14px;min-width:200px;';
+  pop.className='fpop';
   const rect=btnEl.getBoundingClientRect();
   pop.style.top=Math.min(rect.bottom+6,window.innerHeight-130)+'px';
   pop.style.left=Math.max(8,Math.min(rect.left,window.innerWidth-220))+'px';
   pop.innerHTML=`<div style="font-size:12px;font-weight:800;color:#333;margin-bottom:8px">대표자 검색</div>
     <input id="${ID}" type="text" value="${cur.replace(/"/g,'&quot;')}" placeholder="대표자"
-      oninput="G['${FLD}']=this.value;renderFees()"
+      oninput="G['${FLD}']=this.value;_dRF()"
       style="width:100%;padding:8px 10px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:14px;font-family:inherit;box-sizing:border-box">
     <div style="display:flex;gap:6px;margin-top:10px">
       <button onclick="G['${FLD}']='';renderFees();document.getElementById('filter-popup')?.remove();document.removeEventListener('click',_fpOutside);_fpField=null" style="flex:1;padding:7px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:13px;cursor:pointer;font-family:inherit">초기화</button>
@@ -1705,13 +1712,13 @@ function openFilingRepSearch(btnEl) {
   const cur=G[FLD]||'';
   const pop=document.createElement('div');
   pop.id='filter-popup';
-  pop.style.cssText='position:fixed;z-index:9999;background:#fff;border:1.5px solid #e0e0e0;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);padding:14px;min-width:200px;';
+  pop.className='fpop';
   const rect=btnEl.getBoundingClientRect();
   pop.style.top=Math.min(rect.bottom+6,window.innerHeight-130)+'px';
   pop.style.left=Math.max(8,Math.min(rect.left,window.innerWidth-220))+'px';
   pop.innerHTML=`<div style="font-size:12px;font-weight:800;color:#333;margin-bottom:8px">대표자 검색</div>
     <input id="${ID}" type="text" value="${cur.replace(/"/g,'&quot;')}" placeholder="대표자"
-      oninput="G['${FLD}']=this.value;renderFees()"
+      oninput="G['${FLD}']=this.value;_dRF()"
       style="width:100%;padding:8px 10px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:14px;font-family:inherit;box-sizing:border-box">
     <div style="display:flex;gap:6px;margin-top:10px">
       <button onclick="G['${FLD}']='';renderFees();document.getElementById('filter-popup')?.remove();document.removeEventListener('click',_fpOutside);_fpField=null" style="flex:1;padding:7px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:13px;cursor:pointer;font-family:inherit">초기화</button>
@@ -1741,7 +1748,7 @@ function openClosureNameSearch(btnEl) {
   _fpField='__'+ID;
   const cur=G[FLD]||'';
   const pop=document.createElement('div'); pop.id='filter-popup';
-  pop.style.cssText='position:fixed;z-index:9999;background:#fff;border:1.5px solid #e0e0e0;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);padding:14px;min-width:200px;';
+  pop.className='fpop';
   const rect=btnEl.getBoundingClientRect();
   pop.style.top=Math.min(rect.bottom+6,window.innerHeight-130)+'px';
   pop.style.left=Math.max(8,Math.min(rect.left,window.innerWidth-220))+'px';
@@ -1763,7 +1770,7 @@ function openClosureRepSearch(btnEl) {
   _fpField='__'+ID;
   const cur=G[FLD]||'';
   const pop=document.createElement('div'); pop.id='filter-popup';
-  pop.style.cssText='position:fixed;z-index:9999;background:#fff;border:1.5px solid #e0e0e0;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);padding:14px;min-width:200px;';
+  pop.className='fpop';
   const rect=btnEl.getBoundingClientRect();
   pop.style.top=Math.min(rect.bottom+6,window.innerHeight-130)+'px';
   pop.style.left=Math.max(8,Math.min(rect.left,window.innerWidth-220))+'px';
@@ -1811,7 +1818,8 @@ function openFilterPopup(field, btnEl) {
   const rect = btnEl.getBoundingClientRect();
   const pop = document.createElement('div');
   pop.id = 'filter-popup';
-  pop.style.cssText = 'position:fixed;z-index:9999;background:#fff;border:1.5px solid #e0e0e0;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,0.18);padding:14px;min-width:175px;max-height:80vh;overflow-y:auto;';
+  pop.className = 'fpop';
+  pop.style.cssText += 'max-height:80vh;overflow-y:auto;';
   const top = Math.min(rect.bottom + 6, window.innerHeight - 340);
   const left = Math.max(8, Math.min(rect.left, window.innerWidth - 200));
   pop.style.top = top + 'px'; pop.style.left = left + 'px';
@@ -4592,7 +4600,7 @@ async function runChecklistAI() {
   const checked = [...document.querySelectorAll('[data-cl-id]:checked')].map(el=>Number(el.dataset.clId));
   if (!checked.length) return alert('거래처를 선택해주세요');
   const results = document.getElementById('cl-results');
-  results.innerHTML = '<div style="text-align:center;padding:16px;color:#888">AI 생성 중...</div>';
+  results.innerHTML = `<div style="text-align:center;padding:16px;color:#888">${spinnerHTML}AI 생성 중...</div>`;
   const sys = `당신은 한국 세무사 사무소의 신고 업무 전문가입니다. 거래처별 맞춤 신고 체크리스트를 작성합니다.
 형식: 번호 목록(1. 2. 3. ...), 각 항목은 구체적이고 실무적으로, 5~8개 항목, 마크다운 없이`;
   let html = '';
@@ -4661,7 +4669,7 @@ async function runEngagementLetterAI() {
   const office = G.settings.name||'세무사 사무소';
   const rep = G.settings.rep||'대표 세무사';
   const result = document.getElementById('el-result');
-  result.innerHTML = '<div style="text-align:center;padding:16px;color:#888">AI 생성 중...</div>';
+  result.innerHTML = `<div style="text-align:center;padding:16px;color:#888">${spinnerHTML}AI 생성 중...</div>`;
   const sys = `당신은 한국 세무사 사무소 전문 문서 작성 AI입니다. 세무사법 및 실무에 맞는 수임계약서를 작성합니다.
 계약서 구성: 제1조(목적) 제2조(수임업무) 제3조(보수) 제4조(자료제공의무) 제5조(비밀유지) 제6조(계약기간 및 해지) 제7조(책임한계) 제8조(분쟁해결)
 형식: 조항 번호 포함, ${tone} 어투, 마크다운 없이, 서명란 포함`;
@@ -4981,7 +4989,7 @@ async function runAINotice() {
   const tone = document.getElementById('notice-tone').value;
   const deadline = document.getElementById('notice-deadline').value;
   const results = document.getElementById('notice-results');
-  results.innerHTML = '<div style="text-align:center;padding:20px;color:#888">AI 생성 중...</div>';
+  results.innerHTML = `<div style="text-align:center;padding:20px;color:#888">${spinnerHTML}AI 생성 중...</div>`;
 
   for (const chip of chips) {
     const c = G.clients.find(x=>x.id===Number(chip.dataset.id));
@@ -5136,7 +5144,7 @@ async function runAIReminder() {
   const tone = document.getElementById('sms-tone').value;
   const deadline = document.getElementById('sms-deadline').value;
   const results = document.getElementById('sms-results');
-  results.innerHTML = '<div style="text-align:center;padding:20px;color:#888">AI 생성 중...</div>';
+  results.innerHTML = `<div style="text-align:center;padding:20px;color:#888">${spinnerHTML}AI 생성 중...</div>`;
 
   for (const chip of chips) {
     const c = G.clients.find(x=>x.id===Number(chip.dataset.id));
@@ -5256,7 +5264,7 @@ async function tcSendChat() {
   inp.value = '';
   window._tcMsgs.push({role:'user', content:q});
   tcAddMsg('user', esc(q));
-  const loadDiv = tcAddMsg('ai', '<span style="display:inline-block;width:16px;height:16px;border:2px solid #ccc;border-top-color:#555;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:6px"></span> 답변 생성 중...');
+  const loadDiv = tcAddMsg('ai', `${spinnerHTML} 답변 생성 중...`);
   try {
     const [aiRes, precRes] = await Promise.all([
       tcFetchAI(window._tcMsgs),
@@ -5326,7 +5334,7 @@ async function tcSearchPrec() {
   const type = document.getElementById('tc-prec-type').value;
   if (!keyword) return;
   const box = document.getElementById('tc-prec-results');
-  box.innerHTML = '<div style="text-align:center;padding:24px;color:#888;font-size:14px"><span style="display:inline-block;width:16px;height:16px;border:2px solid #ccc;border-top-color:#555;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:6px"></span>검색 중...</div>';
+  box.innerHTML = `<div style="text-align:center;padding:24px;color:#888;font-size:14px">${spinnerHTML}검색 중...</div>`;
   const results = await tcFetchPrec(keyword, type, 15);
   if (!results || results.length === 0) {
     box.innerHTML = '<div style="text-align:center;padding:32px;color:#aaa;font-size:14px">검색 결과가 없습니다</div>';
@@ -5396,7 +5404,7 @@ async function runVatReview() {
   const bizType = document.getElementById('vat-biz-type').value;
   const period = document.getElementById('vat-period').value;
   const resultDiv = document.getElementById('vat-result');
-  resultDiv.innerHTML = '<div style="text-align:center;padding:20px;color:#888"><span style="display:inline-block;width:16px;height:16px;border:2px solid #ccc;border-top-color:#555;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:6px"></span>AI 검토 중...</div>';
+  resultDiv.innerHTML = `<div style="text-align:center;padding:20px;color:#888">${spinnerHTML}AI 검토 중...</div>`;
   const prompt = `아래는 ${bizType} ${period} 부가가치세 신고서의 주요 수치입니다.
 
 ${input}
@@ -5456,7 +5464,7 @@ async function runCorpTaxReview() {
   const taxType = document.getElementById('corp-tax-type').value;
   const year = document.getElementById('corp-year').value.trim() || new Date().getFullYear()-1;
   const resultDiv = document.getElementById('corp-result');
-  resultDiv.innerHTML = '<div style="text-align:center;padding:20px;color:#888"><span style="display:inline-block;width:16px;height:16px;border:2px solid #ccc;border-top-color:#555;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:6px"></span>AI 검토 중...</div>';
+  resultDiv.innerHTML = `<div style="text-align:center;padding:20px;color:#888">${spinnerHTML}AI 검토 중...</div>`;
   const prompt = `아래는 ${year}년 귀속 ${taxType} 신고서의 주요 수치입니다.
 
 ${input}
@@ -7022,6 +7030,10 @@ init();
   const _rc = renderClients;
   renderClients = function() { _rc.apply(this, arguments); requestAnimationFrame(updateNav); };
 })();
+// 검색 입력 디바운스 — 키 입력마다 전체 리렌더 방지
+const _dRC = debounce(renderClients, 220);
+const _dRJ = debounce(renderJulgae, 220);
+const _dRF = debounce(renderFees, 220);
 </script>
 </body>
 </html>
