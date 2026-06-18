@@ -3326,6 +3326,22 @@ function renderJulgae() {
   const _jFeeSum    = c => { const v=julgaeVal(pKey2,c.id); return (v.fee||0)+(isSeongsiType?(v.feeSeongsi||0):0); };
   const feeTotal    = clients.reduce((a,c) => a + _jFeeSum(c), 0);
   const feeCollected= clients.filter(c => julgaeVal(pKey2,c.id).s).reduce((a,c) => a + _jFeeSum(c), 0);
+  // 정렬
+  const _jSort = G.julgaeSort || 'name';
+  const _jDir  = G.julgaeSortDir === 'desc' ? -1 : 1;
+  const _taxOrder = {'법인':0, '개인':1};
+  const _statusScore = c => { const v=julgaeVal(pKey2,c.id); return (v.s?8:0)+(v.a?4:0)+(v.b?2:0)+(v.d?1:0); };
+  clients = [...clients].sort((a, b) => {
+    let d = 0;
+    if (_jSort === 'taxType')   d = ((_taxOrder[a.taxType]??2) - (_taxOrder[b.taxType]??2));
+    else if (_jSort === 'manager')  d = (getManagers(a)[0]||'힙').localeCompare(getManagers(b)[0]||'힙','ko');
+    else if (_jSort === 'contract') d = ((a.contracts||[])[0]||'힙').localeCompare((b.contracts||[])[0]||'힙','ko');
+    else if (_jSort === 'status')   d = _statusScore(a) - _statusScore(b);
+    else if (_jSort === 'fee')      d = _jFeeSum(b) - _jFeeSum(a);
+    else d = a.name.localeCompare(b.name, 'ko');
+    return d !== 0 ? _jDir * d : a.name.localeCompare(b.name, 'ko');
+  });
+
   const niInput = (cid, field, val, extraStyle='') =>
     `<input type="number" class="julgae-num-input" value="${val||''}" placeholder="0"
       onchange="updateJulgaeNum('${pKey2}',${cid},'${field}',this.value)"
@@ -3546,6 +3562,20 @@ function renderJulgae() {
     <span style="font-size:12px;color:#888">목록 ${(G.sectionCollapsed||{})['julgae-list']?'(접힘)':''}</span>
   </div>
 
+  <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap">
+    <span style="font-size:12px;color:#888;font-weight:600">정렬:</span>
+    <select onchange="G.julgaeSort=this.value;renderJulgae()" style="font-size:12px;padding:3px 8px;border-radius:6px;border:1px solid #e0e0e0;font-family:inherit;cursor:pointer">
+      <option value="name" ${(G.julgaeSort||'name')==='name'?'selected':''}>거래처명</option>
+      <option value="taxType" ${G.julgaeSort==='taxType'?'selected':''}>법인/개인</option>
+      <option value="manager" ${G.julgaeSort==='manager'?'selected':''}>담당자별</option>
+      <option value="contract" ${G.julgaeSort==='contract'?'selected':''}>수임내용별</option>
+      <option value="status" ${G.julgaeSort==='status'?'selected':''}>진행상태</option>
+      <option value="fee" ${G.julgaeSort==='fee'?'selected':''}>수수료</option>
+    </select>
+    <button onclick="G.julgaeSortDir=(G.julgaeSortDir||'asc')==='asc'?'desc':'asc';renderJulgae()" style="padding:3px 10px;border-radius:6px;border:1px solid ${(G.julgaeSortDir||'asc')==='desc'?'#4f8ef7':'#e0e0e0'};background:${(G.julgaeSortDir||'asc')==='desc'?'#e8f0fe':'#f5f5f5'};color:${(G.julgaeSortDir||'asc')==='desc'?'#1565c0':'#555'};font-size:12px;cursor:pointer;font-family:inherit">
+      ${(G.julgaeSortDir||'asc')==='asc'?'↑ 오름차순':'↓ 내림차순'}
+    </button>
+  </div>
   <div class="tbl-wrap" style="${(G.sectionCollapsed||{})['julgae-list']?'display:none':''}">
   <table>
     <thead><tr>
