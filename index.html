@@ -2817,25 +2817,29 @@ function openForm(id) {
       <input class="finput" id="f-rep" value="${esc(c.rep||'')}" oninput="window._formData.rep=this.value">
     </div>
 
-    <div class="ff">
-      <label class="ffl">연락처</label>
-      <input class="finput" id="f-phone" value="${esc(c.phone||'')}" oninput="window._formData.phone=this.value">
-    </div>
-    <div class="ff c2">
-      <label class="ffl">이메일</label>
-      <input class="finput" id="f-email" value="${esc(c.email||'')}" oninput="window._formData.email=this.value">
+    <div class="c3" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="ff">
+        <label class="ffl">연락처</label>
+        <input class="finput" id="f-phone" value="${esc(c.phone||'')}" oninput="window._formData.phone=this.value">
+      </div>
+      <div class="ff">
+        <label class="ffl">이메일</label>
+        <input class="finput" id="f-email" value="${esc(c.email||'')}" oninput="window._formData.email=this.value">
+      </div>
     </div>
 
-    <div class="c2">
-      <div class="ff">
-        <label class="ffl">사업자번호</label>
-        <input class="finput" id="f-bizNo" value="${esc(c.bizNo||'')}" placeholder="000-00-00000" oninput="validateBizNo(this.value,this)">
+    <div class="c3" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div>
+        <div class="ff">
+          <label class="ffl">사업자번호</label>
+          <input class="finput" id="f-bizNo" value="${esc(c.bizNo||'')}" placeholder="000-00-00000" oninput="validateBizNo(this.value,this)">
+        </div>
+        <div id="bizno-msg" style="font-size:10px;margin-top:2px;padding-left:4px"></div>
       </div>
-      <div id="bizno-msg" style="font-size:10px;margin-top:2px;padding-left:4px"></div>
-    </div>
-    <div class="ff">
-      <label class="ffl" id="f-jumin-label">${c.taxType==='법인'?'법인번호':'주민번호'}</label>
-      <input class="finput" id="f-jumin" value="${esc(c.jumin||'')}" placeholder="000000-0000000" oninput="window._formData.jumin=this.value">
+      <div class="ff">
+        <label class="ffl" id="f-jumin-label">${c.taxType==='법인'?'법인번호':'주민번호'}</label>
+        <input class="finput" id="f-jumin" value="${esc(c.jumin||'')}" placeholder="000000-0000000" oninput="window._formData.jumin=this.value">
+      </div>
     </div>
 
     <div class="ff">
@@ -2884,6 +2888,16 @@ function openForm(id) {
     </div>
     <div id="fee-suggestion-box" class="c2"></div>
 
+    <div class="ff c3" style="flex-wrap:wrap;gap:4px 10px;align-items:center">
+      <label class="ffl" style="flex-shrink:0;min-width:48px">수임내용</label>
+      ${DEAL_TYPES.slice(1).map(v=>`<label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:12px;color:#333;font-weight:600;white-space:nowrap"><input type="checkbox" ${(window._formData.dealTypes||[]).includes(v)?'checked':''} onchange="(function(v,c){var l=window._formData.dealTypes||(window._formData.dealTypes=[]);var i=l.indexOf(v);if(c&&i<0)l.push(v);if(!c&&i>=0)l.splice(i,1);window._formData.dealType=l[0]||'';})('${v}',this.checked)" style="width:14px;height:14px;cursor:pointer;accent-color:#4f8ef7;flex-shrink:0"> ${v}</label>`).join('')}
+    </div>
+
+    <div class="ff c3" style="flex-wrap:wrap;gap:4px 10px;align-items:center">
+      <label class="ffl" style="flex-shrink:0;min-width:48px">담당자</label>
+      ${MANAGERS.slice(1).map(v=>`<label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:12px;color:#333;font-weight:600;white-space:nowrap"><input type="checkbox" ${(window._formData.managers||[]).includes(v)?'checked':''} onchange="(function(v,c){var l=window._formData.managers||(window._formData.managers=[]);var i=l.indexOf(v);if(c&&i<0)l.push(v);if(!c&&i>=0)l.splice(i,1);window._formData.manager=l[0]||'';})('${v}',this.checked)" style="width:14px;height:14px;cursor:pointer;accent-color:#4f8ef7;flex-shrink:0"> ${v}</label>`).join('')}
+    </div>
+
     <div class="c3" style="background:#f8f9ff;border:1px solid #e0e4f0;border-radius:10px;padding:10px">
       <div class="fsec">관계사 그룹</div>
       <div class="ff" style="margin-bottom:${_allGroups.length>0||_groupMembers.length>0?'6px':'0'}">
@@ -2903,20 +2917,6 @@ function openForm(id) {
         <div id="groups-list" style="display:none;flex-wrap:wrap;gap:4px;margin-top:5px">
           ${_allGroups.map((g,gi)=>{const cnt=G.clients.filter(cl=>cl.id!==c.id&&cl.relatedGroup===g).length;return`<button type="button" onclick="(function(){var n=window._formGroupNames[${gi}];document.getElementById('f-relatedGroup').value=n;window._formData.relatedGroup=n;window._formData.soloGroup=false;})()" style="background:#e8f0fe;border:1px solid #c5cae9;border-radius:8px;padding:3px 10px;font-size:11px;cursor:pointer;font-family:inherit;color:#1565c0">👥 ${esc(g)}<span style="color:#888;margin-left:3px;font-size:10px">${cnt}개</span></button>`;}).join('')}
         </div>`:''}
-    </div>
-
-    <div class="c3" style="background:#f8f9ff;border:1px solid #e0e4f0;border-radius:10px;padding:10px">
-      <div class="fsec">수임내용</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(85px,1fr));gap:6px 10px" id="form-dealTypes">
-        ${DEAL_TYPES.slice(1).map(v=>`<label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;color:#333;font-weight:600"><input type="checkbox" ${(window._formData.dealTypes||[]).includes(v)?'checked':''} onchange="(function(v,c){var l=window._formData.dealTypes||(window._formData.dealTypes=[]);var i=l.indexOf(v);if(c&&i<0)l.push(v);if(!c&&i>=0)l.splice(i,1);window._formData.dealType=l[0]||'';})('${v}',this.checked)" style="width:15px;height:15px;cursor:pointer;accent-color:#4f8ef7;flex-shrink:0">${v}</label>`).join('')}
-      </div>
-    </div>
-
-    <div class="c3" style="background:#f8f9ff;border:1px solid #e0e4f0;border-radius:10px;padding:10px">
-      <div class="fsec">담당자</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:6px 10px" id="form-managers">
-        ${MANAGERS.slice(1).map(v=>`<label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px;color:#333;font-weight:600"><input type="checkbox" ${(window._formData.managers||[]).includes(v)?'checked':''} onchange="(function(v,c){var l=window._formData.managers||(window._formData.managers=[]);var i=l.indexOf(v);if(c&&i<0)l.push(v);if(!c&&i>=0)l.splice(i,1);window._formData.manager=l[0]||'';})('${v}',this.checked)" style="width:15px;height:15px;cursor:pointer;accent-color:#4f8ef7;flex-shrink:0">${v}</label>`).join('')}
-      </div>
     </div>
 
     <div class="c3" style="border:1.5px solid #e0e0e0;border-radius:10px;overflow:hidden">
