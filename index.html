@@ -57,6 +57,7 @@ body{font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;background:#f0
 .badge-orange{background:#fff3e0;color:#e65100}
 .badge-purple{background:#f3e5f5;color:#6a1b9a}
 .badge-gray{background:#f5f5f5;color:#555}
+.badge-teal{background:#e0f2f1;color:#00695c}
 
 /* ── 필터바 */
 .filter-bar{background:#fff;border-radius:12px;padding:12px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
@@ -535,9 +536,9 @@ const PERIOD_TEMPLATES = [
 ];
 
 const REPORT_TYPE_FILTERS = {
-  vat:      c => c.vatType === '일반' || c.vatType === '간이',
+  vat:      c => c.vatType === '일반' || c.vatType === '간이' || c.vatType === '간세',
   vat_hak_1:c => c.vatType === '일반',
-  vat_hak_2:c => c.vatType === '일반' || c.vatType === '간이',
+  vat_hak_2:c => c.vatType === '일반' || c.vatType === '간이' || c.vatType === '간세',
   vat_yej:  c => c.taxType === '법인' && c.vatType === '일반',
   corp:     c => c.taxType === '법인',
   income:   c => c.taxType === '개인' && c.vatType !== '면세' && !getDealTypes(c).includes('성실'),
@@ -709,7 +710,7 @@ function showSaveError(msg) {
 let MANAGERS = ['전체','이슬빈','이현주','정여주','최수이'];
 let _tempMgrs = [];
 const TAX_TYPES = ['전체','법인','개인'];
-const VAT_TYPES = ['전체','일반','간이','면세'];
+const VAT_TYPES = ['전체','일반','간이','간세','면세'];
 const FEE_STATUSES = ['전체','수금완료','청구완료','미수금'];
 const DEAL_TYPES = ['전체','기장','신고대리','종소세대리','고문','성실'];
 const STATUS_LIST = ['정상','주의','휴업','해지','폐업'];
@@ -734,21 +735,21 @@ const TAX_OFFICES = [
 const CONTRACT_GROUPS = [
   { key:'장', label:'기장', items:[
     {key:'기장_일반', label:'기장 (일반)', vat:['일반'], tax:['법인','개인']},
-    {key:'기장_간이', label:'기장 (간이)', vat:['간이'], tax:['개인']},
+    {key:'기장_간이', label:'기장 (간이)', vat:['간이','간세'], tax:['개인']},
     {key:'기장_면세', label:'기장 (면세)', vat:['면세'], tax:['개인']},
   ]},
   { key:'신고', label:'신고대리', items:[
-    {key:'신고대리_부가세', label:'부가세 신고대리', vat:['일반','간이'], tax:['법인','개인']},
+    {key:'신고대리_부가세', label:'부가세 신고대리', vat:['일반','간이','간세'], tax:['법인','개인']},
     {key:'신고대리_면세', label:'사업장현황 신고대리', vat:['면세'], tax:['개인']},
-    {key:'종소세신고대리', label:'종합소득세 신고대리', vat:['일반','간이','면세'], tax:['개인']},
+    {key:'종소세신고대리', label:'종합소득세 신고대리', vat:['일반','간이','간세','면세'], tax:['개인']},
   ]},
   { key:'법인', label:'법인 신고', items:[
     {key:'법인세', label:'법인세 신고', vat:['일반','간이','면세'], tax:['법인']},
-    {key:'세무조정', label:'세무조정', vat:['일반','간이','면세'], tax:['법인','개인']},
+    {key:'세무조정', label:'세무조정', vat:['일반','간이','간세','면세'], tax:['법인','개인']},
   ]},
   { key:'공통', label:'공통', items:[
-    {key:'연말정산', label:'연말정산', vat:['일반','간이','면세'], tax:['법인','개인']},
-    {key:'원천세', label:'원천세 신고', vat:['일반','간이','면세'], tax:['법인','개인']},
+    {key:'연말정산', label:'연말정산', vat:['일반','간이','간세','면세'], tax:['법인','개인']},
+    {key:'원천세', label:'원천세 신고', vat:['일반','간이','간세','면세'], tax:['법인','개인']},
   ]},
 ];
 
@@ -1030,7 +1031,7 @@ function showMissingClientsModal() {
   const list = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&getMissingFields(c).length>0);
   if (!list.length) { toast('기재사항 누락 업체가 없습니다.','info'); return; }
   const TAX_TYPES = ['개인','법인'];
-  const VAT_TYPES = ['일반','간이','면세','비과세'];
+  const VAT_TYPES = ['일반','간이','간세','면세','비과세'];
   showModal(`<div style="max-width:580px;width:min(580px,97vw)">
   <div class="modal-header"><h3>📋 기재사항 누락 업체 (${list.length}개)</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
   <div class="modal-body" style="padding:0">
@@ -1551,7 +1552,7 @@ function renderClients() {
         <td data-label="대표자" style="font-size:12px;color:#444;${hc['c_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
         <td data-label="수임내용" style="${hc['c_dealType']?'display:none':''}">${em?iSel('dealType',DEAL_TYPES.slice(1),getDealTypes(c)[0]):getDealTypes(c).map(d=>dealBadge(d)).join('')}</td>
         <td data-label="인격" style="${hc['c_taxType']?'display:none':''}">${em?iSel('taxType',TAX_TYPES.slice(1),c.taxType):badge(c.taxType,c.taxType==='법인'?'blue':'gray')}</td>
-        <td data-label="과세유형" style="${hc['c_vatType']?'display:none':''}">${em?iSel('vatType',VAT_TYPES.slice(1),c.vatType):badge(c.vatType,c.vatType==='일반'?'blue':c.vatType==='간이'?'orange':'gray')}</td>
+        <td data-label="과세유형" style="${hc['c_vatType']?'display:none':''}">${em?iSel('vatType',VAT_TYPES.slice(1),c.vatType):badge(c.vatType,c.vatType==='일반'?'blue':c.vatType==='간이'?'orange':c.vatType==='간세'?'teal':'gray')}</td>
         <td data-label="담당자" style="color:#555;font-size:12px;${hc['c_manager']?'display:none':''}">${em?iSel('manager',MANAGERS.slice(1),getManagers(c)[0]||''):getManagers(c).join(', ')||'-'}</td>
         <td data-label="수수료" style="font-weight:600;font-size:11px;${hc['c_fee']?'display:none':''}">${em?`<div onclick="event.stopPropagation()" style="display:grid;grid-template-columns:auto 1fr;gap:2px 4px;align-items:center;font-size:10px"><span style="color:#888">기장</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'fee',this.value)" value="${c.fee||0}" class="inline-edit" style="width:65px"><span style="color:#888">신고</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeSingo',this.value)" value="${c.feeSingo||0}" class="inline-edit" style="width:65px"><span style="color:#888">조정</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeJojung',this.value)" value="${c.feeJojung||0}" class="inline-edit" style="width:65px"><span style="color:#888">성실</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeSeongsi',this.value)" value="${c.feeSeongsi||0}" class="inline-edit" style="width:65px"></div>`:(c.status==='정상'||c.status==='주의'?(()=>{const p=[];if(c.fee)p.push('<span style="color:#aaa;font-size:10px">기장</span> '+c.fee.toLocaleString());if(c.feeSingo)p.push('<span style="color:#aaa;font-size:10px">신고</span> '+c.feeSingo.toLocaleString());if(c.feeJojung)p.push('<span style="color:#aaa;font-size:10px">조정</span> '+c.feeJojung.toLocaleString());if(c.feeSeongsi)p.push('<span style="color:#aaa;font-size:10px">성실</span> '+c.feeSeongsi.toLocaleString());return p.length?p.join('<br>'):'-';})():'-')}</td>
         <td data-label="상태" ${em?`onclick="event.stopPropagation();openStatusModal(${c.id})" style="cursor:pointer;` : `style="opacity:.95;`}${hc['c_status']?'display:none':''}${em?`" title="클릭하여 상태 변경"` : `" title="상태 변경은 수정모드에서 가능합니다"`}>${badge(c.status,statusColor(c.status))}</td>
@@ -3176,9 +3177,9 @@ function renderSchedule() {
   const nowD = today.getDate();
   const yr = today.getFullYear();
 
-  const vatAllC  = active.filter(c=>c.vatType==='일반'||c.vatType==='간이');
+  const vatAllC  = active.filter(c=>c.vatType==='일반'||c.vatType==='간이'||c.vatType==='간세');
   const vatGC    = active.filter(c=>c.vatType==='일반');
-  const vatSC    = active.filter(c=>c.vatType==='간이');
+  const vatSC    = active.filter(c=>c.vatType==='간이'||c.vatType==='간세');
   const exemptC  = active.filter(c=>c.vatType==='면세');
   const incomeC  = active.filter(c=>c.taxType==='개인');
   const seongsiC = active.filter(c=>getDealTypes(c).includes('성실'));
