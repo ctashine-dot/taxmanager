@@ -1378,6 +1378,21 @@ function renderClients() {
     </div>
   </div>
 
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:stretch;margin-bottom:10px">
+    <div style="position:relative;flex:2;min-width:130px">
+      <input id="client-name-input" type="text" placeholder="거래처명" value="${esc(G.searchText||'')}" oninput="onClientNameSearch(this.value)" style="width:100%;padding:8px 30px 8px 12px;border-radius:9px;border:1.5px solid ${G.searchText?'#4f8ef7':'#e0e0e0'};font-size:13px;font-family:inherit;box-sizing:border-box;outline:none">
+      ${G.searchText?`<button onclick="G.searchText='';G.clientPage=0;renderClients()" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:18px;color:#bbb;cursor:pointer;line-height:1">×</button>`:''}
+    </div>
+    <div style="position:relative;flex:1;min-width:100px">
+      <input id="client-rep-input" type="text" placeholder="대표자" value="${esc(G.clientRepSearch||'')}" oninput="onClientRepSearch(this.value)" style="width:100%;padding:8px 30px 8px 12px;border-radius:9px;border:1.5px solid ${G.clientRepSearch?'#4f8ef7':'#e0e0e0'};font-size:13px;font-family:inherit;box-sizing:border-box;outline:none">
+      ${G.clientRepSearch?`<button onclick="G.clientRepSearch='';G.clientPage=0;renderClients()" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:18px;color:#bbb;cursor:pointer;line-height:1">×</button>`:''}
+    </div>
+    <div style="min-width:80px">${filterPopupBtn('filterManagers','담당자')}</div>
+    <div style="min-width:75px">${filterPopupBtn('filterDealTypes','수임내용')}</div>
+    <div style="min-width:60px">${filterPopupBtn('filterTaxTypes','인격')}</div>
+    <div style="min-width:75px">${filterPopupBtn('filterVatTypes','과세유형')}</div>
+  </div>
+
   <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
     ${sectionToggleBtn('clients-list')}
     <div style="font-size:12px;color:#888">총 ${list.length}개 거래처 (${G.clientPage+1}/${totalPages} 페이지)</div>
@@ -1744,6 +1759,16 @@ function onClosureSearch(v) {
 function onScheduleSearch(v) {
   G.scheduleSearch = v; renderSchedule();
   const inp = document.getElementById('schedule-search-input');
+  if (inp) { inp.focus(); const l=v.length; inp.setSelectionRange(l,l); }
+}
+function onClientNameSearch(v) {
+  G.searchText = v; G.clientPage = 0; renderClients();
+  const inp = document.getElementById('client-name-input');
+  if (inp) { inp.focus(); const l=v.length; inp.setSelectionRange(l,l); }
+}
+function onClientRepSearch(v) {
+  G.clientRepSearch = v; G.clientPage = 0; renderClients();
+  const inp = document.getElementById('client-rep-input');
   if (inp) { inp.focus(); const l=v.length; inp.setSelectionRange(l,l); }
 }
 function closureCycleBtn(field, label, states) {
