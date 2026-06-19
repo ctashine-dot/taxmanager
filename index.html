@@ -171,6 +171,7 @@ input.finput:focus,select.fsel:focus,textarea.ftarea:focus{border-color:#4f8ef7}
 
 /* ── 확장 행 */
 .expand-row td{background:#f0f4ff;padding:0;flex:0 0 100%}
+.client-row{user-select:none;-webkit-user-select:none}
 .client-row.expanded{background:#e8f0fe!important}
 .client-row.expanded:hover{background:#dce8fd!important}
 .expand-inner{display:flex;flex-wrap:wrap;gap:14px 24px;padding:14px 16px;align-items:flex-start;border-top:1px solid #c5cae9}
@@ -1544,7 +1545,7 @@ function renderClients() {
       const groupLabel = inGroup ? (c.relatedGroup && c.relatedGroup.trim() ? c.relatedGroup.trim() : c.rep) : null;
       const groupDot = inGroup ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${gc};margin-right:5px;vertical-align:middle"></span>` : '';
       const groupSub = inGroup ? `<span style="font-size:10px;color:${gc};font-weight:600;margin-left:4px">👥 ${esc(groupLabel)}</span>` : '';
-      return `<tr class="client-row" onclick="toggleExpand(${c.id})" style="${inGroup?`border-left:3px solid ${gc}`:''}" >
+      return `<tr class="client-row" onpointerdown="startLongPress(event,${c.id})" onpointermove="moveLongPress(event)" onpointerup="cancelLongPress()" onpointercancel="cancelLongPress()" oncontextmenu="event.preventDefault()" onclick="if(window._lpFired){window._lpFired=false}else{toggleExpand(${c.id})}" style="${inGroup?`border-left:3px solid ${gc}`:''}" >
         ${G.bulkMode?`<td onclick="event.stopPropagation();toggleClientSelect(${c.id})" style="width:32px;text-align:center;cursor:pointer"><input type="checkbox" ${(G.selectedClients||[]).includes(c.id)?'checked':''} style="width:16px;height:16px;cursor:pointer" onclick="event.stopPropagation();toggleClientSelect(${c.id})"></td>`:''}
         <td><div class="td-name">${(()=>{const risk=clientRiskLevel(c);return risk==='red'?'<span title="위험" style="color:#e53935;margin-right:4px">●</span>':risk==='yellow'?'<span title="주의" style="color:#f57c00;margin-right:4px">●</span>':''})()}${groupDot}${esc(c.name)}<button onclick="event.stopPropagation();openClientNotes(${c.id})" style="margin-left:4px;padding:1px 5px;border-radius:5px;border:1px solid #e0e0e0;background:#f8f9ff;font-size:11px;cursor:pointer;vertical-align:middle" title="메모/이력">📝${(G.clientNotes||{})[c.id]?.length?` ${G.clientNotes[c.id].length}`:''}</button><button onclick="event.stopPropagation();toggleFavorite(${c.id})" style="margin-left:2px;padding:1px 4px;border-radius:5px;border:1px solid #e0e0e0;background:#fff;font-size:12px;cursor:pointer;vertical-align:middle" title="즐겨찾기">${(G.favorites||[]).includes(c.id)?'⭐':'☆'}</button></div>${(c.bizType||c.bizCode||groupSub)?`<div class="td-sub">${c.bizType?esc(c.bizType):''}${c.bizCode?` <span style="color:#aaa;font-size:10px">[${esc(c.bizCode)}]</span>`:''}${groupSub}</div>`:''}</td>
         <td data-label="대표자" style="font-size:12px;color:#444;${hc['c_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
@@ -2409,6 +2410,21 @@ function _hcChips(pairs) {
   const hc = G.hiddenCols || {};
   return pairs.filter(([k])=>hc[k]).map(([k,l])=>`<button onclick="_toggleHiddenCol('${k}')" style="padding:3px 8px;border-radius:12px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;font-size:11px;cursor:pointer;font-family:inherit">+ ${l}</button>`).join('');
 }
+
+// ── 거래처 행 꾹 누르면 편집 모달 열기
+function startLongPress(e, id) {
+  if (e.target.closest('button,input,select,a')) return;
+  window._lpFired = false;
+  window._lpX = e.clientX; window._lpY = e.clientY;
+  clearTimeout(window._lpTimer);
+  window._lpTimer = setTimeout(() => { window._lpFired = true; openForm(id); }, 800);
+}
+function moveLongPress(e) {
+  if (window._lpTimer && (Math.abs(e.clientX - window._lpX) > 10 || Math.abs(e.clientY - window._lpY) > 10)) {
+    clearTimeout(window._lpTimer); window._lpTimer = null;
+  }
+}
+function cancelLongPress() { clearTimeout(window._lpTimer); }
 
 function toggleMobileExpand(id) {
   const expandSource = document.getElementById('expand-'+id);
