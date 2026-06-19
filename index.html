@@ -2411,13 +2411,13 @@ function _hcChips(pairs) {
   return pairs.filter(([k])=>hc[k]).map(([k,l])=>`<button onclick="_toggleHiddenCol('${k}')" style="padding:3px 8px;border-radius:12px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;font-size:11px;cursor:pointer;font-family:inherit">+ ${l}</button>`).join('');
 }
 
-// ── 거래처 행 꾹 누르면 편집 모달 열기
+// ── 거래처 행 꾹 누르면 빠른 변경 시트 열기
 function startLongPress(e, id) {
   if (e.target.closest('button,input,select,a')) return;
   window._lpFired = false;
   window._lpX = e.clientX; window._lpY = e.clientY;
   clearTimeout(window._lpTimer);
-  window._lpTimer = setTimeout(() => { window._lpFired = true; openForm(id); }, 800);
+  window._lpTimer = setTimeout(() => { window._lpFired = true; openQuickSheet(id); }, 800);
 }
 function moveLongPress(e) {
   if (window._lpTimer && (Math.abs(e.clientX - window._lpX) > 10 || Math.abs(e.clientY - window._lpY) > 10)) {
@@ -2425,6 +2425,30 @@ function moveLongPress(e) {
   }
 }
 function cancelLongPress() { clearTimeout(window._lpTimer); }
+
+function openQuickSheet(id) {
+  const c = G.clients.find(x=>x.id===id); if(!c) return;
+  const cmsBg    = c.cms ? '#fff3e0' : '#e8f5e9';
+  const cmsBdr   = c.cms ? '#ffb74d' : '#66bb6a';
+  const cmsClr   = c.cms ? '#e65100' : '#2e7d32';
+  showModal(`<div style="max-width:320px;width:100%">
+    <div class="modal-header"><h3>${esc(c.name)}</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body" style="gap:10px">
+      <button onclick="closeModal();setTimeout(()=>openStatusModal(${id}),50)"
+        style="width:100%;padding:14px;border-radius:10px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#1565c0;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left">
+        📋 상태 변경 &nbsp;<span style="font-size:12px;font-weight:400;color:#555">현재: ${esc(c.status||'-')}</span>
+      </button>
+      <button onclick="toggleCMS(${id});closeModal()"
+        style="width:100%;padding:14px;border-radius:10px;border:1.5px solid ${cmsBdr};background:${cmsBg};color:${cmsClr};font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left">
+        🏦 CMS ${c.cms?'해지':'가입'} &nbsp;<span style="font-size:12px;font-weight:400;color:#555">현재: ${c.cms?'가입':'미가입'}</span>
+      </button>
+      <button onclick="closeModal()"
+        style="width:100%;padding:12px;border-radius:10px;border:1.5px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:14px;cursor:pointer;font-family:inherit">
+        취소
+      </button>
+    </div>
+  </div>`);
+}
 
 function toggleMobileExpand(id) {
   const expandSource = document.getElementById('expand-'+id);
