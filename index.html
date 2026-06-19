@@ -7,6 +7,11 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>TaxManager — 세무사무소 거래처 관리</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#4f8ef7">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="TaxManager">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
@@ -430,6 +435,7 @@ let G = {
   julgaeLinks: {},
   feePayments: {},
   filterPresets: [],
+  contactLogs: {},
   scheduleCalView: false,
   scheduleCalMonth: 0,
   scheduleSearch: '',
@@ -589,6 +595,7 @@ function saveToLS() {
     localStorage.setItem('tm_julgaeLinks', JSON.stringify(G.julgaeLinks||{}));
     localStorage.setItem('tm_feePayments', JSON.stringify(G.feePayments||{}));
     localStorage.setItem('tm_filterPresets', JSON.stringify(G.filterPresets||[]));
+    localStorage.setItem('tm_contactLogs', JSON.stringify(G.contactLogs||{}));
   } catch(e) {
     console.error('로컬 저장 실패:', e);
     showSaveError('로컬 저장 공간이 부족합니다');
@@ -615,6 +622,7 @@ function saveToLS() {
       julgaeLinks: JSON.stringify(G.julgaeLinks||{}),
       feePayments: JSON.stringify(G.feePayments||{}),
       filterPresets: JSON.stringify(G.filterPresets||[]),
+      contactLogs: JSON.stringify(G.contactLogs||{}),
     }).catch(e => {
       console.error('Firebase 저장 실패:', e);
       showSaveError('클라우드 저장 실패 — 로컬에만 저장됨');
@@ -1238,10 +1246,10 @@ function _renderDashboardInner() {
       <div style="display:flex;flex-direction:column;gap:6px">
         ${sorted.map(([office,cnt])=>{
           const pct=Math.round(cnt/maxV*100);
-          return `<div>
+          return `<div data-office="${esc(office)}" onclick="openTaxOfficeClients(this.dataset.office)" style="cursor:pointer;padding:4px 6px;border-radius:6px;transition:background .12s" onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background=''">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
               <span style="font-size:13px;font-weight:600">${esc(office)}</span>
-              <span style="font-size:12px;color:#555;font-weight:700">${cnt}개</span>
+              <span style="font-size:12px;color:#555;font-weight:700">${cnt}개 →</span>
             </div>
             <div style="height:6px;background:#e8eaf6;border-radius:3px">
               <div style="height:6px;width:${pct}%;background:#4f8ef7;border-radius:3px"></div>
@@ -1408,6 +1416,7 @@ function renderClients() {
       <button class="btn-sm" style="background:#f3e5f5;color:#6a1b9a;border:1.5px solid #ce93d8" onclick="openFilterPresets(this)">⭐ 프리셋${(G.filterPresets||[]).length?' ('+(G.filterPresets||[]).length+')':''}</button>
       <button class="btn-sm" style="background:${G.bulkMode?'#e8f5e9':'#f5f5f5'};color:${G.bulkMode?'#2e7d32':'#888'};border:2px solid ${G.bulkMode?'#43a047':'#e0e0e0'}" onclick="G.bulkMode=!G.bulkMode;G.selectedClients=[];renderClients()">☑ 일괄편집${G.bulkMode?' ON':''}</button>
       <button class="btn-sm" style="background:#e8f5e9;color:#2e7d32;border:1.5px solid #a5d6a7" onclick="openManagerTransferModal()">👤 담당자 이동</button>
+      <button class="btn-sm" style="background:#fff3e0;color:#e65100;border:1.5px solid #ffcc80" onclick="openNotesSearch()">🔍 메모검색</button>
       <button class="btn-sm" style="background:#e8f5e9;color:#1b5e20;border:1.5px solid #81c784" onclick="exportClientsToExcel()">📊 Excel 내보내기</button>
       ${(()=>{const hasFilter=G.searchText||G.clientRepSearch||(G.filterManagers||[]).length||(G.filterTaxTypes||[]).length||(G.filterVatTypes||[]).length||(G.filterFeeStatuses||[]).length||(G.filterDealTypes||[]).length||(G.filterCMS||[]).length||(G.filterTags||[]).length||G.filterRisk||G.showFavorites;return hasFilter?`<button class="btn-sm" style="background:#fdecea;color:#c62828;border:1.5px solid #ef9a9a;font-weight:700" onclick="G.searchText='';G.clientRepSearch='';G.filterManagers=[];G.filterTaxTypes=[];G.filterVatTypes=[];G.filterFeeStatuses=[];G.filterDealTypes=[];G.filterCMS=[];G.filterTags=[];G.filterRisk='';G.showFavorites=false;G.clientPage=0;renderClients()">✕ 필터초기화</button>`:'';})()}
       <button class="btn-primary btn-sm" onclick="openForm(null)" style="padding:8px 14px">+ 거래처 추가</button>
@@ -3720,6 +3729,53 @@ function renderJulgae() {
     ].map(s=>{const pct2=total?Math.round(s.count/total*100):0;return`<div class="stat-card" style="border-left:3px solid ${s.color}"><div class="stat-label">${s.label}</div><div style="font-size:20px;font-weight:800">${s.count}<span style="font-size:13px;color:#aaa"> / ${total}</span></div><div class="progress-bar" style="margin-top:6px"><div class="progress-fill" style="width:${pct2}%;background:${s.color};height:6px"></div></div></div>`;}).join('')}
   </div>` : ''}
 
+  ${prevPeriods1.length > 0 ? (()=>{
+    const open = G._yrCompareOpen !== false;
+    const prevPeriodLabel = prevPeriods1[0]?.label || '';
+    const curRevTotal = clients.reduce((a,c)=>{
+      const v2=julgaeVal(pKey2,c.id);
+      return a+(isVatType?(v2.salesAmount||0):(v2.revenue||0));
+    },0);
+    const prevRevTotal1 = clients.reduce((a,c)=>{
+      const p1=prevMap1[c.id];
+      return a+(isVatType?(p1?.salesAmount||0):(p1?.revenue||0));
+    },0);
+    const curFeeTotal = clients.reduce((a,c)=>a+_jFeeSum(c),0);
+    const prevFeeTotal1 = clients.reduce((a,c)=>a+(prevMap1[c.id]?.fee||0),0);
+    const revDiff = prevRevTotal1 ? ((curRevTotal-prevRevTotal1)/prevRevTotal1*100).toFixed(1) : null;
+    const feeDiff = prevFeeTotal1 ? ((curFeeTotal-prevFeeTotal1)/prevFeeTotal1*100).toFixed(1) : null;
+    const prevDoneClients1 = prevPeriods1.flatMap(pp=>Object.entries(G.julgae[pp.id]||{}).filter(([,v2])=>v2?.a).map(([cid])=>Number(cid)));
+    const prevDoneSet = new Set(prevDoneClients1);
+    const curDone = doneCount; const curTotal = total;
+    const prevDone = clients.filter(c=>prevDoneSet.has(c.id)).length;
+    return `<div class="card" style="margin-bottom:12px;cursor:pointer" onclick="G._yrCompareOpen=G._yrCompareOpen===false?true:false;renderJulgae()">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div class="card-title" style="margin-bottom:0">📊 전년도 비교 (${esc(prevPeriodLabel.replace(/^\d{2}년 /,''))})</div>
+        <span style="font-size:12px;color:#888">${open?'▲ 접기':'▼ 열기'}</span>
+      </div>
+      ${open ? `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px">
+        <div style="background:#f8f9ff;border-radius:10px;padding:10px">
+          <div style="font-size:11px;color:#888;margin-bottom:4px">수입금액 (전년→올해)</div>
+          <div style="font-size:14px;font-weight:700;color:#1565c0">${curRevTotal.toLocaleString()}원</div>
+          <div style="font-size:11px;color:#aaa">전년 ${prevRevTotal1.toLocaleString()}원</div>
+          ${revDiff!==null?`<div style="font-size:12px;font-weight:700;color:${Number(revDiff)>=0?'#2e7d32':'#e53935'};margin-top:3px">${Number(revDiff)>=0?'▲':'▼'} ${Math.abs(revDiff)}%</div>`:''}
+        </div>
+        <div style="background:#f9f0ff;border-radius:10px;padding:10px">
+          <div style="font-size:11px;color:#888;margin-bottom:4px">수수료 (전년→올해)</div>
+          <div style="font-size:14px;font-weight:700;color:#7b1fa2">${curFeeTotal.toLocaleString()}원</div>
+          <div style="font-size:11px;color:#aaa">전년 ${prevFeeTotal1.toLocaleString()}원</div>
+          ${feeDiff!==null?`<div style="font-size:12px;font-weight:700;color:${Number(feeDiff)>=0?'#2e7d32':'#e53935'};margin-top:3px">${Number(feeDiff)>=0?'▲':'▼'} ${Math.abs(feeDiff)}%</div>`:''}
+        </div>
+        <div style="background:#f0f7f0;border-radius:10px;padding:10px">
+          <div style="font-size:11px;color:#888;margin-bottom:4px">결재완료 (전년→올해)</div>
+          <div style="font-size:14px;font-weight:700;color:#2e7d32">${curDone}/${curTotal}</div>
+          <div style="font-size:11px;color:#aaa">전년 ${prevDone}/${curTotal}</div>
+          <div style="font-size:12px;color:#888;margin-top:3px">${curTotal?Math.round(curDone/curTotal*100):0}% vs ${curTotal?Math.round(prevDone/curTotal*100):0}%</div>
+        </div>
+      </div>` : ''}
+    </div>`;
+  })() : ''}
+
   <div class="filter-bar">
     <button class="btn-sm" style="background:#e3f2fd;color:#1565c0;border:1.5px solid #90caf9" onclick="openEnrollModal('${pKey}')">
       ☑ 업체 선택${hasEnroll?` (${period.enrolled.length})`:' (자동)'}
@@ -3837,6 +3893,10 @@ function renderJulgae() {
       const autoFee  = v.fee       || (c[feeFieldKey]   || 0);
       const autoFee2 = v.feeSeongsi || (c.feeSeongsi     || 0);
       const rowBg = item.isGroupHeader?'#f3e5f5':item.isGroupChild?'#fdf8fe':v.s?'#e8f5e9':v.a?'#f1f8e9':'#fff';
+      const _safeKey = pKey2.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      const _noteIcon = v.note
+        ? `<span onclick="event.stopPropagation();openJulgaeNote('${_safeKey}',${c.id})" style="cursor:pointer;font-size:12px;margin-left:4px;flex-shrink:0" title="${esc(v.note)}">📝</span>`
+        : `<span onclick="event.stopPropagation();openJulgaeNote('${_safeKey}',${c.id})" style="cursor:pointer;font-size:10px;color:#ddd;margin-left:4px;flex-shrink:0" title="특이사항 추가">✎</span>`;
       const margin = (v.revenue&&v.income) ? (v.income/v.revenue*100).toFixed(1) : null;
       const _revVal4bosu = isVatType ? (v.salesAmount||0) : (v.revenue||0);
       const _bosuRec = getBosuFeeRec(_revVal4bosu, period.reportType);
@@ -3847,10 +3907,10 @@ function renderJulgae() {
         ${G.julgaeBulkMode?`<td style="text-align:center;width:32px" onclick="event.stopPropagation();toggleJulgaeSelect(${c.id})"><input type="checkbox" ${(G.julgaeBulkSelected||[]).includes(c.id)?'checked':''} style="width:16px;height:16px;cursor:pointer" onclick="event.stopPropagation();toggleJulgaeSelect(${c.id})"></td>`:''}
         <td style="color:#aaa;font-size:11px">${++_rowN}</td>
         <td onclick="openClientNotes(${c.id})" style="cursor:pointer">${item.isGroupHeader
-          ?`<div style="display:flex;align-items:center;gap:6px"><button onclick="event.stopPropagation();toggleJulgaeGroup('${item.groupKey}')" style="border:none;background:none;cursor:pointer;font-size:13px;padding:0 2px;color:#7b1fa2">${item.expanded?'▼':'▶'}</button><div class="td-name">${esc(c.name)}</div><span style="background:#7b1fa2;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;white-space:nowrap">외 ${item.groupClients.length-1}개</span></div>`
+          ?`<div style="display:flex;align-items:center;gap:6px"><button onclick="event.stopPropagation();toggleJulgaeGroup('${item.groupKey}')" style="border:none;background:none;cursor:pointer;font-size:13px;padding:0 2px;color:#7b1fa2">${item.expanded?'▼':'▶'}</button><div class="td-name">${esc(c.name)}</div><span style="background:#7b1fa2;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;white-space:nowrap">외 ${item.groupClients.length-1}개</span>${_noteIcon}</div>`
           :item.isGroupChild
-            ?`<div style="display:flex;align-items:center;gap:4px;padding-left:22px"><span style="color:#ccc;font-size:11px">└</span><div class="td-name" style="font-size:12px">${esc(c.name)}</div></div>`
-            :`<div class="td-name">${esc(c.name)}</div>`
+            ?`<div style="display:flex;align-items:center;gap:4px;padding-left:22px"><span style="color:#ccc;font-size:11px">└</span><div class="td-name" style="font-size:12px">${esc(c.name)}</div>${_noteIcon}</div>`
+            :`<div class="td-name" style="display:flex;align-items:center">${esc(c.name)}${_noteIcon}</div>`
         }</td>
         <td style="font-size:12px;color:#444;${hc['j_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
         <td style="color:#555;font-size:12px;${hc['j_manager']?'display:none':''}">${getManagers(c).length?getManagers(c).join(', '):'<span style="color:#ff7043;font-size:11px">⚠ 미지정</span>'}</td>
@@ -4360,15 +4420,27 @@ function renderFees() {
   const fmChips = _hcChips([['fm_rep','대표자(월정)'],['fm_dealType','수임내용'],['fm_manager','담당자(월정)'],['fm_contractDate','수임일'],['fm_fee','월수수료']]);
   const ffChips = _hcChips([['ff_period','신고기간'],['ff_rep','대표자(신고)'],['ff_manager','담당자(신고)'],['ff_fee','청구액']]);
 
-  const monthlyRows = filteredFeeClients.map(c => {
+  // Group by manager for subtotals (Feature 3)
+  const _fmByMgr = {};
+  filteredFeeClients.forEach(c => {
+    const key = getManagers(c).join(', ') || '(담당자 미지정)';
+    if (!_fmByMgr[key]) _fmByMgr[key] = [];
+    _fmByMgr[key].push(c);
+  });
+  const _fmMgrKeys = Object.keys(_fmByMgr).sort((a,b)=>a.localeCompare(b,'ko'));
+  const _genFeeRow = c => {
     const collected = G.monthlyFees[c.id]?.[ym] || false;
     const feeHist = ((G.feeHistory||{})[c.id]||{})[ym];
     const streak = !collected ? getUnpaidStreak(c, ym) : 0;
     const streakBadge = streak >= 2
       ? `<span style="font-size:10px;font-weight:700;color:#fff;background:${streak>=6?'#b71c1c':streak>=3?'#e53935':'#ff7043'};border-radius:10px;padding:1px 6px;margin-left:5px;white-space:nowrap">${streak}개월 미납</span>`
       : '';
+    const contactCount = (G.contactLogs||{})[c.id]?.length||0;
+    const contactBtn = !collected
+      ? `<button onclick="event.stopPropagation();openContactLog(${c.id})" style="margin-left:4px;padding:1px 6px;border-radius:5px;border:1px solid ${contactCount?'#81c784':'#e0e0e0'};background:${contactCount?'#e8f5e9':'#f9f9f9'};font-size:10px;color:${contactCount?'#2e7d32':'#aaa'};cursor:pointer;font-family:inherit" title="연락 이력">📞${contactCount?` ${contactCount}`:''}</button>`
+      : '';
     return `<tr style="background:${collected?'#e8f5e9':'#fff'}">
-      <td><div style="font-weight:600;font-size:13px;display:flex;align-items:center;flex-wrap:wrap;gap:2px">${esc(c.name)}${streakBadge}<button onclick="event.stopPropagation();printFeeInvoice(${c.id})" style="margin-left:6px;padding:1px 7px;border-radius:5px;border:1px solid #c5cae9;background:#f0f4ff;font-size:10px;color:#4f8ef7;cursor:pointer;font-family:inherit" title="청구서 인쇄">🖨 청구서</button></div></td>
+      <td><div style="font-weight:600;font-size:13px;display:flex;align-items:center;flex-wrap:wrap;gap:2px">${esc(c.name)}${streakBadge}<button onclick="event.stopPropagation();printFeeInvoice(${c.id})" style="margin-left:6px;padding:1px 7px;border-radius:5px;border:1px solid #c5cae9;background:#f0f4ff;font-size:10px;color:#4f8ef7;cursor:pointer;font-family:inherit" title="청구서 인쇄">🖨 청구서</button>${contactBtn}</div></td>
       <td style="font-size:12px;color:#444;${hc['fm_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
       <td style="${hc['fm_dealType']?'display:none':''}">${getDealTypes(c).map(d=>dealBadge(d)).join('')}</td>
       <td style="color:#555;font-size:12px;${hc['fm_manager']?'display:none':''}">${getManagers(c).join(', ')||'-'}</td>
@@ -4382,6 +4454,15 @@ function renderFees() {
         <span style="font-size:16px">${((G.taxInvoice||{})[c.id]||{})[ym]?'✅':'☐'}</span>
       </td>
     </tr>`;
+  };
+  const monthlyRows = (_fmMgrKeys.length > 1 ? _fmMgrKeys : ['_all']).flatMap(mgrKey => {
+    const cls = mgrKey === '_all' ? filteredFeeClients : _fmByMgr[mgrKey];
+    const subTotal = cls.reduce((a,c)=>a+(c.fee||0),0);
+    const subColl = cls.filter(c=>G.monthlyFees[c.id]?.[ym]).reduce((a,c)=>a+(c.fee||0),0);
+    const subPct = subTotal ? Math.round(subColl/subTotal*100) : 0;
+    const header = _fmMgrKeys.length > 1 ? `<tr style="background:#e8eaf6"><td colspan="8" style="padding:4px 10px;font-size:11px;font-weight:700;color:#3949ab">👤 ${esc(mgrKey)} <span style="font-weight:400;color:#7986cb">${cls.length}개 업체 · ${subTotal.toLocaleString()}원 · 수금${subPct}%</span></td></tr>` : '';
+    const rows = cls.map(_genFeeRow);
+    return [header, ...rows];
   }).join('');
 
   const filingRows = filteredFilingFees.map(x => `
@@ -4425,7 +4506,11 @@ function renderFees() {
   document.getElementById('page-fees').innerHTML = `
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:8px">
     <h2 style="font-size:20px;font-weight:800">💰 수수료 관리</h2>
-    <button class="btn-sm" style="background:#e8f5e9;color:#1b5e20;border:1.5px solid #81c784" onclick="exportFeesToExcel()">📊 Excel 내보내기</button>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="btn-sm" style="background:#f9f0ff;color:#7b1fa2;border:1.5px solid #ce93d8" onclick="openFeeChangeHistory()">💴 인상이력</button>
+      <button class="btn-sm" style="background:#e8f0fe;color:#1a237e;border:1.5px solid #9fa8da" onclick="batchPrintFeeInvoices()">🖨 일괄인쇄</button>
+      <button class="btn-sm" style="background:#e8f5e9;color:#1b5e20;border:1.5px solid #81c784" onclick="exportFeesToExcel()">📊 Excel 내보내기</button>
+    </div>
   </div>
 
   <div class="card" style="margin-bottom:14px;cursor:pointer" onclick="G.agingOpen=G.agingOpen===false?true:false;renderFees()">
@@ -7401,6 +7486,7 @@ async function loadFromFirebase() {
       G.julgaeLinks = data.julgaeLinks ? JSON.parse(data.julgaeLinks) : {};
       G.feePayments = data.feePayments ? JSON.parse(data.feePayments) : {};
       G.filterPresets = data.filterPresets ? JSON.parse(data.filterPresets) : [];
+      G.contactLogs = data.contactLogs ? JSON.parse(data.contactLogs) : {};
     } else {
       // 신규 계정: 로컬스토리지 데이터 마이그레이션 시도
       const saved = localStorage.getItem('tm_clients');
@@ -7431,6 +7517,7 @@ async function loadFromFirebase() {
         G.julgaeLinks = JSON.parse(localStorage.getItem('tm_julgaeLinks')||'{}');
         G.feePayments = JSON.parse(localStorage.getItem('tm_feePayments')||'{}');
         G.filterPresets = JSON.parse(localStorage.getItem('tm_filterPresets')||'[]');
+        G.contactLogs = JSON.parse(localStorage.getItem('tm_contactLogs')||'{}');
         saveToLS(); // Firebase에 업로드
       } else {
         const json = await decompressB64(CLIENTS_B64);
@@ -7467,6 +7554,7 @@ async function loadFromFirebase() {
     G.julgaeLinks = JSON.parse(localStorage.getItem('tm_julgaeLinks')||'{}');
     G.feePayments = JSON.parse(localStorage.getItem('tm_feePayments')||'{}');
     G.filterPresets = JSON.parse(localStorage.getItem('tm_filterPresets')||'[]');
+    G.contactLogs = JSON.parse(localStorage.getItem('tm_contactLogs')||'{}');
   }
   // Apply dark mode if saved
   if (localStorage.getItem('tm_darkMode')) { G.darkMode=true; document.body.classList.add('dark-mode'); }
@@ -7488,6 +7576,205 @@ async function loadFromFirebase() {
       if (!hasThisYear) autoCreatePeriods(yr);
     }
   }
+}
+
+// ══════════════════════════════════════════════════════
+// Feature A: 세무서별 거래처 목록 클릭
+// ══════════════════════════════════════════════════════
+function openTaxOfficeClients(office) {
+  const active = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&c.taxOffice===office);
+  const html = active.length
+    ? active.map(c=>`<div onclick="closeModal();switchTab('clients');G.searchText='${esc(c.name).replace(/'/g,"\\'")}';renderClients()" style="padding:9px 12px;border-radius:10px;border:1px solid #e8eaf6;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px;background:#fafbff" onmouseover="this.style.background='#e8f0fe'" onmouseout="this.style.background='#fafbff'">
+      <div><div style="font-weight:700;font-size:13px">${esc(c.name)}</div><div style="font-size:11px;color:#888">${esc(c.rep||'-')} · ${esc(getManagers(c).join(', ')||'미지정')}</div></div>
+      ${badge(c.status,statusColor(c.status))}
+    </div>`).join('')
+    : '<div style="color:#aaa;text-align:center;padding:20px">해당 세무서 거래처 없음</div>';
+  showModal(`<div style="max-width:480px">
+    <div class="modal-header"><h3>🏛 ${esc(office)} · ${active.length}개</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">${html}</div>
+  </div>`);
+}
+
+// ══════════════════════════════════════════════════════
+// Feature B: 신고기간별 거래처 특이사항(메모) 관리
+// ══════════════════════════════════════════════════════
+function openJulgaeNote(pKey, clientId) {
+  const c = G.clients.find(x=>x.id===clientId); if(!c) return;
+  const cur = julgaeVal(pKey, clientId);
+  showModal(`<div style="max-width:420px">
+    <div class="modal-header"><h3>📝 특이사항 — ${esc(c.name)}</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div style="font-size:12px;color:#888;margin-bottom:8px">신고기간 내 특이사항을 기록합니다 (거래처 메모와 별개)</div>
+      <textarea id="julgae-note-input" style="width:100%;height:100px;padding:8px 10px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;box-sizing:border-box">${esc(cur.note||'')}</textarea>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button onclick="saveJulgaeNote('${pKey}',${clientId})" class="btn-primary" style="flex:1;padding:10px">저장</button>
+        ${cur.note?`<button onclick="clearJulgaeNote('${pKey}',${clientId})" style="padding:10px 14px;border-radius:8px;border:1px solid #fca5a5;background:#fef2f2;color:#e53935;cursor:pointer;font-family:inherit">삭제</button>`:''}
+      </div>
+    </div>
+  </div>`);
+  setTimeout(()=>document.getElementById('julgae-note-input')?.focus(),80);
+}
+function saveJulgaeNote(pKey, clientId) {
+  const txt = document.getElementById('julgae-note-input')?.value?.trim()||'';
+  if (!G.julgae[pKey]) G.julgae[pKey] = {};
+  const cur = julgaeVal(pKey, clientId);
+  cur.note = txt;
+  G.julgae[pKey][clientId] = cur;
+  saveToLS(); closeModal(); renderJulgae();
+  toast(txt ? '특이사항 저장됨' : '특이사항 삭제됨', 'success');
+}
+function clearJulgaeNote(pKey, clientId) {
+  if (!G.julgae[pKey]) return;
+  const cur = julgaeVal(pKey, clientId);
+  delete cur.note;
+  G.julgae[pKey][clientId] = cur;
+  saveToLS(); closeModal(); renderJulgae();
+  toast('특이사항 삭제됨', 'success');
+}
+
+// ══════════════════════════════════════════════════════
+// Feature C: 수수료 인상 이력 전체 보기
+// ══════════════════════════════════════════════════════
+function openFeeChangeHistory() {
+  const hist = G.feeChangeHistory || {};
+  const entries = [];
+  Object.entries(hist).forEach(([idStr, logs]) => {
+    const c = G.clients.find(x=>x.id===Number(idStr));
+    if (!c || !logs.length) return;
+    logs.forEach(h => entries.push({...h, clientName:c.name}));
+  });
+  entries.sort((a,b) => b.date.localeCompare(a.date));
+  const rows = entries.length ? entries.map(h=>`
+    <div style="padding:8px 12px;border-radius:10px;background:#f9f0ff;border-left:3px solid #9c27b0;margin-bottom:6px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px">
+        <span style="font-weight:700;font-size:13px">${esc(h.clientName)}</span>
+        <span style="font-size:11px;color:#aaa">${esc(h.date)}</span>
+      </div>
+      <div style="font-size:13px;color:#555;margin-top:3px">${(h.from||0).toLocaleString()}원 → <b style="color:#7b1fa2">${(h.to||0).toLocaleString()}원</b></div>
+    </div>`).join('')
+    : '<div style="color:#aaa;text-align:center;padding:24px">수수료 변경 이력 없음</div>';
+  showModal(`<div style="max-width:500px">
+    <div class="modal-header"><h3>💴 수수료 인상 이력 (${entries.length}건)</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">${rows}</div>
+  </div>`);
+}
+
+// ══════════════════════════════════════════════════════
+// Feature D: 월정 수수료 일괄 청구서 인쇄
+// ══════════════════════════════════════════════════════
+function batchPrintFeeInvoices() {
+  const ym = G.feesYM || currentYM();
+  const clients = G.clients.filter(c =>
+    c.status!=='해지'&&c.status!=='폐업'&&c.fee&&
+    getDealTypes(c).some(d=>['기장','고문','성실'].includes(d))&&
+    (!c.contractDate||c.contractDate.slice(0,7)<=ym)
+  );
+  if (!clients.length) { toast('인쇄할 거래처가 없습니다','warning'); return; }
+  const [yr, mo] = ym.split('-');
+  const invoiceHtml = clients.map(c => {
+    const items = [];
+    if (c.fee) items.push({name:'기장수수료', amount:c.fee});
+    if (c.feeSingo) items.push({name:'신고수수료', amount:c.feeSingo});
+    if (c.feeJojung) items.push({name:'조정수수료', amount:c.feeJojung});
+    if (c.feeSeongsi) items.push({name:'성실신고수수료', amount:c.feeSeongsi});
+    const total = items.reduce((a,i)=>a+i.amount,0);
+    const rows = items.map(i=>`<tr><td style="padding:6px 8px;border-bottom:1px solid #eee">${i.name}</td><td style="padding:6px 8px;text-align:right;border-bottom:1px solid #eee;font-weight:700">${i.amount.toLocaleString()}원</td></tr>`).join('');
+    return `<div style="border:1px solid #ddd;border-radius:8px;padding:20px 24px;margin-bottom:32px;page-break-inside:avoid">
+      <h2 style="margin:0 0 4px;font-size:18px">${esc(c.name)}</h2>
+      <div style="color:#888;font-size:13px;margin-bottom:16px">${yr}년 ${mo}월 수수료 청구서</div>
+      <table style="width:100%;border-collapse:collapse;border-top:2px solid #4f8ef7">${rows}
+      <tr style="background:#f5f9ff"><td style="padding:8px;font-weight:800">합계</td><td style="padding:8px;text-align:right;font-weight:800;color:#4f8ef7">${total.toLocaleString()}원</td></tr>
+      </table>
+    </div>`;
+  }).join('');
+  const win = window.open('','_blank');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${yr}년 ${mo}월 수수료 청구서 일괄</title>
+    <style>body{font-family:inherit;margin:20px}@media print{.no-print{display:none}}</style>
+  </head><body><button class="no-print" onclick="window.print()" style="margin-bottom:16px;padding:8px 16px;background:#4f8ef7;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px">🖨 인쇄</button>${invoiceHtml}</body></html>`);
+  win.document.close();
+}
+
+// ══════════════════════════════════════════════════════
+// Feature E: 미수금 연락 이력 트래킹
+// ══════════════════════════════════════════════════════
+function openContactLog(clientId) {
+  const c = G.clients.find(x=>x.id===clientId); if(!c) return;
+  const logs = (G.contactLogs||{})[clientId] || [];
+  const logHtml = logs.length
+    ? [...logs].reverse().map(l=>`<div style="padding:8px 12px;background:#f8f9ff;border-radius:8px;border-left:3px solid #4f8ef7;margin-bottom:6px">
+        <div style="font-size:11px;color:#aaa;margin-bottom:2px">${esc(l.date)} · ${esc(l.method||'기타')}</div>
+        <div style="font-size:13px">${esc(l.text)}</div>
+        <button onclick="deleteContactLog(${clientId},'${l.id}')" style="margin-top:4px;padding:1px 8px;border-radius:5px;border:1px solid #fca5a5;background:#fef2f2;color:#e53935;font-size:10px;cursor:pointer;font-family:inherit">삭제</button>
+      </div>`).join('')
+    : '<div style="color:#aaa;text-align:center;padding:12px;font-size:12px">연락 이력 없음</div>';
+  showModal(`<div style="max-width:420px">
+    <div class="modal-header"><h3>📞 연락 이력 — ${esc(c.name)}</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+        <select id="cl-method" style="padding:7px 10px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;font-family:inherit">
+          <option>전화</option><option>문자</option><option>카카오</option><option>방문</option><option>기타</option>
+        </select>
+        <textarea id="cl-text" placeholder="연락 내용 입력..." style="padding:8px 10px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;height:72px"></textarea>
+        <button onclick="addContactLog(${clientId})" class="btn-primary" style="padding:8px">기록 추가</button>
+      </div>
+      <div id="cl-log-list">${logHtml}</div>
+    </div>
+  </div>`);
+  setTimeout(()=>document.getElementById('cl-text')?.focus(),80);
+}
+function addContactLog(clientId) {
+  const method = document.getElementById('cl-method')?.value||'기타';
+  const text = document.getElementById('cl-text')?.value?.trim()||'';
+  if (!text) return;
+  if (!G.contactLogs) G.contactLogs = {};
+  if (!G.contactLogs[clientId]) G.contactLogs[clientId] = [];
+  G.contactLogs[clientId].push({id:Date.now()+'', date:new Date().toLocaleString('ko-KR'), method, text});
+  saveToLS();
+  openContactLog(clientId);
+  if (G.currentTab==='fees') renderFees();
+}
+function deleteContactLog(clientId, logId) {
+  if (!G.contactLogs?.[clientId]) return;
+  G.contactLogs[clientId] = G.contactLogs[clientId].filter(l=>l.id!==logId);
+  saveToLS();
+  openContactLog(clientId);
+  if (G.currentTab==='fees') renderFees();
+}
+
+// ══════════════════════════════════════════════════════
+// Feature F: 거래처 메모 전체 검색
+// ══════════════════════════════════════════════════════
+function openNotesSearch() {
+  showModal(`<div style="max-width:520px">
+    <div class="modal-header"><h3>🔍 메모 전체 검색</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <input id="notes-search-input" type="text" placeholder="메모 내용 검색..." style="width:100%;padding:10px 14px;border:1.5px solid #4f8ef7;border-radius:10px;font-size:14px;font-family:inherit;box-sizing:border-box;margin-bottom:12px" oninput="renderNotesSearch(this.value)">
+      <div id="notes-search-results"></div>
+    </div>
+  </div>`);
+  setTimeout(()=>{document.getElementById('notes-search-input')?.focus(); renderNotesSearch('');},80);
+}
+function renderNotesSearch(q) {
+  const res = document.getElementById('notes-search-results'); if(!res) return;
+  const lq = q.toLowerCase();
+  const matches = [];
+  Object.entries(G.clientNotes||{}).forEach(([idStr, notes])=>{
+    const c = G.clients.find(x=>x.id===Number(idStr)); if(!c) return;
+    notes.forEach(n=>{
+      if (!lq || n.text.toLowerCase().includes(lq) || c.name.toLowerCase().includes(lq))
+        matches.push({c, n});
+    });
+  });
+  matches.sort((a,b)=>b.n.date.localeCompare(a.n.date));
+  if (!matches.length) { res.innerHTML='<div style="color:#aaa;text-align:center;padding:20px">검색 결과 없음</div>'; return; }
+  res.innerHTML = matches.slice(0,50).map(({c,n})=>`
+    <div onclick="closeModal();openClientNotes(${c.id})" style="padding:10px 12px;border-radius:10px;border:1px solid #e8eaf6;cursor:pointer;margin-bottom:6px;background:#fafbff" onmouseover="this.style.background='#e8f0fe'" onmouseout="this.style.background='#fafbff'">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span style="font-weight:700;font-size:13px">${esc(c.name)}</span>
+        <span style="font-size:10px;color:#aaa">${esc(n.date)}</span>
+      </div>
+      <div style="font-size:12px;color:#555;line-height:1.4;white-space:pre-wrap">${esc(n.text).slice(0,120)}${n.text.length>120?'…':''}</div>
+    </div>`).join('');
 }
 
 // ══════════════════════════════════════════════════════
@@ -7568,6 +7855,13 @@ const _dRC = debounce(renderClients, 220);
 const _dRJ = debounce(renderJulgae, 220);
 const _dRF = debounce(renderFees, 220);
 const _dGS = debounce(doGlobalSearch, 220);
+
+// PWA: Service Worker 등록
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
 </script>
 </body>
 </html>

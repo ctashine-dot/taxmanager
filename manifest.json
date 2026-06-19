@@ -1,0 +1,19 @@
+{
+  "name": "TaxManager — 세무사무소 거래처 관리",
+  "short_name": "TaxManager",
+  "description": "세무사무소 거래처 관리 시스템",
+  "start_url": "/taxmanager/",
+  "scope": "/taxmanager/",
+  "display": "standalone",
+  "background_color": "#f0f2f5",
+  "theme_color": "#4f8ef7",
+  "lang": "ko",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='32' fill='%234f8ef7'/><text x='96' y='130' font-size='110' text-anchor='middle' fill='white'>💰</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
