@@ -215,7 +215,6 @@ body.dark-mode .overlay { background: rgba(0,0,0,.65); }
     border: 1px solid #e8eaf6;
     background: #fff;
     box-shadow: 0 1px 4px rgba(0,0,0,.07);
-    overflow: hidden;
   }
 
   /* 거래처명 셀 — 전체 너비, 위 배치 */
@@ -248,7 +247,7 @@ body.dark-mode .overlay { background: rgba(0,0,0,.65); }
     flex: none;
   }
 
-  /* 데이터 셀 — 4열 그리드, 라벨 위·값 아래 */
+  /* 데이터 셀 — 4열 그리드, 라벨 위·값 아래, 테두리 없음 */
   .client-table-wrap table tbody td[data-label] {
     flex: 0 0 25%;
     box-sizing: border-box;
@@ -256,10 +255,7 @@ body.dark-mode .overlay { background: rgba(0,0,0,.65); }
     flex-direction: column;
     align-items: flex-start;
     padding: 6px 10px;
-    border-bottom: 1px solid #f5f5f5;
-    border-left: none;
-    border-right: none;
-    border-top: none;
+    border: none;
     min-width: 0;
   }
   .client-table-wrap table tbody td[data-label]:before {
@@ -270,14 +266,6 @@ body.dark-mode .overlay { background: rgba(0,0,0,.65); }
     display: block;
     white-space: nowrap;
     font-weight: 400;
-  }
-
-  /* 4열 기준 마지막 셀 제외 우측 구분선 */
-  .client-table-wrap table tbody td[data-label] {
-    border-right: 1px solid #f5f5f5;
-  }
-  .client-table-wrap table tbody td[data-label]:nth-of-type(4n) {
-    border-right: none;
   }
   /* 모바일: 테이블 expand-row는 항상 숨김 (JS로 카드 내부에 직접 삽입) */
   .client-table-wrap table tbody tr.expand-row { display: none !important; }
@@ -305,20 +293,11 @@ body.dark-mode .overlay { background: rgba(0,0,0,.65); }
   .filter-bar { gap: 6px; }
   .modal { max-width: 95vw !important; width: 95vw !important; }
 }
-/* 가로(landscape): 셀 한 줄 스크롤 */
+/* 가로(landscape): 8개 셀 한 줄 (각 12.5%) */
 @media (max-width: 900px) and (orientation: landscape) {
-  .client-table-wrap table tbody tr:not(.expand-row) {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
   .client-table-wrap table tbody td[data-label] {
-    flex: 0 0 auto;
-    min-width: 70px;
-    max-width: 120px;
-  }
-  .client-table-wrap table tbody td:has(.td-name) {
-    flex: 1 0 140px;
+    flex: 1 1 12.5%;
+    min-width: 68px;
   }
 }
 </style>
@@ -1517,13 +1496,13 @@ function renderClients() {
     const sf2=(G.clientSort||{}).field||'n', sd2=(G.clientSort||{}).dir||'asc';
     const sortActive=sf2!=='n'||sd2!=='asc';
     const anyActive=hasFilter||sortActive;
-    const isOpen=G.clientSearchOpen!==false;
+    const isOpen=G.clientSearchOpen===true;
     const bdr=anyActive?'#4f8ef7':'#ddd';
     const bg=anyActive?'#e8f0fe':'#f5f5f5';
     const clr=anyActive?'#1565c0':'#666';
-    return '<div style="margin-bottom:8px;display:flex;align-items:center;gap:8px"><button onclick="G.clientSearchOpen=(G.clientSearchOpen===false?true:false);renderClients()" style="padding:6px 16px;border-radius:20px;font-size:13px;cursor:pointer;font-family:inherit;border:1.5px solid '+bdr+';background:'+bg+';color:'+clr+';display:inline-flex;align-items:center;gap:5px;font-weight:600">🔍 검색'+(anyActive?' ●':'')+' '+(isOpen?'▲':'▼')+'</button>'+(anyActive?'<span style="font-size:11px;color:#4f8ef7;font-weight:600">필터/정렬 적용중</span>':'')+'</div>';
+    return '<div style="margin-bottom:8px;display:flex;align-items:center;gap:8px"><button onclick="G.clientSearchOpen=(G.clientSearchOpen===true?false:true);renderClients()" style="padding:6px 16px;border-radius:20px;font-size:13px;cursor:pointer;font-family:inherit;border:1.5px solid '+bdr+';background:'+bg+';color:'+clr+';display:inline-flex;align-items:center;gap:5px;font-weight:600">🔍 검색'+(anyActive?' ●':'')+' '+(isOpen?'▲':'▼')+'</button>'+(anyActive?'<span style="font-size:11px;color:#4f8ef7;font-weight:600">필터/정렬 적용중</span>':'')+'</div>';
   })()}
-  <div style="display:${G.clientSearchOpen===false?'none':'block'}">
+  <div style="display:${G.clientSearchOpen===true?'block':'none'}">
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:stretch;margin-bottom:6px">
       <div style="position:relative;flex:2;min-width:130px">
         <input id="client-name-input" type="text" placeholder="거래처명" value="${esc(G.searchText||'')}" oninput="onClientNameSearch(this.value)" style="width:100%;padding:8px 30px 8px 12px;border-radius:9px;border:1.5px solid ${G.searchText?'#4f8ef7':'#e0e0e0'};font-size:13px;font-family:inherit;box-sizing:border-box;outline:none">
@@ -1553,9 +1532,9 @@ function renderClients() {
     })()}
   </div>
 
-  <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-    ${sectionToggleBtn('clients-list')}
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
     <div style="font-size:12px;color:#888">총 ${list.length}개 거래처 (${G.clientPage+1}/${totalPages} 페이지)</div>
+    ${sectionToggleBtn('clients-list')}
   </div>
 
   <datalist id="taxoffice-list">${TAX_OFFICES.map(o=>`<option value="${esc(o)}">`).join('')}</datalist>
