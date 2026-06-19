@@ -170,7 +170,7 @@ input.finput:focus,select.fsel:focus,textarea.ftarea:focus{border-color:#4f8ef7}
 }
 
 /* ── 확장 행 */
-.expand-row td{background:#f0f4ff;padding:0}
+.expand-row td{background:#f0f4ff;padding:0;flex:0 0 100%}
 .client-row.expanded{background:#e8f0fe!important}
 .client-row.expanded:hover{background:#dce8fd!important}
 .expand-inner{display:flex;flex-wrap:wrap;gap:14px 24px;padding:14px 16px;align-items:flex-start;border-top:1px solid #c5cae9}
@@ -200,31 +200,80 @@ body.dark-mode .overlay { background: rgba(0,0,0,.65); }
   #main { padding: 12px 8px; }
   .stat-grid { grid-template-columns: repeat(2, 1fr); }
   .client-table-wrap table thead { display: none; }
-  .client-table-wrap table tbody tr {
-    display: block;
+
+  /* 카드 행: flex-wrap 그리드 */
+  .client-table-wrap table tbody tr:not(.expand-row) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    position: relative;
     margin-bottom: 10px;
     border-radius: 12px;
     border: 1px solid #e8eaf6;
     background: #fff;
     box-shadow: 0 1px 4px rgba(0,0,0,.07);
+    overflow: hidden;
   }
-  .client-table-wrap table tbody td {
+
+  /* 거래처명 셀 — 전체 너비, 위 배치 */
+  .client-table-wrap table tbody td:has(.td-name) {
+    flex: 0 0 100%;
+    display: block;
+    padding: 10px 44px 8px 12px;
+    border-bottom: 1px solid #eeeff6;
+    box-sizing: border-box;
+  }
+
+  /* 체크박스 셀 (일괄편집 모드) */
+  .client-table-wrap table tbody td:has(input[type="checkbox"]) {
+    flex: 0 0 100%;
     display: flex;
-    justify-content: space-between;
     align-items: center;
     padding: 8px 12px;
+    border-bottom: 1px solid #f0f0f0;
+    box-sizing: border-box;
+  }
+
+  /* 화살표 셀 — 우상단 절대 배치 */
+  .client-table-wrap table tbody td:last-child:not([data-label]) {
+    position: absolute;
+    top: 11px;
+    right: 10px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    flex: none;
+  }
+
+  /* 데이터 셀 — 2열 그리드, 라벨 위·값 아래 */
+  .client-table-wrap table tbody td[data-label] {
+    flex: 0 0 50%;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 6px 10px;
     border-bottom: 1px solid #f5f5f5;
     border-left: none;
     border-right: none;
+    border-top: none;
+    min-width: 0;
   }
-  .client-table-wrap table tbody td:last-child { border-bottom: none; }
   .client-table-wrap table tbody td[data-label]:before {
     content: attr(data-label);
-    font-size: 11px;
-    color: #888;
-    margin-right: 8px;
+    font-size: 10px;
+    color: #aaa;
+    margin-bottom: 3px;
+    display: block;
     white-space: nowrap;
+    font-weight: 400;
   }
+
+  /* 홀수번째 데이터 셀 오른쪽 구분선 */
+  .client-table-wrap table tbody td[data-label]:nth-of-type(odd) {
+    border-right: 1px solid #f5f5f5;
+  }
+
   .tbl-wrap { overflow-x: auto; }
   #header { padding: 0 10px; }
   #header-btns .hbtn:not(.always-show) { display: none; }
@@ -1500,7 +1549,7 @@ function renderClients() {
         <td data-label="인격" style="${hc['c_taxType']?'display:none':''}">${em?iSel('taxType',TAX_TYPES.slice(1),c.taxType):badge(c.taxType,c.taxType==='법인'?'blue':'gray')}</td>
         <td data-label="과세유형" style="${hc['c_vatType']?'display:none':''}">${em?iSel('vatType',VAT_TYPES.slice(1),c.vatType):badge(c.vatType,c.vatType==='일반'?'blue':c.vatType==='간이'?'orange':'gray')}</td>
         <td data-label="담당자" style="color:#555;font-size:12px;${hc['c_manager']?'display:none':''}">${em?iSel('manager',MANAGERS.slice(1),getManagers(c)[0]||''):getManagers(c).join(', ')||'-'}</td>
-        <td style="font-weight:600;font-size:11px;${hc['c_fee']?'display:none':''}">${em?`<div onclick="event.stopPropagation()" style="display:grid;grid-template-columns:auto 1fr;gap:2px 4px;align-items:center;font-size:10px"><span style="color:#888">기장</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'fee',this.value)" value="${c.fee||0}" class="inline-edit" style="width:65px"><span style="color:#888">신고</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeSingo',this.value)" value="${c.feeSingo||0}" class="inline-edit" style="width:65px"><span style="color:#888">조정</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeJojung',this.value)" value="${c.feeJojung||0}" class="inline-edit" style="width:65px"><span style="color:#888">성실</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeSeongsi',this.value)" value="${c.feeSeongsi||0}" class="inline-edit" style="width:65px"></div>`:(c.status==='정상'||c.status==='주의'?(()=>{const p=[];if(c.fee)p.push('<span style="color:#aaa;font-size:10px">기장</span> '+c.fee.toLocaleString());if(c.feeSingo)p.push('<span style="color:#aaa;font-size:10px">신고</span> '+c.feeSingo.toLocaleString());if(c.feeJojung)p.push('<span style="color:#aaa;font-size:10px">조정</span> '+c.feeJojung.toLocaleString());if(c.feeSeongsi)p.push('<span style="color:#aaa;font-size:10px">성실</span> '+c.feeSeongsi.toLocaleString());return p.length?p.join('<br>'):'-';})():'-')}</td>
+        <td data-label="수수료" style="font-weight:600;font-size:11px;${hc['c_fee']?'display:none':''}">${em?`<div onclick="event.stopPropagation()" style="display:grid;grid-template-columns:auto 1fr;gap:2px 4px;align-items:center;font-size:10px"><span style="color:#888">기장</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'fee',this.value)" value="${c.fee||0}" class="inline-edit" style="width:65px"><span style="color:#888">신고</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeSingo',this.value)" value="${c.feeSingo||0}" class="inline-edit" style="width:65px"><span style="color:#888">조정</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeJojung',this.value)" value="${c.feeJojung||0}" class="inline-edit" style="width:65px"><span style="color:#888">성실</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeSeongsi',this.value)" value="${c.feeSeongsi||0}" class="inline-edit" style="width:65px"></div>`:(c.status==='정상'||c.status==='주의'?(()=>{const p=[];if(c.fee)p.push('<span style="color:#aaa;font-size:10px">기장</span> '+c.fee.toLocaleString());if(c.feeSingo)p.push('<span style="color:#aaa;font-size:10px">신고</span> '+c.feeSingo.toLocaleString());if(c.feeJojung)p.push('<span style="color:#aaa;font-size:10px">조정</span> '+c.feeJojung.toLocaleString());if(c.feeSeongsi)p.push('<span style="color:#aaa;font-size:10px">성실</span> '+c.feeSeongsi.toLocaleString());return p.length?p.join('<br>'):'-';})():'-')}</td>
         <td data-label="상태" ${em?`onclick="event.stopPropagation();openStatusModal(${c.id})" style="cursor:pointer;` : `style="opacity:.95;`}${hc['c_status']?'display:none':''}${em?`" title="클릭하여 상태 변경"` : `" title="상태 변경은 수정모드에서 가능합니다"`}>${badge(c.status,statusColor(c.status))}</td>
         <td data-label="CMS" ${em?`onclick="event.stopPropagation();toggleCMS(${c.id})" style="cursor:pointer;` : `style="opacity:.95;`}${hc['c_cms']?'display:none':''}${em?`"` : `" title="CMS 변경은 수정모드에서 가능합니다"`}>${badge(c.cms?'가입':'미가입',c.cms?'green':'gray')}</td>
         <td style="text-align:center;color:#aaa;font-size:11px" id="expand-arrow-${c.id}">▼</td>
