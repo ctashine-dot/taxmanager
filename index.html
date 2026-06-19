@@ -636,7 +636,10 @@ const TAX_TYPES = ['전체','법인','개인'];
 const VAT_TYPES = ['전체','일반','간이','면세'];
 const FEE_STATUSES = ['전체','수금완료','청구완료','미수금'];
 const DEAL_TYPES = ['전체','기장','신고대리','종소세대리','고문','성실'];
-const STATUS_LIST = ['정상','주의','해지','폐업'];
+const STATUS_LIST = ['정상','주의','휴업','해지','폐업'];
+function statusColor(s) {
+  return s==='정상'?'green':s==='주의'?'orange':s==='폐업'?'red':'gray';
+}
 
 // 전국 세무서 목록 (관할세무서 자동완성용 · 직접 입력도 가능)
 const TAX_OFFICES = [
@@ -1215,10 +1218,41 @@ function _renderDashboardInner() {
   ${(G.settings?.dashWidgets?.managerStats!==false)?`<div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div class="card-title" style="margin:0">담당자별 현황 (업체수 · 월정수수료)</div>
-      <button onclick="openManagerAnalysis()" style="padding:5px 12px;border-radius:8px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;font-size:12px;cursor:pointer;font-family:inherit">👤 상세 분석</button>
+      <div style="display:flex;gap:8px">
+        <button onclick="openManagerTransferModal()" style="padding:5px 12px;border-radius:8px;border:1.5px solid #a5d6a7;background:#e8f5e9;color:#2e7d32;font-size:12px;cursor:pointer;font-family:inherit">👤 담당자 이동</button>
+        <button onclick="openManagerAnalysis()" style="padding:5px 12px;border-radius:8px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;font-size:12px;cursor:pointer;font-family:inherit">📊 상세 분석</button>
+      </div>
     </div>
     ${feeByManager||'<div style="color:#aaa;font-size:13px">담당자 데이터 없음</div>'}
   </div>`:''}
+
+  ${(()=>{
+    const active = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&c.taxOffice);
+    if (!active.length) return '';
+    const byOffice = {};
+    active.forEach(c=>{byOffice[c.taxOffice]=(byOffice[c.taxOffice]||0)+1;});
+    const sorted = Object.entries(byOffice).sort((a,b)=>b[1]-a[1]).slice(0,10);
+    const maxV = sorted[0]?.[1]||1;
+    return `<div class="card" style="margin-bottom:14px">
+      <div class="card-title">🏛 관할 세무서별 거래처 현황 (상위 10개)</div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${sorted.map(([office,cnt])=>{
+          const pct=Math.round(cnt/maxV*100);
+          return `<div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+              <span style="font-size:13px;font-weight:600">${esc(office)}</span>
+              <span style="font-size:12px;color:#555;font-weight:700">${cnt}개</span>
+            </div>
+            <div style="height:6px;background:#e8eaf6;border-radius:3px">
+              <div style="height:6px;width:${pct}%;background:#4f8ef7;border-radius:3px"></div>
+            </div>
+          </div>`;
+        }).join('')}
+        ${Object.keys(byOffice).length>10?`<div style="font-size:12px;color:#aaa;margin-top:4px">외 ${Object.keys(byOffice).length-10}개 세무서...</div>`:''}
+        <div style="font-size:11px;color:#aaa;margin-top:4px">세무서 미입력: ${G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&!c.taxOffice).length}개</div>
+      </div>
+    </div>`;
+  })()}
 
   ${(G.settings?.dashWidgets?.chart12!==false)?(()=>{
     const now2 = new Date();
@@ -1373,6 +1407,8 @@ function renderClients() {
       <button class="btn-sm" style="background:#f0f8ff;color:#1565c0;border:1.5px solid #90caf9" onclick="openImportModal()">📥 세무사랑 가져오기</button>
       <button class="btn-sm" style="background:#f3e5f5;color:#6a1b9a;border:1.5px solid #ce93d8" onclick="openFilterPresets(this)">⭐ 프리셋${(G.filterPresets||[]).length?' ('+(G.filterPresets||[]).length+')':''}</button>
       <button class="btn-sm" style="background:${G.bulkMode?'#e8f5e9':'#f5f5f5'};color:${G.bulkMode?'#2e7d32':'#888'};border:2px solid ${G.bulkMode?'#43a047':'#e0e0e0'}" onclick="G.bulkMode=!G.bulkMode;G.selectedClients=[];renderClients()">☑ 일괄편집${G.bulkMode?' ON':''}</button>
+      <button class="btn-sm" style="background:#e8f5e9;color:#2e7d32;border:1.5px solid #a5d6a7" onclick="openManagerTransferModal()">👤 담당자 이동</button>
+      <button class="btn-sm" style="background:#e8f5e9;color:#1b5e20;border:1.5px solid #81c784" onclick="exportClientsToExcel()">📊 Excel 내보내기</button>
       ${(()=>{const hasFilter=G.searchText||G.clientRepSearch||(G.filterManagers||[]).length||(G.filterTaxTypes||[]).length||(G.filterVatTypes||[]).length||(G.filterFeeStatuses||[]).length||(G.filterDealTypes||[]).length||(G.filterCMS||[]).length||(G.filterTags||[]).length||G.filterRisk||G.showFavorites;return hasFilter?`<button class="btn-sm" style="background:#fdecea;color:#c62828;border:1.5px solid #ef9a9a;font-weight:700" onclick="G.searchText='';G.clientRepSearch='';G.filterManagers=[];G.filterTaxTypes=[];G.filterVatTypes=[];G.filterFeeStatuses=[];G.filterDealTypes=[];G.filterCMS=[];G.filterTags=[];G.filterRisk='';G.showFavorites=false;G.clientPage=0;renderClients()">✕ 필터초기화</button>`:'';})()}
       <button class="btn-primary btn-sm" onclick="openForm(null)" style="padding:8px 14px">+ 거래처 추가</button>
     </div>
@@ -1442,7 +1478,7 @@ function renderClients() {
         <td data-label="과세유형" style="${hc['c_vatType']?'display:none':''}">${em?iSel('vatType',VAT_TYPES.slice(1),c.vatType):badge(c.vatType,c.vatType==='일반'?'blue':c.vatType==='간이'?'orange':'gray')}</td>
         <td data-label="담당자" style="color:#555;font-size:12px;${hc['c_manager']?'display:none':''}">${em?iSel('manager',MANAGERS.slice(1),getManagers(c)[0]||''):getManagers(c).join(', ')||'-'}</td>
         <td style="font-weight:600;font-size:11px;${hc['c_fee']?'display:none':''}">${em?`<div onclick="event.stopPropagation()" style="display:grid;grid-template-columns:auto 1fr;gap:2px 4px;align-items:center;font-size:10px"><span style="color:#888">기장</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'fee',this.value)" value="${c.fee||0}" class="inline-edit" style="width:65px"><span style="color:#888">신고</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeSingo',this.value)" value="${c.feeSingo||0}" class="inline-edit" style="width:65px"><span style="color:#888">조정</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeJojung',this.value)" value="${c.feeJojung||0}" class="inline-edit" style="width:65px"><span style="color:#888">성실</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeSeongsi',this.value)" value="${c.feeSeongsi||0}" class="inline-edit" style="width:65px"></div>`:(c.status==='정상'||c.status==='주의'?(()=>{const p=[];if(c.fee)p.push('<span style="color:#aaa;font-size:10px">기장</span> '+c.fee.toLocaleString());if(c.feeSingo)p.push('<span style="color:#aaa;font-size:10px">신고</span> '+c.feeSingo.toLocaleString());if(c.feeJojung)p.push('<span style="color:#aaa;font-size:10px">조정</span> '+c.feeJojung.toLocaleString());if(c.feeSeongsi)p.push('<span style="color:#aaa;font-size:10px">성실</span> '+c.feeSeongsi.toLocaleString());return p.length?p.join('<br>'):'-';})():'-')}</td>
-        <td data-label="상태" onclick="event.stopPropagation();cycleStatus(${c.id})" style="cursor:pointer;${hc['c_status']?'display:none':''}">${badge(c.status,c.status==='정상'?'green':c.status==='주의'?'orange':'gray')}</td>
+        <td data-label="상태" onclick="event.stopPropagation();openStatusModal(${c.id})" style="cursor:pointer;${hc['c_status']?'display:none':''}" title="클릭하여 상태 변경">${badge(c.status,statusColor(c.status))}</td>
         <td data-label="CMS" onclick="event.stopPropagation();toggleCMS(${c.id})" style="cursor:pointer;${hc['c_cms']?'display:none':''}">${badge(c.cms?'가입':'미가입',c.cms?'green':'gray')}</td>
         <td style="text-align:center;color:#aaa;font-size:11px" id="expand-arrow-${c.id}">▼</td>
       </tr>
@@ -2321,13 +2357,60 @@ function cycleFeeStatus(id) {
   if(cell) cell.innerHTML = badge(c.feeStatus, c.feeStatus==='수금완료'?'green':c.feeStatus==='청구완료'?'blue':'red');
 }
 
-function cycleStatus(id) {
+function openStatusModal(id) {
   const c = G.clients.find(x=>x.id===id); if(!c) return;
-  const opts = ['정상','주의','해지','폐업'];
-  c.status = opts[(opts.indexOf(c.status)+1) % opts.length];
-  saveToLS();
-  const rows = document.querySelector(`#expand-arrow-${id}`).closest('tr').querySelectorAll('td');
-  if(rows[6]) rows[6].innerHTML = badge(c.status, c.status==='정상'?'green':c.status==='주의'?'orange':'gray');
+  window._statusSelected = c.status;
+  const today = new Date().toISOString().slice(0,10);
+  const needsDate = ['휴업','해지','폐업'];
+  const labels = {정상:'✅ 정상', 주의:'⚠ 주의', 휴업:'😴 휴업', 해지:'🚫 해지', 폐업:'💔 폐업'};
+  showModal(`<div style="max-width:360px">
+    <div class="modal-header"><h3>상태 변경</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div style="font-weight:700;font-size:14px;margin-bottom:14px">${esc(c.name)}</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">
+        ${STATUS_LIST.map(s=>`<button id="status-opt-${s}" onclick="selectStatusOption('${s}')"
+          style="padding:11px 4px;border-radius:10px;border:2px solid ${c.status===s?'#4f8ef7':'#e0e0e0'};background:${c.status===s?'#e8f0fe':'#f9f9f9'};font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:${c.status===s?'#4f8ef7':'#555'}">
+          ${labels[s]||s}
+        </button>`).join('')}
+      </div>
+      <div id="status-date-row" style="display:${needsDate.includes(c.status)?'block':'none'};background:#fff8e1;border-radius:8px;padding:12px;margin-bottom:14px;border:1.5px solid #ffe082">
+        <label style="font-size:13px;font-weight:700;color:#e65100;display:block;margin-bottom:8px">📅 사유발생일 <span style="color:#c62828">*</span></label>
+        <input type="date" id="status-event-date" value="${c.terminationDate||today}"
+          style="width:100%;padding:8px 12px;border:1.5px solid #ffa726;border-radius:8px;font-size:14px;font-family:inherit">
+        <div style="font-size:11px;color:#888;margin-top:6px">해지·휴업·폐업 사유가 발생한 날짜를 입력하세요</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button onclick="closeModal()" style="flex:1;padding:10px;border-radius:8px;border:1.5px solid #e0e0e0;background:#f5f5f5;font-size:14px;cursor:pointer;font-family:inherit">취소</button>
+        <button onclick="applyStatusChange(${id})" style="flex:2;padding:10px;border-radius:8px;border:none;background:#4f8ef7;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">변경 저장</button>
+      </div>
+    </div>
+  </div>`);
+}
+function selectStatusOption(s) {
+  window._statusSelected = s;
+  STATUS_LIST.forEach(opt => {
+    const btn = document.getElementById('status-opt-'+opt);
+    if (!btn) return;
+    btn.style.border = `2px solid ${opt===s?'#4f8ef7':'#e0e0e0'}`;
+    btn.style.background = opt===s?'#e8f0fe':'#f9f9f9';
+    btn.style.color = opt===s?'#4f8ef7':'#555';
+  });
+  const dr = document.getElementById('status-date-row');
+  if (dr) dr.style.display = ['휴업','해지','폐업'].includes(s)?'block':'none';
+}
+function applyStatusChange(id) {
+  const c = G.clients.find(x=>x.id===id); if(!c) return;
+  const newStatus = window._statusSelected;
+  if (!newStatus) return;
+  if (['휴업','해지','폐업'].includes(newStatus)) {
+    const dateVal = document.getElementById('status-event-date')?.value;
+    if (!dateVal) { alert('사유발생일을 입력해주세요'); return; }
+    c.terminationDate = dateVal;
+    if (newStatus==='폐업') c.closureYear = dateVal.slice(0,4);
+  }
+  c.status = newStatus;
+  saveToLS(); closeModal(); renderClients();
+  toast(`${c.name} 상태 변경: ${newStatus}`, 'success');
 }
 
 function deleteClient(id) {
@@ -3517,7 +3600,11 @@ function renderJulgae() {
   document.getElementById('page-julgae').innerHTML = `
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
     <h2 style="font-size:20px;font-weight:800">신고 및 결재</h2>
-    <button class="btn-primary btn-sm" onclick="openAddPeriod()" style="padding:8px 14px">+ 신고리스트 추가</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn-sm" style="background:#fff3e0;color:#e65100;border:1.5px solid #ffcc80" onclick="openDataRequestSMS()">📱 자료요청 SMS</button>
+      <button class="btn-sm" style="background:#e8f5e9;color:#1b5e20;border:1.5px solid #81c784" onclick="exportJulgaeToExcel()">📊 Excel 내보내기</button>
+      <button class="btn-primary btn-sm" onclick="openAddPeriod()" style="padding:8px 14px">+ 신고리스트 추가</button>
+    </div>
   </div>
 
   ${periods.length === 0 ? `<div class="card" style="text-align:center;padding:40px;color:#aaa">
@@ -4281,7 +4368,7 @@ function renderFees() {
       ? `<span style="font-size:10px;font-weight:700;color:#fff;background:${streak>=6?'#b71c1c':streak>=3?'#e53935':'#ff7043'};border-radius:10px;padding:1px 6px;margin-left:5px;white-space:nowrap">${streak}개월 미납</span>`
       : '';
     return `<tr style="background:${collected?'#e8f5e9':'#fff'}">
-      <td><div style="font-weight:600;font-size:13px;display:flex;align-items:center;flex-wrap:wrap;gap:2px">${esc(c.name)}${streakBadge}</div></td>
+      <td><div style="font-weight:600;font-size:13px;display:flex;align-items:center;flex-wrap:wrap;gap:2px">${esc(c.name)}${streakBadge}<button onclick="event.stopPropagation();printFeeInvoice(${c.id})" style="margin-left:6px;padding:1px 7px;border-radius:5px;border:1px solid #c5cae9;background:#f0f4ff;font-size:10px;color:#4f8ef7;cursor:pointer;font-family:inherit" title="청구서 인쇄">🖨 청구서</button></div></td>
       <td style="font-size:12px;color:#444;${hc['fm_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
       <td style="${hc['fm_dealType']?'display:none':''}">${getDealTypes(c).map(d=>dealBadge(d)).join('')}</td>
       <td style="color:#555;font-size:12px;${hc['fm_manager']?'display:none':''}">${getManagers(c).join(', ')||'-'}</td>
@@ -4336,7 +4423,10 @@ function renderFees() {
   const agingOpen = (G.agingOpen !== false);
 
   document.getElementById('page-fees').innerHTML = `
-  <div style="margin-bottom:20px"><h2 style="font-size:20px;font-weight:800">💰 수수료 관리</h2></div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:8px">
+    <h2 style="font-size:20px;font-weight:800">💰 수수료 관리</h2>
+    <button class="btn-sm" style="background:#e8f5e9;color:#1b5e20;border:1.5px solid #81c784" onclick="exportFeesToExcel()">📊 Excel 내보내기</button>
+  </div>
 
   <div class="card" style="margin-bottom:14px;cursor:pointer" onclick="G.agingOpen=G.agingOpen===false?true:false;renderFees()">
     <div style="display:flex;justify-content:space-between;align-items:center">
@@ -6703,6 +6793,229 @@ function toggleField(id, field) {
   if (c) c[field]=!c[field];
   saveToLS();
   updateBadge();
+}
+
+// ══════════════════════════════════════════════════════
+// Excel 내보내기
+// ══════════════════════════════════════════════════════
+function exportClientsToExcel() {
+  if (typeof XLSX==='undefined') { toast('XLSX 라이브러리 미로드','error'); return; }
+  const list = filteredClients();
+  const headers = ['번호','거래처명','대표자','수임내용','인격','과세유형','담당자','기장수수료','신고수수료','상태','CMS','수임일','관할세무서','연락처','사업자번호','메모'];
+  const rows = list.map((c,i)=>[
+    i+1, c.name, c.rep||'', getDealTypes(c).join('/'), c.taxType||'', c.vatType||'',
+    getManagers(c).join('/'), c.fee||0, (c.feeSingo||0)+(c.feeJojung||0)+(c.feeSeongsi||0),
+    c.status||'', c.cms?'가입':'미가입', c.contractDate||'', c.taxOffice||'', c.phone||'', c.bizNo||'', c.memo||''
+  ]);
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([headers,...rows]);
+  ws['!cols']=[4,22,10,12,6,8,12,10,10,6,6,12,12,14,14,20].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, ws, '거래처목록');
+  XLSX.writeFile(wb, `거래처목록_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast(`${list.length}개 거래처를 Excel로 내보냈습니다`,'success');
+}
+function exportFeesToExcel() {
+  if (typeof XLSX==='undefined') { toast('XLSX 라이브러리 미로드','error'); return; }
+  const now = new Date();
+  const thisYM = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const active = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&getDealTypes(c).some(d=>['기장','고문','성실'].includes(d)));
+  const months6 = Array.from({length:6},(_,i)=>{const d=new Date(now.getFullYear(),now.getMonth()-5+i,1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');});
+  const headers = ['거래처명','담당자','기장수수료',...months6,'미수금월수'];
+  const rows = active.map(c=>{
+    const monthCols = months6.map(ym=>(G.monthlyFees[c.id]?.[ym])?'수금':'미수금');
+    const unpaid = months6.filter(ym=>!(G.monthlyFees[c.id]?.[ym])).length;
+    return [c.name, getManagers(c).join('/'), c.fee||0, ...monthCols, unpaid];
+  });
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([headers,...rows]);
+  ws['!cols']=[22,12,10,...months6.map(()=>({wch:8})),8].map((v,i)=>typeof v==='number'?{wch:v}:v);
+  XLSX.utils.book_append_sheet(wb, ws, '수수료현황');
+  XLSX.writeFile(wb, `수수료현황_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast(`수수료 현황을 Excel로 내보냈습니다`,'success');
+}
+function exportJulgaeToExcel() {
+  if (typeof XLSX==='undefined') { toast('XLSX 라이브러리 미로드','error'); return; }
+  const periods = G.periods;
+  const idx = Math.min(G.julgaePeriodIdx||0, Math.max(0, periods.length-1));
+  const period = periods[idx];
+  if (!period) { toast('신고기간이 없습니다','error'); return; }
+  const pKey = period.id;
+  const targets = period.enrolled?.length>0
+    ? G.clients.filter(c=>period.enrolled.includes(c.id))
+    : applyReportFilter(G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'), period);
+  const headers = ['거래처명','대표자','담당자','자료','기장','결재','수수료','수금여부','특이사항'];
+  const rows = targets.map(c=>{
+    const v = julgaeVal(pKey, c.id);
+    return [c.name, c.rep||'', getManagers(c).join('/'), v.d?'✓':'', v.b?'✓':'', v.a?'✓':'', v.fee||0, v.s?'수금':'미수금', v.note||''];
+  });
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([headers,...rows]);
+  ws['!cols']=[22,10,10,6,6,6,10,8,24].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, ws, period.label.slice(0,31));
+  XLSX.writeFile(wb, `${period.label}_신고현황_${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast(`${period.label} 신고 현황을 Excel로 내보냈습니다`,'success');
+}
+
+// ══════════════════════════════════════════════════════
+// 수수료 청구서 인쇄
+// ══════════════════════════════════════════════════════
+function printFeeInvoice(clientId) {
+  const c = G.clients.find(x=>x.id===clientId); if(!c) return;
+  const s = G.settings||{};
+  const now = new Date();
+  const items = [];
+  if (c.fee)        items.push({name:'기장 수수료 (월정)', amount:c.fee});
+  if (c.feeSingo)   items.push({name:'신고 수수료',        amount:c.feeSingo});
+  if (c.feeJojung)  items.push({name:'조정 수수료',        amount:c.feeJojung});
+  if (c.feeSeongsi) items.push({name:'성실신고 수수료',    amount:c.feeSeongsi});
+  if (!items.length) { toast('수수료 정보가 없습니다','warning'); return; }
+  const total = items.reduce((a,x)=>a+x.amount, 0);
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>수수료 청구서</title><style>
+    *{margin:0;padding:0;box-sizing:border-box}body{font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;padding:40px;color:#1a1a2e;font-size:14px}
+    .top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1a1a2e;padding-bottom:16px;margin-bottom:24px}
+    .office-name{font-size:20px;font-weight:800}.office-sub{font-size:12px;color:#888;margin-top:4px}
+    .doc-title{font-size:24px;font-weight:800;color:#4f8ef7;text-align:right}.doc-date{font-size:12px;color:#888;text-align:right;margin-top:4px}
+    .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;border:1px solid #e0e0e0;border-radius:8px;padding:16px;margin-bottom:20px}
+    .il{font-size:11px;color:#888;margin-bottom:4px}.iv{font-weight:700;font-size:14px}.isub{font-size:12px;color:#888;margin-top:3px}
+    table{width:100%;border-collapse:collapse;margin-bottom:16px}
+    th{background:#f5f5f5;padding:10px 12px;text-align:left;font-size:12px;border-bottom:2px solid #e0e0e0;font-weight:700}
+    td{padding:10px 12px;border-bottom:1px solid #f0f0f0;font-size:13px}
+    .tr{font-weight:800;font-size:15px;background:#e8f0fe}
+    .tr td{padding:12px 12px}
+    .note{font-size:11px;color:#aaa;margin-bottom:20px}
+    .stamp{display:inline-block;border:2px solid #ccc;border-radius:6px;padding:10px 24px;font-size:12px;color:#999;margin-top:16px}
+    @media print{body{padding:20px}}
+  </style></head><body>
+    <div class="top">
+      <div><div class="office-name">${esc(s.name||'세무회계사무소')}</div><div class="office-sub">대표세무사: ${esc(s.rep||'')} | ${esc(s.phone||'')}</div></div>
+      <div><div class="doc-title">수 수 료 청 구 서</div><div class="doc-date">${now.toLocaleDateString('ko-KR')} 기준</div></div>
+    </div>
+    <div class="info-grid">
+      <div><div class="il">청구 대상</div><div class="iv">${esc(c.name)}</div><div class="isub">대표: ${esc(c.rep||'-')} · ${esc(c.taxType||'')} ${esc(c.vatType||'')}</div></div>
+      <div><div class="il">청구 기간</div><div class="iv">${now.getFullYear()}년 ${now.getMonth()+1}월분</div><div class="isub">수임일: ${esc(c.contractDate||'-')}</div></div>
+    </div>
+    <table>
+      <thead><tr><th>항 목</th><th style="text-align:right">금 액</th></tr></thead>
+      <tbody>
+        ${items.map(x=>`<tr><td>${x.name}</td><td style="text-align:right;font-weight:600">${x.amount.toLocaleString()} 원</td></tr>`).join('')}
+        <tr class="tr"><td>합 계</td><td style="text-align:right">${total.toLocaleString()} 원</td></tr>
+      </tbody>
+    </table>
+    <div class="note">* 이 청구서는 세무사무소 업무관리 시스템에서 자동 생성되었습니다.</div>
+    <div class="stamp">직 인</div>
+  </body></html>`;
+  const w = window.open('','_blank','width=700,height=900');
+  w.document.write(html); w.document.close();
+  setTimeout(()=>w.print(), 600);
+}
+
+// ══════════════════════════════════════════════════════
+// 자료 미제출 SMS 일괄 문자 생성
+// ══════════════════════════════════════════════════════
+function openDataRequestSMS() {
+  const periods = G.periods;
+  const idx = Math.min(G.julgaePeriodIdx||0, Math.max(0, periods.length-1));
+  const period = periods[idx];
+  if (!period) { toast('신고기간이 없습니다','error'); return; }
+  const pKey = period.id;
+  const targets = period.enrolled?.length>0
+    ? G.clients.filter(c=>period.enrolled.includes(c.id))
+    : applyReportFilter(G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'), period);
+  const missing = targets.filter(c=>!julgaeVal(pKey,c.id).d);
+  const s = G.settings||{};
+  const today = new Date().toLocaleDateString('ko-KR');
+  const smsText = `[${esc(s.name||'세무사무소')}]\n안녕하세요.\n${period.label} 신고를 위한 거래 자료를 ${today}까지 전달해 주시기 바랍니다.\n\n빠른 처리를 위해 서류를 준비해 주세요.\n문의: ${s.phone||''}`;
+  showModal(`<div style="max-width:500px">
+    <div class="modal-header"><h3>📱 자료 요청 SMS 일괄 생성</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div style="background:#e8f0fe;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px">
+        <b>${period.label}</b> | 자료 미제출 거래처 <b style="color:#c62828">${missing.length}개</b> / 전체 ${targets.length}개
+      </div>
+      <div style="max-height:180px;overflow-y:auto;border:1px solid #f0f0f0;border-radius:8px;padding:10px;margin-bottom:14px">
+        ${missing.map(c=>`<div style="padding:5px 0;border-bottom:1px solid #f8f8f8;font-size:13px">${esc(c.name)} <span style="color:#888;font-size:11px">${getManagers(c).join('/')||'(담당없음)'}</span></div>`).join('')||'<div style="color:#2e7d32;padding:8px">모두 자료 제출 완료 ✓</div>'}
+      </div>
+      <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:6px">📱 SMS 문자 내용 (수정 후 복사하세요)</div>
+      <textarea id="sms-text-area" rows="7" style="width:100%;padding:10px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;line-height:1.6">${smsText}</textarea>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button onclick="(async()=>{try{await navigator.clipboard.writeText(document.getElementById('sms-text-area').value);toast('문자 복사됨','success');}catch{const ta=document.getElementById('sms-text-area');ta.select();document.execCommand('copy');toast('복사됨','success');}})()" style="flex:1;padding:10px;border-radius:8px;border:none;background:#4f8ef7;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">📋 문자 복사</button>
+      </div>
+      <div style="font-size:11px;color:#aaa;margin-top:8px">각 거래처별 개별 발송 시 거래처명을 추가해 수정하여 사용하세요</div>
+    </div>
+  </div>`);
+}
+
+// ══════════════════════════════════════════════════════
+// 담당자 이동 마법사
+// ══════════════════════════════════════════════════════
+function openManagerTransferModal() {
+  const mgrs = (G.settings?.managers||[]);
+  if (mgrs.length < 2) { toast('담당자가 2명 이상 필요합니다','warning'); return; }
+  showModal(`<div style="max-width:480px">
+    <div class="modal-header"><h3>👤 담당자 이동 마법사</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;margin-bottom:14px">
+        <div>
+          <div style="font-size:12px;color:#888;margin-bottom:4px">이동 전 담당자 (FROM)</div>
+          <select id="mgr-from" onchange="renderMgrTransferList()" style="width:100%;padding:8px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:14px;font-family:inherit">
+            <option value="">선택...</option>
+            ${mgrs.map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join('')}
+          </select>
+        </div>
+        <div style="font-size:20px;color:#aaa;padding-top:20px">→</div>
+        <div>
+          <div style="font-size:12px;color:#888;margin-bottom:4px">이동 후 담당자 (TO)</div>
+          <select id="mgr-to" style="width:100%;padding:8px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:14px;font-family:inherit">
+            <option value="">선택...</option>
+            ${mgrs.map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div id="mgr-transfer-list" style="max-height:220px;overflow-y:auto;border:1px solid #f0f0f0;border-radius:8px;padding:10px;margin-bottom:14px">
+        <div style="color:#aaa;font-size:13px;text-align:center">FROM 담당자를 선택하세요</div>
+      </div>
+      <div id="mgr-transfer-count" style="font-size:12px;color:#888;margin-bottom:10px"></div>
+      <div style="display:flex;gap:8px">
+        <button onclick="closeModal()" style="flex:1;padding:10px;border-radius:8px;border:1.5px solid #e0e0e0;background:#f5f5f5;font-size:14px;cursor:pointer;font-family:inherit">취소</button>
+        <button onclick="applyManagerTransfer()" style="flex:2;padding:10px;border-radius:8px;border:none;background:#4f8ef7;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">이동 적용</button>
+      </div>
+    </div>
+  </div>`);
+}
+function renderMgrTransferList() {
+  const fromMgr = document.getElementById('mgr-from')?.value;
+  const list = document.getElementById('mgr-transfer-list');
+  if (!list||!fromMgr) return;
+  const clients = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&getManagers(c).includes(fromMgr));
+  list.innerHTML = clients.length===0
+    ? `<div style="color:#aaa;font-size:13px;text-align:center">${fromMgr}의 거래처 없음</div>`
+    : clients.map(c=>`<label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f5f5f5;cursor:pointer">
+        <input type="checkbox" class="mgr-chk" data-id="${c.id}" checked style="width:16px;height:16px;accent-color:#4f8ef7">
+        <span style="font-size:13px;font-weight:600">${esc(c.name)}</span>
+        <span style="font-size:11px;color:#888">${esc(c.taxType||'')} · ${esc(c.vatType||'')}</span>
+      </label>`).join('');
+  const cnt = document.getElementById('mgr-transfer-count');
+  if (cnt) cnt.textContent = `총 ${clients.length}개 거래처 (전체 선택됨 — 개별 해제 가능)`;
+}
+function applyManagerTransfer() {
+  const fromMgr = document.getElementById('mgr-from')?.value;
+  const toMgr = document.getElementById('mgr-to')?.value;
+  if (!fromMgr||!toMgr) { alert('FROM과 TO 담당자를 모두 선택해주세요'); return; }
+  if (fromMgr===toMgr) { alert('같은 담당자입니다'); return; }
+  const checked = [...document.querySelectorAll('.mgr-chk:checked')].map(c=>Number(c.dataset.id));
+  if (!checked.length) { alert('이동할 거래처를 선택해주세요'); return; }
+  const today = new Date().toISOString().slice(0,10);
+  checked.forEach(id=>{
+    const c = G.clients.find(x=>x.id===id); if(!c) return;
+    const mgrs = getManagers(c);
+    const idx2 = mgrs.indexOf(fromMgr);
+    if (idx2>=0) mgrs[idx2] = toMgr;
+    c.manager = mgrs[0]||'';
+    if (!G.managerHistory) G.managerHistory = {};
+    if (!G.managerHistory[id]) G.managerHistory[id] = [];
+    G.managerHistory[id].push({date:today, from:fromMgr, to:toMgr});
+  });
+  saveToLS(); closeModal(); renderClients();
+  toast(`${checked.length}개 거래처 담당자 이동: ${fromMgr} → ${toMgr}`,'success');
 }
 
 function toast(msg, type='info', ms=3000) {
