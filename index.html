@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>TaxManager — 세무사무소 거래처 관리</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -7063,18 +7066,22 @@ async function loadFromFirebase() {
   // Apply dark mode if saved
   if (localStorage.getItem('tm_darkMode')) { G.darkMode=true; document.body.classList.add('dark-mode'); }
   try { const _up=JSON.parse(localStorage.getItem('tm_uiPrefs')||'{}'); if(_up.julgaeSort)G.julgaeSort=_up.julgaeSort; if(_up.julgaeSortDir)G.julgaeSortDir=_up.julgaeSortDir; } catch(e){}
-  migrateJulgae();
-  if (G.settings.managers) MANAGERS = ['전체', ...G.settings.managers];
-  updateBadge();
-  document.getElementById('loading').style.display = 'none';
-  document.getElementById('page-dashboard').style.display = 'block';
-  renderDashboard();
-  // Feature 10: auto-create periods if enabled
-  if (G.settings?.autoCreatePeriods) {
-    const yr = new Date().getFullYear();
-    const yy = String(yr).slice(2);
-    const hasThisYear = G.periods.some(p => (p.label||'').startsWith(yy+'년'));
-    if (!hasThisYear) autoCreatePeriods(yr);
+  try {
+    migrateJulgae();
+    if (G.settings?.managers) MANAGERS = ['전체', ...G.settings.managers];
+    updateBadge();
+  } catch(e) {
+    console.error('초기화 오류:', e);
+  } finally {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('page-dashboard').style.display = 'block';
+    renderDashboard();
+    if (G.settings?.autoCreatePeriods) {
+      const yr = new Date().getFullYear();
+      const yy = String(yr).slice(2);
+      const hasThisYear = G.periods.some(p => (p.label||'').startsWith(yy+'년'));
+      if (!hasThisYear) autoCreatePeriods(yr);
+    }
   }
 }
 
