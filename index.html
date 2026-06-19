@@ -153,11 +153,11 @@ input.finput:focus,select.fsel:focus,textarea.ftarea:focus{border-color:#4f8ef7}
 }
 
 /* ── 수임항목 그룹 */
-.contract-group{margin-bottom:10px}
-.contract-group-title{font-size:11px;font-weight:700;color:#4f8ef7;margin-bottom:6px;text-transform:uppercase}
-.contract-chips{display:flex;flex-wrap:wrap;gap:6px}
-.contract-chip{padding:6px 13px;border-radius:20px;border:2px solid #e0e0e0;background:#fff;color:#888;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;font-family:inherit}
-.contract-chip.on{border-color:#4f8ef7;background:#e8f0fe;color:#4f8ef7}
+.contract-group{margin-bottom:6px}
+.contract-group-title{font-size:10px;font-weight:700;color:#9e9e9e;margin-bottom:3px;text-transform:uppercase;letter-spacing:.3px}
+.contract-chips{display:flex;flex-wrap:wrap;gap:4px}
+.contract-chip{padding:3px 9px;border-radius:12px;border:1.5px solid #e0e0e0;background:#fff;color:#888;font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;font-family:inherit}
+.contract-chip.on{border-color:#4f8ef7;background:#e8f0fe;color:#1565c0}
 .contract-chip.disabled{opacity:.3;cursor:not-allowed}
 
 /* ── 인쇄 */
@@ -738,23 +738,27 @@ const TAX_OFFICES = [
 ];
 
 const CONTRACT_GROUPS = [
-  { key:'장', label:'기장', items:[
+  { key:'기장', label:'기장', items:[
     {key:'기장_일반', label:'기장 (일반)', vat:['일반'], tax:['법인','개인']},
     {key:'기장_간이', label:'기장 (간이)', vat:['간이','간세'], tax:['개인']},
     {key:'기장_면세', label:'기장 (면세)', vat:['면세'], tax:['개인']},
   ]},
-  { key:'신고', label:'신고대리', items:[
-    {key:'신고대리_부가세', label:'부가세 신고대리', vat:['일반','간이','간세'], tax:['법인','개인']},
-    {key:'신고대리_면세', label:'사업장현황 신고대리', vat:['면세'], tax:['개인']},
-    {key:'종소세신고대리', label:'종합소득세 신고대리', vat:['일반','간이','간세','면세'], tax:['개인']},
-  ]},
-  { key:'법인', label:'법인 신고', items:[
+  { key:'신고', label:'신고', items:[
+    {key:'부가세신고', label:'부가세 신고', vat:['일반','간이','간세'], tax:['법인','개인']},
+    {key:'사업장현황신고', label:'사업장현황 신고', vat:['면세'], tax:['개인']},
     {key:'법인세', label:'법인세 신고', vat:['일반','간이','면세'], tax:['법인']},
+    {key:'소득세', label:'소득세 신고', vat:['일반','간이','간세','면세'], tax:['개인']},
+    {key:'성실신고', label:'성실신고확인', vat:['일반','간이','간세','면세'], tax:['개인']},
     {key:'세무조정', label:'세무조정', vat:['일반','간이','간세','면세'], tax:['법인','개인']},
   ]},
   { key:'공통', label:'공통', items:[
-    {key:'연말정산', label:'연말정산', vat:['일반','간이','간세','면세'], tax:['법인','개인']},
     {key:'원천세', label:'원천세 신고', vat:['일반','간이','간세','면세'], tax:['법인','개인']},
+    {key:'연말정산', label:'연말정산', vat:['일반','간이','간세','면세'], tax:['법인','개인']},
+  ]},
+  { key:'신고대리', label:'신고대리', items:[
+    {key:'신고대리_부가세', label:'부가세 신고대리', vat:['일반','간이','간세'], tax:['법인','개인']},
+    {key:'신고대리_면세', label:'사업장현황 신고대리', vat:['면세'], tax:['개인']},
+    {key:'종소세신고대리', label:'소득세 신고대리', vat:['일반','간이','간세','면세'], tax:['개인']},
   ]},
 ];
 
@@ -769,6 +773,35 @@ function availableContracts(vatType, taxType) {
     ...g,
     items: g.items.filter(i => i.vat.includes(vatType) && i.tax.includes(taxType))
   })).filter(g => g.items.length > 0);
+}
+
+function getDefaultContracts(dealType, taxType, vatType) {
+  const dt = dealType || '기장';
+  const cs = [];
+  const isBook = ['기장','고문','성실'].includes(dt);
+  const isCorp = taxType === '법인';
+  const isVat = ['일반','간이','간세'].includes(vatType);
+  const isExempt = vatType === '면세';
+  if (isBook) {
+    if (vatType==='일반') cs.push('기장_일반');
+    else if (vatType==='간이'||vatType==='간세') cs.push('기장_간이');
+    else if (isExempt) cs.push('기장_면세');
+    if (isVat) cs.push('부가세신고');
+    if (isExempt) cs.push('사업장현황신고');
+    if (isCorp) cs.push('법인세');
+    if (!isCorp && dt!=='성실') cs.push('소득세');
+    if (dt==='성실') cs.push('성실신고');
+    cs.push('세무조정','원천세','연말정산');
+  }
+  if (dt==='신고대리') {
+    if (isVat) cs.push('부가세신고');
+    if (isExempt) cs.push('사업장현황신고');
+    if (isCorp) cs.push('법인세');
+    if (!isCorp) cs.push('소득세');
+  }
+  if (dt==='종소세대리') cs.push('소득세');
+  const avail = availableContracts(vatType, taxType).flatMap(g=>g.items).map(i=>i.key);
+  return cs.filter(k=>avail.includes(k));
 }
 
 // ══════════════════════════════════════════════════════
@@ -2758,7 +2791,7 @@ function openForm(id) {
     taxType:'개인',vatType:'일반',bizType:'',taxOffice:'',
     manager:'이슬빈',fee:0,feeSingo:0,feeJojung:0,feeSeongsi:0,feeStatus:'청구완료',dealType:'기장',
     dealTypes:['기장'],managers:['이슬빈'],
-    contracts:[],status:'정상',dataReceived:false,bookkeeping:false,approved:false,
+    contracts:getDefaultContracts('기장','개인','일반'),status:'정상',dataReceived:false,bookkeeping:false,approved:false,
     memo:'',contractDate:'',terminationDate:'',terminationReason:'',
     closureYear:'',closureTaxFiled:false,closureTaxApproved:false
   };
@@ -2773,6 +2806,7 @@ function openForm(id) {
     ? G.clients.filter(cl=>cl.id!==c.id&&cl.relatedGroup===c.relatedGroup)
     : (isEdit && !c.soloGroup && c.rep ? G.clients.filter(cl=>cl.id!==c.id&&!cl.soloGroup&&!cl.relatedGroup&&cl.rep===c.rep) : []);
 
+  window._formIsNew = (id === null);
   function contractsHTML() {
     const avail = availableContracts(window._formData.vatType, window._formData.taxType);
     return avail.map(g=>`
@@ -2888,18 +2922,20 @@ function openForm(id) {
     </div>
     <div id="fee-suggestion-box" class="c2"></div>
 
-    <div class="ff">
-      <label class="ffl">수임내용</label>
-      <select class="fsel" onchange="window._formData.dealType=this.value;window._formData.dealTypes=this.value?[this.value]:[]">
-        ${DEAL_TYPES.slice(1).map(v=>`<option value="${v}"${(window._formData.dealTypes||['기장'])[0]===v?' selected':''}>${v}</option>`).join('')}
-      </select>
-    </div>
-    <div class="ff">
-      <label class="ffl">담당자</label>
-      <select class="fsel" onchange="window._formData.manager=this.value;window._formData.managers=this.value?[this.value]:[]">
-        <option value="">-</option>
-        ${MANAGERS.slice(1).map(v=>`<option value="${v}"${(window._formData.managers||[])[0]===v?' selected':''}>${v}</option>`).join('')}
-      </select>
+    <div class="c3" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="ff">
+        <label class="ffl">수임내용</label>
+        <select class="fsel" onchange="window._formData.dealType=this.value;window._formData.dealTypes=this.value?[this.value]:[];if(window._formIsNew){window._formData.contracts=getDefaultContracts(this.value,window._formData.taxType,window._formData.vatType);var a=document.getElementById('contract-area');if(a){const av=availableContracts(window._formData.vatType,window._formData.taxType);a.innerHTML=av.map(g=>`<div class='contract-group'><div class='contract-group-title'>${g.label}</div><div class='contract-chips'>${g.items.map(item=>`<button type='button' class='contract-chip ${(window._formData.contracts||[]).includes(item.key)?'on':''}' onclick='toggleContract(&quot;${item.key}&quot;)'>${item.label}</button>`).join('')}</div></div>`).join('');}}">
+          ${DEAL_TYPES.slice(1).map(v=>`<option value="${v}"${(window._formData.dealTypes||['기장'])[0]===v?' selected':''}>${v}</option>`).join('')}
+        </select>
+      </div>
+      <div class="ff">
+        <label class="ffl">담당자</label>
+        <select class="fsel" onchange="window._formData.manager=this.value;window._formData.managers=this.value?[this.value]:[]">
+          <option value="">-</option>
+          ${MANAGERS.slice(1).map(v=>`<option value="${v}"${(window._formData.managers||[])[0]===v?' selected':''}>${v}</option>`).join('')}
+        </select>
+      </div>
     </div>
 
     <div class="c3" style="background:#f8f9ff;border:1px solid #e0e4f0;border-radius:10px;padding:10px">
@@ -2930,17 +2966,18 @@ function openForm(id) {
       <div style="padding:10px" id="contract-area">${contractsHTML()}</div>
     </div>
 
-    <div class="ff">
-      <label class="ffl">수임일자</label>
-      <input type="date" class="finput" id="f-contractDate" value="${esc(c.contractDate||'')}" oninput="window._formData.contractDate=this.value">
+    <div class="c3" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="ff">
+        <label class="ffl">수임일자</label>
+        <input type="date" class="fsel" style="padding:3px 4px;font-size:11px;color:#333" id="f-contractDate" value="${esc(c.contractDate||'')}" oninput="window._formData.contractDate=this.value">
+      </div>
+      <div class="ff">
+        <label class="ffl">상태</label>
+        <select class="fsel" style="padding:3px 4px" onchange="onFormSelect('status',this.value)">
+          ${STATUS_LIST.map(v=>`<option${c.status===v?' selected':''}>${v}</option>`).join('')}
+        </select>
+      </div>
     </div>
-    <div class="ff">
-      <label class="ffl">상태</label>
-      <select class="fsel" style="padding:3px 4px" onchange="onFormSelect('status',this.value)">
-        ${STATUS_LIST.map(v=>`<option${c.status===v?' selected':''}>${v}</option>`).join('')}
-      </select>
-    </div>
-    <div></div>
 
     <div id="termination-area" class="c3">${terminationHTML()}</div>
 
@@ -2987,7 +3024,11 @@ window.onFormSelect = function(field, val) {
       const tax = field==='taxType'?val:window._formData.taxType;
       return i.vat.includes(vat)&&i.tax.includes(tax);
     }).map(i=>i.key);
-    window._formData.contracts = (window._formData.contracts||[]).filter(k=>avail.includes(k));
+    if (window._formIsNew) {
+      window._formData.contracts = getDefaultContracts(window._formData.dealType, window._formData.taxType, window._formData.vatType);
+    } else {
+      window._formData.contracts = (window._formData.contracts||[]).filter(k=>avail.includes(k));
+    }
     document.getElementById('contract-area').innerHTML = (()=>{
       const avail2 = availableContracts(window._formData.vatType,window._formData.taxType);
       return avail2.map(g=>`<div class="contract-group"><div class="contract-group-title">${g.label}</div><div class="contract-chips">${g.items.map(item=>`<button type="button" class="contract-chip ${(window._formData.contracts||[]).includes(item.key)?'on':''}" onclick="toggleContract('${item.key}')">${item.label}</button>`).join('')}</div></div>`).join('');
@@ -7921,6 +7962,21 @@ function migrateJulgae() {
       }
     }
   }
+  // 수임계약항목 기본값 추가 (새 항목들 - 부가세신고, 사업장현황신고, 소득세, 성실신고)
+  const newContractKeys = ['부가세신고','사업장현황신고','소득세','성실신고'];
+  let contractsMigrated = false;
+  G.clients.forEach(c => {
+    if (!c.contracts) c.contracts = [];
+    const dealType = getDealTypes(c)[0] || '기장';
+    const defaults = getDefaultContracts(dealType, c.taxType, c.vatType);
+    for (const key of defaults) {
+      if (newContractKeys.includes(key) && !c.contracts.includes(key)) {
+        c.contracts.push(key);
+        contractsMigrated = true;
+      }
+    }
+  });
+  if (contractsMigrated) saveToLS();
   // 수수료 4종 필드 마이그레이션: feeSingo가 미정의인 거래처에 한해 deal type 기준으로 이동
   const bookingTypes = ['기장', '고문', '성실'];
   let feesMigrated = false;
