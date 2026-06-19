@@ -1493,30 +1493,23 @@ function renderClients() {
 
   ${(()=>{
     const hasFilter=!!(G.searchText||G.clientRepSearch||(G.filterManagers||[]).length||(G.filterTaxTypes||[]).length||(G.filterVatTypes||[]).length||(G.filterFeeStatuses||[]).length||(G.filterDealTypes||[]).length||(G.filterCMS||[]).length||(G.filterTags||[]).length||G.filterRisk||G.showFavorites);
-    const sf2=(G.clientSort||{}).field||'n', sd2=(G.clientSort||{}).dir||'asc';
-    const sortActive=sf2!=='n'||sd2!=='asc';
-    const anyActive=hasFilter||sortActive;
     const isOpen=G.clientSearchOpen===true;
-    const bdr=anyActive?'#4f8ef7':'#ddd';
-    const bg=anyActive?'#e8f0fe':'#f5f5f5';
-    const clr=anyActive?'#1565c0':'#666';
-    return '<div style="margin-bottom:8px;display:flex;align-items:center;gap:8px"><button onclick="G.clientSearchOpen=(G.clientSearchOpen===true?false:true);renderClients()" style="padding:6px 16px;border-radius:20px;font-size:13px;cursor:pointer;font-family:inherit;border:1.5px solid '+bdr+';background:'+bg+';color:'+clr+';display:inline-flex;align-items:center;gap:5px;font-weight:600">🔍 검색'+(anyActive?' ●':'')+' '+(isOpen?'▲':'▼')+'</button>'+(anyActive?'<span style="font-size:11px;color:#4f8ef7;font-weight:600">필터/정렬 적용중</span>':'')+'</div>';
+    const bdr=hasFilter?'#4f8ef7':'#ddd';
+    const bg=hasFilter?'#e8f0fe':'#f5f5f5';
+    const clr=hasFilter?'#1565c0':'#666';
+    return '<div style="margin-bottom:8px;display:flex;align-items:center;gap:8px"><button onclick="G.clientSearchOpen=(G.clientSearchOpen===true?false:true);renderClients()" style="padding:6px 16px;border-radius:20px;font-size:13px;cursor:pointer;font-family:inherit;border:1.5px solid '+bdr+';background:'+bg+';color:'+clr+';display:inline-flex;align-items:center;gap:5px;font-weight:600">🔍 검색'+(hasFilter?' ●':'')+' '+(isOpen?'▲':'▼')+'</button>'+(hasFilter?'<span style="font-size:11px;color:#4f8ef7;font-weight:600">필터 적용중</span>':'')+'</div>';
   })()}
   <div style="display:${G.clientSearchOpen===true?'block':'none'}">
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:stretch;margin-bottom:6px">
-      <div style="position:relative;flex:2;min-width:130px">
-        <input id="client-name-input" type="text" placeholder="거래처명" value="${esc(G.searchText||'')}" oninput="onClientNameSearch(this.value)" style="width:100%;padding:8px 30px 8px 12px;border-radius:9px;border:1.5px solid ${G.searchText?'#4f8ef7':'#e0e0e0'};font-size:13px;font-family:inherit;box-sizing:border-box;outline:none">
-        ${G.searchText?`<button onclick="G.searchText='';G.clientPage=0;renderClients()" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:18px;color:#bbb;cursor:pointer;line-height:1">×</button>`:''}
-      </div>
-      <div style="position:relative;flex:1;min-width:100px">
-        <input id="client-rep-input" type="text" placeholder="대표자" value="${esc(G.clientRepSearch||'')}" oninput="onClientRepSearch(this.value)" style="width:100%;padding:8px 30px 8px 12px;border-radius:9px;border:1.5px solid ${G.clientRepSearch?'#4f8ef7':'#e0e0e0'};font-size:13px;font-family:inherit;box-sizing:border-box;outline:none">
-        ${G.clientRepSearch?`<button onclick="G.clientRepSearch='';G.clientPage=0;renderClients()" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:18px;color:#bbb;cursor:pointer;line-height:1">×</button>`:''}
-      </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:stretch;margin-bottom:8px">
       <div style="min-width:80px">${filterPopupBtn('filterManagers','담당자')}</div>
       <div style="min-width:75px">${filterPopupBtn('filterDealTypes','수임내용')}</div>
       <div style="min-width:60px">${filterPopupBtn('filterTaxTypes','인격')}</div>
       <div style="min-width:75px">${filterPopupBtn('filterVatTypes','과세유형')}</div>
     </div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:8px">
+    <div style="font-size:12px;color:#888;white-space:nowrap">총 ${list.length}개 (${G.clientPage+1}/${totalPages})</div>
     ${(()=>{
       const sf = (G.clientSort||{}).field||'n', sd = (G.clientSort||{}).dir||'asc';
       const opts = [{k:'n',l:'업체명'},{k:'r',l:'대표자'},{k:'d',l:'수임내용'},{k:'f',l:'수수료'},{k:'m',l:'담당자'}];
@@ -1525,16 +1518,12 @@ function renderClients() {
         const nextDir = active && sd==='asc' ? 'desc' : 'asc';
         const icon = active ? (sd==='asc'?' ↑':' ↓') : '';
         const st = active ? 'background:#e8f0fe;color:#1565c0;border:1.5px solid #4f8ef7;font-weight:700' : 'background:#f5f5f5;color:#888;border:1.5px solid #e0e0e0';
-        return `<button onclick="G.clientSort={field:'${k}',dir:'${nextDir}'};G.clientPage=0;renderClients()" style="padding:5px 11px;border-radius:20px;font-size:12px;cursor:pointer;font-family:inherit;${st}">${l}${icon}</button>`;
+        return `<button onclick="G.clientSort={field:'${k}',dir:'${nextDir}'};G.clientPage=0;renderClients()" style="padding:4px 9px;border-radius:16px;font-size:11px;cursor:pointer;font-family:inherit;${st}">${l}${icon}</button>`;
       }).join('');
-      const resetBtn = (sf!=='n'||sd!=='asc') ? `<button onclick="G.clientSort={field:'n',dir:'asc'};G.clientPage=0;renderClients()" style="padding:5px 9px;border-radius:20px;font-size:11px;cursor:pointer;font-family:inherit;background:#fdecea;color:#c62828;border:1.5px solid #ef9a9a" title="정렬 초기화">✕</button>` : '';
-      return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px"><span style="font-size:11px;color:#aaa;white-space:nowrap">정렬</span>${btns}${resetBtn}</div>`;
+      const resetBtn = (sf!=='n'||sd!=='asc') ? `<button onclick="G.clientSort={field:'n',dir:'asc'};G.clientPage=0;renderClients()" style="padding:4px 7px;border-radius:16px;font-size:10px;cursor:pointer;font-family:inherit;background:#fdecea;color:#c62828;border:1.5px solid #ef9a9a" title="정렬 초기화">✕</button>` : '';
+      return `<div style="display:contents">${btns}${resetBtn}</div>`;
     })()}
-  </div>
-
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-    <div style="font-size:12px;color:#888">총 ${list.length}개 거래처 (${G.clientPage+1}/${totalPages} 페이지)</div>
-    ${sectionToggleBtn('clients-list')}
+    <div style="margin-left:auto">${sectionToggleBtn('clients-list')}</div>
   </div>
 
   <datalist id="taxoffice-list">${TAX_OFFICES.map(o=>`<option value="${esc(o)}">`).join('')}</datalist>
