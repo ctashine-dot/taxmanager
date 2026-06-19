@@ -5247,6 +5247,7 @@ function _normName(s) {
     .replace(/[()（）\[\]]/g,'').trim();
 }
 function syncFromRawData() {
+  const normNo = s => String(s||'').replace(/[^0-9]/g,'');
   const byBizNo = new Map(), byName = new Map();
   (G.clients||[]).forEach(c => {
     const nb = _normBizNo(c.bizNo);
@@ -5259,11 +5260,14 @@ function syncFromRawData() {
     const nb = _normBizNo(raw.b);
     let client = (nb && nb !== '0000000000') ? byBizNo.get(nb) : null;
     if (!client) client = byName.get(_normName(raw.n));
-    if (!client) { unmatched.push(raw); continue; }
+    if (!client) {
+      const hasBizNo = nb && nb !== '0000000000';
+      unmatched.push({...raw, reason: hasBizNo ? '사업자번호·업체명 모두 불일치' : '사업자번호 없음·업체명 불일치'});
+      continue;
+    }
 
     const chg = [];
     const curMgr = (client.managers||[client.manager]||[]).filter(Boolean);
-    const normNo = s => String(s||'').replace(/[^0-9]/g,'');
     if (raw.n && _normName(raw.n) !== _normName(client.name)) chg.push({f:'name',l:'업체명',o:client.name,nv:raw.n});
     if (raw.r && raw.r !== client.rep) chg.push({f:'rep',l:'대표자',o:client.rep,nv:raw.r});
     if (raw.b && raw.b !== '000-00-00000' && normNo(raw.b) !== normNo(client.bizNo||'')) chg.push({f:'bizNo',l:'사업자번호',o:client.bizNo||'',nv:raw.b});
@@ -5283,9 +5287,13 @@ function syncFromRawData() {
 
 function _syncDownloadCSV(rows, filename) {
   const BOM = '﻿';
-  const lines = [['업체명','사업자번호','담당자','수수료','과세유형'].join(',')];
+  const hasReason = rows.some(r => r.reason);
+  const headers = ['업체명','사업자번호','대표자','담당자','수수료','과세유형'];
+  if (hasReason) headers.push('미매칭 사유');
+  const lines = [headers.join(',')];
   rows.forEach(r => {
-    const vals = [r.name||r.n, r.bizNo||r.b, r.manager||r.m, r.fee||r.f||0, r.vatType||r.v||''];
+    const vals = [r.name||r.n, r.bizNo||r.b, r.rep||r.r||'', r.manager||r.m, r.fee||r.f||0, r.vatType||r.v||''];
+    if (hasReason) vals.push(r.reason||'');
     lines.push(vals.map(v=>'"'+String(v||'').replace(/"/g,'""')+'"').join(','));
   });
   const blob = new Blob([BOM+lines.join('\r\n')], {type:'text/csv;charset=utf-8'});
@@ -5307,12 +5315,15 @@ function _showSyncModal(updates, unmatched, matched) {
     </div>`).join('');
 
   const unmRows = unmatched.map(u => `
-    <div style="padding:9px 14px;border-bottom:1px solid #e8eaf6;background:#fff;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-      <span style="font-weight:700;font-size:13px;color:#222;min-width:120px">${esc(u.n)}</span>
-      <span style="font-size:11px;color:#888;font-family:monospace">${esc(u.b)}</span>
-      <span style="font-size:12px;color:#555">${esc(u.m)}</span>
-      <span style="font-size:12px;color:#1565c0;font-weight:600">${u.f?u.f.toLocaleString()+'원':''}</span>
-      <span style="font-size:11px;padding:2px 7px;border-radius:8px;background:#f5f5f5;color:#666">${esc(u.v)||'과세유형미상'}</span>
+    <div style="padding:9px 14px;border-bottom:1px solid #e8eaf6;background:#fff">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+        <span style="font-weight:700;font-size:13px;color:#222;min-width:120px">${esc(u.n)}</span>
+        <span style="font-size:11px;color:#888;font-family:monospace">${esc(u.b)||'사업자번호없음'}</span>
+        <span style="font-size:12px;color:#555">${esc(u.m)}</span>
+        <span style="font-size:12px;color:#1565c0;font-weight:600">${u.f?u.f.toLocaleString()+'원':''}</span>
+        <span style="font-size:11px;padding:2px 7px;border-radius:8px;background:#f5f5f5;color:#666">${esc(u.v)||'과세유형미상'}</span>
+      </div>
+      <span style="font-size:11px;padding:2px 8px;border-radius:6px;background:#fce4ec;color:#b71c1c;border:1px solid #f48fb1">${esc(u.reason||'매칭 불가')}</span>
     </div>`).join('');
 
   const matchRows = matched.map(m => `
