@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2026년 7월 워크샵 예산안</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; background: #f0f2f5; color: #1a1a2e; font-size: 14px; padding: 24px; }
+.container { max-width: 860px; margin: 0 auto; }
+h1 { font-size: 22px; font-weight: 800; color: #1a1a2e; margin-bottom: 4px; }
+.subtitle { color: #666; font-size: 13px; margin-bottom: 24px; }
+.info-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+.info-card { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+.info-card .label { font-size: 11px; color: #888; font-weight: 600; text-transform: uppercase; margin-bottom: 6px; }
+.info-card .value { font-size: 16px; font-weight: 700; color: #1a1a2e; }
+.section { background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 16px; }
+.section-title { font-size: 15px; font-weight: 700; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+.badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+.badge-blue { background: #e8f0fe; color: #1967d2; }
+.badge-green { background: #e6f4ea; color: #1e7e34; }
+.badge-orange { background: #fff3e0; color: #e65100; }
+.badge-purple { background: #f3e8ff; color: #7b1fa2; }
+table { width: 100%; border-collapse: collapse; }
+th { background: #f8f9fa; font-size: 12px; color: #555; font-weight: 700; padding: 10px 12px; text-align: left; border-bottom: 2px solid #e9ecef; }
+td { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; font-size: 13px; vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.confirmed { color: #1e7e34; font-size: 11px; font-weight: 600; }
+.estimated { color: #e65100; font-size: 11px; font-weight: 600; }
+.subtotal-row td { background: #f8f9fa; font-weight: 700; color: #1a1a2e; }
+.total-section { background: linear-gradient(135deg, #1a1a2e, #2d2d5e); border-radius: 12px; padding: 24px; color: #fff; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
+.total-section .label { font-size: 13px; opacity: 0.7; margin-bottom: 4px; }
+.total-section .amount { font-size: 28px; font-weight: 800; }
+.total-section .per-person { font-size: 13px; opacity: 0.7; margin-top: 4px; }
+.note-section { background: #fffbf0; border: 1px solid #ffe082; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+.note-section h3 { font-size: 13px; font-weight: 700; color: #e65100; margin-bottom: 10px; }
+.note-section ul { padding-left: 18px; }
+.note-section li { font-size: 12px; color: #555; line-height: 1.8; }
+.print-btn { background: #1a1a2e; color: #fff; border: none; padding: 10px 24px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 700; font-family: inherit; }
+.print-btn:hover { background: #2d2d5e; }
+@media print {
+  body { background: #fff; padding: 0; }
+  .print-btn { display: none; }
+  .total-section { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px;">
+    <div>
+      <h1>2026년 7월 워크샵 예산안</h1>
+      <div class="subtitle">작성일: 2026년 6월 19일 &nbsp;|&nbsp; 대화 내용 기반 편성</div>
+    </div>
+    <button class="print-btn" onclick="window.print()">인쇄 / PDF</button>
+  </div>
+
+  <!-- 기본 정보 -->
+  <div class="info-grid">
+    <div class="info-card">
+      <div class="label">일정</div>
+      <div class="value">7/10(금) ~ 7/11(토)</div>
+    </div>
+    <div class="info-card">
+      <div class="label">장소</div>
+      <div class="value">통영</div>
+    </div>
+    <div class="info-card">
+      <div class="label">참석 인원</div>
+      <div class="value">28명</div>
+    </div>
+    <div class="info-card">
+      <div class="label">숙소</div>
+      <div class="value">금호리조트 (참고)</div>
+    </div>
+  </div>
+
+  <!-- 1. 교통비 -->
+  <div class="section">
+    <div class="section-title">
+      🚌 교통비
+      <span class="badge badge-blue">이동</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>항목</th>
+          <th>단가</th>
+          <th>수량</th>
+          <th class="num">금액</th>
+          <th>비고</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>관광버스 대절 (왕복)</td>
+          <td>700,000원</td>
+          <td>1대</td>
+          <td class="num">700,000원</td>
+          <td><span class="estimated">추정</span> 45인승 기준</td>
+        </tr>
+        <tr>
+          <td>주차비 지원</td>
+          <td>5,000원</td>
+          <td>28명</td>
+          <td class="num">140,000원</td>
+          <td><span class="estimated">추정</span> 자가용 일부 참석자</td>
+        </tr>
+        <tr>
+          <td>고속도로 통행료 (버스)</td>
+          <td>30,000원</td>
+          <td>1식</td>
+          <td class="num">30,000원</td>
+          <td><span class="estimated">추정</span></td>
+        </tr>
+        <tr class="subtotal-row">
+          <td colspan="3">소계</td>
+          <td class="num">870,000원</td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 2. 숙박비 -->
+  <div class="section">
+    <div class="section-title">
+      🏨 숙박비
+      <span class="badge badge-purple">1박</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>항목</th>
+          <th>단가</th>
+          <th>수량</th>
+          <th class="num">금액</th>
+          <th>비고</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>금호리조트 (또는 동급) 객실</td>
+          <td>150,000원</td>
+          <td>8실</td>
+          <td class="num">1,200,000원</td>
+          <td><span class="estimated">추정</span> 3~4인실 기준</td>
+        </tr>
+        <tr class="subtotal-row">
+          <td colspan="3">소계</td>
+          <td class="num">1,200,000원</td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 3. 식음료비 -->
+  <div class="section">
+    <div class="section-title">
+      🍽️ 식음료비
+      <span class="badge badge-green">식사</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>항목</th>
+          <th>단가</th>
+          <th>수량</th>
+          <th class="num">금액</th>
+          <th>비고</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>7/10 석식 – 까치네다찌 (예약 확정)</td>
+          <td>50,000원</td>
+          <td>28명</td>
+          <td class="num">1,400,000원</td>
+          <td><span class="confirmed">확정</span> 18:30 예약</td>
+        </tr>
+        <tr>
+          <td>7/10 음료·주류 (저녁 추가)</td>
+          <td>10,000원</td>
+          <td>28명</td>
+          <td class="num">280,000원</td>
+          <td><span class="estimated">추정</span></td>
+        </tr>
+        <tr>
+          <td>7/11 조식</td>
+          <td>12,000원</td>
+          <td>28명</td>
+          <td class="num">336,000원</td>
+          <td><span class="estimated">추정</span> 뷔페 또는 식당</td>
+        </tr>
+        <tr>
+          <td>7/11 중식 (귀환 전)</td>
+          <td>15,000원</td>
+          <td>28명</td>
+          <td class="num">420,000원</td>
+          <td><span class="estimated">추정</span></td>
+        </tr>
+        <tr>
+          <td>간식·음료 (이동 중)</td>
+          <td>5,000원</td>
+          <td>28명</td>
+          <td class="num">140,000원</td>
+          <td><span class="estimated">추정</span></td>
+        </tr>
+        <tr class="subtotal-row">
+          <td colspan="3">소계</td>
+          <td class="num">2,576,000원</td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 4. 프로그램·운영비 -->
+  <div class="section">
+    <div class="section-title">
+      📋 프로그램·운영비
+      <span class="badge badge-orange">워크샵</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>항목</th>
+          <th>단가</th>
+          <th>수량</th>
+          <th class="num">금액</th>
+          <th>비고</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>워크샵 자료 출력·제본</td>
+          <td>3,000원</td>
+          <td>28부</td>
+          <td class="num">84,000원</td>
+          <td><span class="estimated">추정</span></td>
+        </tr>
+        <tr>
+          <td>문구·사무용품</td>
+          <td>-</td>
+          <td>1식</td>
+          <td class="num">30,000원</td>
+          <td><span class="estimated">추정</span></td>
+        </tr>
+        <tr>
+          <td>현수막·배너</td>
+          <td>-</td>
+          <td>1식</td>
+          <td class="num">50,000원</td>
+          <td><span class="estimated">추정</span></td>
+        </tr>
+        <tr>
+          <td>기념품 또는 경품</td>
+          <td>10,000원</td>
+          <td>28명</td>
+          <td class="num">280,000원</td>
+          <td><span class="estimated">추정</span></td>
+        </tr>
+        <tr class="subtotal-row">
+          <td colspan="3">소계</td>
+          <td class="num">444,000원</td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 5. 예비비 -->
+  <div class="section">
+    <div class="section-title">🛡️ 예비비</div>
+    <table>
+      <thead>
+        <tr>
+          <th>항목</th>
+          <th colspan="2">기준</th>
+          <th class="num">금액</th>
+          <th>비고</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>예비비 (총액의 10%)</td>
+          <td colspan="2">합계 × 10%</td>
+          <td class="num">509,000원</td>
+          <td><span class="estimated">추정</span> 돌발상황 대비</td>
+        </tr>
+        <tr class="subtotal-row">
+          <td colspan="3">소계</td>
+          <td class="num">509,000원</td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 총계 -->
+  <div class="total-section">
+    <div>
+      <div class="label">총 예산 (28명 기준)</div>
+      <div class="amount">5,599,000원</div>
+      <div class="per-person">1인당 약 200,000원</div>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-size:12px; opacity:0.7; margin-bottom:8px;">항목별 요약</div>
+      <div style="font-size:12px; line-height:2; opacity:0.85;">
+        교통비: 870,000원<br>
+        숙박비: 1,200,000원<br>
+        식음료: 2,576,000원<br>
+        운영비: 444,000원<br>
+        예비비: 509,000원
+      </div>
+    </div>
+  </div>
+
+  <!-- 유의사항 -->
+  <div class="note-section">
+    <h3>⚠️ 편성 기준 및 유의사항</h3>
+    <ul>
+      <li>석식(까치네다찌 28명 × 50,000원 = 1,400,000원)은 대화 내용 기준 <strong>확정</strong>된 항목입니다.</li>
+      <li>숙박비(금호리조트)는 대화 참고용으로 언급된 금액으로, 실제 견적 확인 후 수정이 필요합니다.</li>
+      <li>교통비는 버스 대절 기준이며, 자가용 분산 이동 시 유류비·통행료 지원 방식으로 변경 가능합니다.</li>
+      <li>변준석 위원장님은 재판 일정으로 미참석 예정이나 예산은 28명 기준으로 편성하였습니다.</li>
+      <li>추정 항목은 실제 견적 확인 후 수정 바랍니다.</li>
+      <li>참석 인원 변동 시 단가 기반으로 재산출 가능합니다.</li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>
