@@ -279,10 +279,22 @@ body.dark-mode .overlay { background: rgba(0,0,0,.65); }
   .client-table-wrap table tbody td[data-label]:nth-of-type(4n) {
     border-right: none;
   }
-  /* expand-row — 블록으로 표시 (JS에서 display:block 설정) */
-  .client-table-wrap table tbody tr.expand-row {
-    display: none;
-    width: 100%;
+  /* 모바일: 테이블 expand-row는 항상 숨김 (JS로 카드 내부에 직접 삽입) */
+  .client-table-wrap table tbody tr.expand-row { display: none !important; }
+
+  /* 카드 내부에 삽입되는 expand 패널 */
+  .mobile-expand-cell {
+    flex: 0 0 100%;
+    box-sizing: border-box;
+    padding: 0;
+    border-top: 1px solid #c5cae9;
+    background: #f0f4ff;
+    border-radius: 0 0 12px 12px;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .mobile-expand-cell .expand-inner {
+    padding: 12px 14px;
   }
 
   .tbl-wrap { overflow-x: auto; }
@@ -292,6 +304,22 @@ body.dark-mode .overlay { background: rgba(0,0,0,.65); }
   .tab { padding: 5px 10px; font-size: 12px; }
   .filter-bar { gap: 6px; }
   .modal { max-width: 95vw !important; width: 95vw !important; }
+}
+/* 가로(landscape): 셀 한 줄 스크롤 */
+@media (max-width: 900px) and (orientation: landscape) {
+  .client-table-wrap table tbody tr:not(.expand-row) {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .client-table-wrap table tbody td[data-label] {
+    flex: 0 0 auto;
+    min-width: 70px;
+    max-width: 120px;
+  }
+  .client-table-wrap table tbody td:has(.td-name) {
+    flex: 1 0 140px;
+  }
 }
 </style>
 </head>
@@ -2431,14 +2459,37 @@ function _hcChips(pairs) {
   return pairs.filter(([k])=>hc[k]).map(([k,l])=>`<button onclick="_toggleHiddenCol('${k}')" style="padding:3px 8px;border-radius:12px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;font-size:11px;cursor:pointer;font-family:inherit">+ ${l}</button>`).join('');
 }
 
+function toggleMobileExpand(id) {
+  const expandSource = document.getElementById('expand-'+id);
+  if (!expandSource) return;
+  const isOpen = !!document.getElementById('m-expand-'+id);
+  // 모든 모바일 expand 닫기
+  document.querySelectorAll('[id^="m-expand-"]').forEach(el => el.remove());
+  document.querySelectorAll('[id^="expand-arrow-"]').forEach(r => { r.textContent = '▼'; r.closest('tr')?.classList.remove('expanded'); });
+  if (isOpen) return;
+  // expand-row 바로 앞 형제 = client-row
+  const clientRow = expandSource.previousElementSibling;
+  if (!clientRow) return;
+  const sourceInner = expandSource.querySelector('.expand-inner');
+  if (!sourceInner) return;
+  const cell = document.createElement('td');
+  cell.id = 'm-expand-'+id;
+  cell.className = 'mobile-expand-cell';
+  cell.innerHTML = sourceInner.outerHTML;
+  clientRow.appendChild(cell);
+  const arrow = document.getElementById('expand-arrow-'+id);
+  if (arrow) { arrow.textContent = '▲'; arrow.closest('tr')?.classList.add('expanded'); }
+}
+
 function toggleExpand(id) {
+  if (window.innerWidth <= 768) { toggleMobileExpand(id); return; }
   const row = document.getElementById('expand-'+id);
   if (!row) return;
   const isOpen = row.style.display !== 'none';
   document.querySelectorAll('.expand-row').forEach(r => { r.style.display = 'none'; });
   document.querySelectorAll('[id^="expand-arrow-"]').forEach(r => { r.textContent = '▼'; r.closest('tr')?.classList.remove('expanded'); });
   if (!isOpen) {
-    row.style.display = window.innerWidth <= 768 ? 'block' : '';
+    row.style.display = '';
     const arrow = document.getElementById('expand-arrow-'+id);
     if (arrow) { arrow.textContent = '▲'; arrow.closest('tr')?.classList.add('expanded'); }
   }
