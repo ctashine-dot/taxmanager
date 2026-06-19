@@ -432,6 +432,8 @@ let G = {
   filterPresets: [],
   scheduleCalView: false,
   scheduleCalMonth: 0,
+  scheduleSearch: '',
+  scheduleManagerFilter: [],
   settings: {
     name: '○○세무회계사무소', rep: '홍세무',
     phone: '02-1234-5678', fax: '02-1234-5679',
@@ -1739,6 +1741,11 @@ function onClosureSearch(v) {
   const inp = document.getElementById('closure-search-input');
   if (inp) { inp.focus(); const l=v.length; inp.setSelectionRange(l,l); }
 }
+function onScheduleSearch(v) {
+  G.scheduleSearch = v; renderSchedule();
+  const inp = document.getElementById('schedule-search-input');
+  if (inp) { inp.focus(); const l=v.length; inp.setSelectionRange(l,l); }
+}
 function closureCycleBtn(field, label, states) {
   if (!states) states = ['전체','해지','폐업'];
   const val = G[field] || states[0];
@@ -1807,13 +1814,14 @@ const _FP_OPTIONS = {
   feesManagerFilter: () => [...MANAGERS.slice(1), '(없음)'],
   filingManagerFilter: () => [...MANAGERS.slice(1), '(없음)'],
   closureManagerFilter:() => [...MANAGERS.slice(1), '(없음)'],
+  scheduleManagerFilter:() => [...MANAGERS.slice(1), '(없음)'],
 };
 const _FP_TITLES = {
   filterDealTypes:'수임내용 필터', filterManagers:'담당자 필터',
   filterTaxTypes:'인격 필터', filterVatTypes:'과세유형 필터',
   filterFeeStatuses:'수금상태 필터', filterCMS:'CMS 가입 필터', julgaeManagers:'담당자 필터',
   feesDealFilter:'수임내용 필터', feesManagerFilter:'담당자 필터', filingManagerFilter:'담당자 필터',
-  closureManagerFilter:'담당자 필터',
+  closureManagerFilter:'담당자 필터', scheduleManagerFilter:'담당자 필터',
 };
 let _fpField = null;
 function openFilterPopup(field, btnEl) {
@@ -1860,6 +1868,7 @@ function fpConfirm() {
   if (f==='julgaeManagers') renderJulgae();
   else if (['feesManagerFilter','feesDealFilter','filingManagerFilter'].includes(f)) renderFees();
   else if (f==='closureManagerFilter') renderClosure();
+  else if (f==='scheduleManagerFilter') renderSchedule();
   else if (G.currentTab==='clients') renderClients();
 }
 
@@ -2910,21 +2919,31 @@ window.saveForm = function(id) {
 // 신고 일정
 // ══════════════════════════════════════════════════════
 function renderSchedule() {
-  const active = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업');
+  let active = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업');
+  // 검색 필터 적용
+  const schSrch = (G.scheduleSearch||'').trim();
+  const schMgr  = G.scheduleManagerFilter||[];
+  if (schSrch) active = active.filter(c=>c.name.includes(schSrch)||(c.rep||'').includes(schSrch));
+  if (schMgr.length>0) active = active.filter(c=>{const ms=getManagers(c);return schMgr.some(m=>m==='(없음)'?ms.length===0:ms.includes(m));});
   const today = new Date();
   const nowM = today.getMonth()+1;
   const nowD = today.getDate();
   const yr = today.getFullYear();
 
-  const vatAll  = active.filter(c=>c.vatType==='일반'||c.vatType==='간이').length;
-  const vatG    = active.filter(c=>c.vatType==='일반').length;
-  const vatS    = active.filter(c=>c.vatType==='간이').length;
-  const exempt  = active.filter(c=>c.vatType==='면세').length;
-  const income  = active.filter(c=>c.taxType==='개인').length;
-  const seongsi = active.filter(c=>(c.contracts||[]).includes('세무조정')||c.dealType==='고문').length;
-  const corp    = active.filter(c=>c.taxType==='법인').length;
-  const yearend = active.filter(c=>(c.contracts||[]).includes('연말정산')).length;
-  const withhold= active.filter(c=>(c.contracts||[]).includes('원천세')).length;
+  const vatAllC  = active.filter(c=>c.vatType==='일반'||c.vatType==='간이');
+  const vatGC    = active.filter(c=>c.vatType==='일반');
+  const vatSC    = active.filter(c=>c.vatType==='간이');
+  const exemptC  = active.filter(c=>c.vatType==='면세');
+  const incomeC  = active.filter(c=>c.taxType==='개인');
+  const seongsiC = active.filter(c=>getDealTypes(c).includes('성실'));
+  const corpC    = active.filter(c=>c.taxType==='법인');
+  const yearendC = active.filter(c=>(c.contracts||[]).includes('연말정산'));
+  const withholdC= active.filter(c=>(c.contracts||[]).includes('원천세'));
+  const vatAll=vatAllC.length, vatG=vatGC.length, vatS=vatSC.length,
+        exempt=exemptC.length, income=incomeC.length, seongsi=seongsiC.length,
+        corp=corpC.length, yearend=yearendC.length, withhold=withholdC.length;
+  // 클라이언트 목록 맵 (건수 클릭 시 사용)
+  window._schedClientMap={'vatAll':vatAllC,'vatG':vatGC,'vatS':vatSC,'exempt':exemptC,'income':incomeC,'seongsi':seongsiC,'corp':corpC,'yearend':yearendC,'withhold':withholdC};
 
   // deadline: [month, day]
   function dday(m, d) {
@@ -2939,47 +2958,47 @@ function renderSchedule() {
 
   const sched = {
     1:[
-      {l:'부가세 확정신고 (2기)',    t:'부가세', n:vatAll, c:'blue',   d:'1월 25일',  dd:dday(1,25),  hint:'7월~12월분'},
-      yearend>0&&{l:'연말정산',      t:'공통',   n:yearend,c:'purple', d:'2월말',     dd:null,        hint:'근로소득'},
-      withhold>0&&{l:'원천세 (12월분)',t:'공통', n:withhold,c:'gray',  d:'1월 10일',  dd:dday(1,10),  hint:''},
+      {l:'부가세 확정신고 (2기)',    t:'부가세', n:vatAll, ck:'vatAll', c:'blue',   d:'1월 25일',  dd:dday(1,25),  hint:'7월~12월분'},
+      yearend>0&&{l:'연말정산',      t:'공통',   n:yearend,ck:'yearend',c:'purple', d:'2월말',     dd:null,        hint:'근로소득'},
+      withhold>0&&{l:'원천세 (12월분)',t:'공통', n:withhold,ck:'withhold',c:'gray', d:'1월 10일',  dd:dday(1,10),  hint:''},
     ],
     2:[
-      exempt>0&&{l:'사업장현황 신고', t:'면세', n:exempt, c:'gray', d:'2월 10일', dd:dday(2,10), hint:'면세사업자'},
+      exempt>0&&{l:'사업장현황 신고', t:'면세', n:exempt, ck:'exempt', c:'gray', d:'2월 10일', dd:dday(2,10), hint:'면세사업자'},
     ],
     3:[
-      corp>0&&{l:'법인세 신고',        t:'법인세', n:corp,   c:'blue',  d:'3월 31일', dd:dday(3,31), hint:'12월 결산법인'},
-      withhold>0&&{l:'원천세 반기납부',t:'공통',  n:withhold,c:'gray',  d:'3월 10일', dd:dday(3,10), hint:'반기납부 선택'},
+      corp>0&&{l:'법인세 신고',        t:'법인세', n:corp,    ck:'corp',     c:'blue', d:'3월 31일', dd:dday(3,31), hint:'12월 결산법인'},
+      withhold>0&&{l:'원천세 반기납부',t:'공통',   n:withhold,ck:'withhold',  c:'gray', d:'3월 10일', dd:dday(3,10), hint:'반기납부 선택'},
     ],
     4:[
-      vatG>0&&{l:'부가세 예정신고 (1기)', t:'부가세', n:vatG, c:'blue', d:'4월 25일', dd:dday(4,25), hint:'1월~3월분'},
-      withhold>0&&{l:'원천세 (3월분)',    t:'공통',   n:withhold, c:'gray', d:'4월 10일', dd:dday(4,10), hint:''},
+      vatG>0&&{l:'부가세 예정신고 (1기)', t:'부가세', n:vatG, ck:'vatG', c:'blue', d:'4월 25일', dd:dday(4,25), hint:'1월~3월분'},
+      withhold>0&&{l:'원천세 (3월분)',    t:'공통',   n:withhold, ck:'withhold', c:'gray', d:'4월 10일', dd:dday(4,10), hint:''},
     ],
     5:[
-      income>0&&{l:'종합소득세 신고',     t:'소득세', n:income,  c:'green',  d:'5월 31일', dd:dday(5,31), hint:'개인사업자'},
-      withhold>0&&{l:'원천세 (4월분)',    t:'공통',   n:withhold, c:'gray',  d:'5월 10일', dd:dday(5,10), hint:''},
+      income>0&&{l:'종합소득세 신고',  t:'소득세', n:income,   ck:'income',  c:'green', d:'5월 31일', dd:dday(5,31), hint:'개인사업자'},
+      withhold>0&&{l:'원천세 (4월분)', t:'공통',   n:withhold, ck:'withhold', c:'gray',  d:'5월 10일', dd:dday(5,10), hint:''},
     ],
     6:[
-      seongsi>0&&{l:'성실신고사업자 신고', t:'소득세', n:seongsi, c:'green', d:'6월 30일', dd:dday(6,30), hint:'성실신고확인'},
-      withhold>0&&{l:'원천세 (5월분)',     t:'공통',   n:withhold, c:'gray', d:'6월 10일', dd:dday(6,10), hint:''},
+      seongsi>0&&{l:'성실신고사업자 신고', t:'소득세', n:seongsi,  ck:'seongsi', c:'green', d:'6월 30일', dd:dday(6,30), hint:'성실신고확인'},
+      withhold>0&&{l:'원천세 (5월분)',     t:'공통',   n:withhold, ck:'withhold', c:'gray',  d:'6월 10일', dd:dday(6,10), hint:''},
     ],
     7:[
-      vatAll>0&&{l:'부가세 확정신고 (1기)', t:'부가세', n:vatAll, c:'blue',   d:'7월 25일', dd:dday(7,25), hint:'1월~6월분'},
-      vatS>0&&{l:'간이과세자 납부',         t:'부가세', n:vatS,   c:'orange', d:'7월 25일', dd:dday(7,25), hint:'간이'},
-      withhold>0&&{l:'원천세 반기납부',     t:'공통',   n:withhold,c:'gray',  d:'7월 10일', dd:dday(7,10), hint:'반기납부'},
+      vatAll>0&&{l:'부가세 확정신고 (1기)', t:'부가세', n:vatAll,   ck:'vatAll',  c:'blue',   d:'7월 25일', dd:dday(7,25), hint:'1월~6월분'},
+      vatS>0&&{l:'간이과세자 납부',          t:'부가세', n:vatS,     ck:'vatS',    c:'orange', d:'7월 25일', dd:dday(7,25), hint:'간이'},
+      withhold>0&&{l:'원천세 반기납부',      t:'공통',   n:withhold, ck:'withhold', c:'gray',  d:'7월 10일', dd:dday(7,10), hint:'반기납부'},
     ],
-    8:[withhold>0&&{l:'원천세 (7월분)', t:'공통', n:withhold, c:'gray', d:'8월 10일', dd:dday(8,10), hint:''}],
-    9:[withhold>0&&{l:'원천세 (8월분)', t:'공통', n:withhold, c:'gray', d:'9월 10일', dd:dday(9,10), hint:''}],
+    8:[withhold>0&&{l:'원천세 (7월분)', t:'공통', n:withhold, ck:'withhold', c:'gray', d:'8월 10일', dd:dday(8,10), hint:''}],
+    9:[withhold>0&&{l:'원천세 (8월분)', t:'공통', n:withhold, ck:'withhold', c:'gray', d:'9월 10일', dd:dday(9,10), hint:''}],
     10:[
-      vatG>0&&{l:'부가세 예정신고 (2기)', t:'부가세', n:vatG, c:'blue', d:'10월 25일', dd:dday(10,25), hint:'7월~9월분'},
-      withhold>0&&{l:'원천세 (9월분)',    t:'공통', n:withhold, c:'gray', d:'10월 10일', dd:dday(10,10), hint:''},
+      vatG>0&&{l:'부가세 예정신고 (2기)', t:'부가세', n:vatG,     ck:'vatG',    c:'blue', d:'10월 25일', dd:dday(10,25), hint:'7월~9월분'},
+      withhold>0&&{l:'원천세 (9월분)',    t:'공통',   n:withhold, ck:'withhold', c:'gray', d:'10월 10일', dd:dday(10,10), hint:''},
     ],
     11:[
-      vatS>0&&{l:'간이과세자 부가세 확정', t:'부가세', n:vatS, c:'orange', d:'11월 25일', dd:dday(11,25), hint:'간이'},
-      withhold>0&&{l:'원천세 (10월분)', t:'공통', n:withhold, c:'gray', d:'11월 10일', dd:dday(11,10), hint:''},
+      vatS>0&&{l:'간이과세자 부가세 확정', t:'부가세', n:vatS,     ck:'vatS',    c:'orange', d:'11월 25일', dd:dday(11,25), hint:'간이'},
+      withhold>0&&{l:'원천세 (10월분)',    t:'공통',   n:withhold, ck:'withhold', c:'gray',   d:'11월 10일', dd:dday(11,10), hint:''},
     ],
     12:[
-      corp>0&&{l:'법인세 중간예납',       t:'법인세', n:corp,    c:'blue', d:'12월 31일', dd:dday(12,31), hint:''},
-      withhold>0&&{l:'원천세 (11월분)',   t:'공통',   n:withhold,c:'gray', d:'12월 10일', dd:dday(12,10), hint:''},
+      corp>0&&{l:'법인세 중간예납',      t:'법인세', n:corp,    ck:'corp',    c:'blue', d:'12월 31일', dd:dday(12,31), hint:''},
+      withhold>0&&{l:'원천세 (11월분)', t:'공통',   n:withhold,ck:'withhold', c:'gray', d:'12월 10일', dd:dday(12,10), hint:''},
     ],
   };
 
@@ -3022,7 +3041,10 @@ function renderSchedule() {
           <div style="flex:1">
             <div style="font-size:13px;font-weight:${isKey?700:500}">${d.l}</div>
             <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px">
-              <span style="font-size:11px;color:#aaa">${d.hint?d.hint+' · ':''} ${d.n}개</span>
+              <div style="display:flex;align-items:center;gap:4px">
+                ${d.hint?`<span style="font-size:11px;color:#aaa">${d.hint} ·</span>`:''}
+                <button onclick="event.stopPropagation();openScheduleClientList('${d.ck||''}','${safeL}')" style="font-size:11px;color:#4f8ef7;background:#e8f0fe;border:none;border-radius:6px;padding:1px 7px;cursor:pointer;font-family:inherit">${d.n}개 ▸</button>
+              </div>
               <span style="font-size:11px;font-weight:700;background:#f5f5f5;padding:1px 7px;border-radius:8px;color:#555">${d.d}</span>
             </div>
             ${d.dd?`<div style="font-size:11px;font-weight:700;color:${d.dd.color};margin-top:2px">${d.dd.label}</div>`:''}
@@ -3073,11 +3095,22 @@ function renderSchedule() {
     </div>`;
   }
 
+  const schMgrActive = (G.scheduleManagerFilter||[]).length>0;
+  const schSrchActive = !!(G.scheduleSearch||'').trim();
   document.getElementById('page-schedule').innerHTML = `
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${KEY_ITEMS.length?'12px':'16px'}">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
     <h2 style="font-size:20px;font-weight:800;margin:0">신고 일정</h2>
     <button onclick="G.scheduleCalView=!G.scheduleCalView;G.scheduleCalMonth=0;renderSchedule()" style="padding:6px 14px;border-radius:8px;border:1.5px solid ${G.scheduleCalView?'#4f8ef7':'#e0e0e0'};background:${G.scheduleCalView?'#e8f0fe':'#f5f5f5'};color:${G.scheduleCalView?'#4f8ef7':'#555'};font-size:13px;cursor:pointer;font-family:inherit">${G.scheduleCalView?'📅 달력 ON':'📅 달력 뷰'}</button>
   </div>
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:${KEY_ITEMS.length?'12px':'14px'}">
+    <div style="position:relative;flex:1">
+      <input id="schedule-search-input" type="text" placeholder="거래처명 / 대표자 검색" value="${esc(G.scheduleSearch||'')}" oninput="onScheduleSearch(this.value)" style="width:100%;padding:8px 32px 8px 12px;border-radius:9px;border:1.5px solid ${schSrchActive?'#4f8ef7':'#e0e0e0'};font-size:13px;font-family:inherit;box-sizing:border-box;outline:none">
+      ${schSrchActive?`<button onclick="G.scheduleSearch='';renderSchedule()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:18px;color:#bbb;cursor:pointer;line-height:1">×</button>`:''}
+    </div>
+    <div style="min-width:100px">${filterPopupBtn('scheduleManagerFilter','담당자 전체')}</div>
+    ${(schSrchActive||schMgrActive)?`<button onclick="G.scheduleSearch='';G.scheduleManagerFilter=[];renderSchedule()" style="padding:7px 10px;border-radius:8px;border:1.5px solid #e0e0e0;background:#fff;color:#888;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap">초기화</button>`:''}
+  </div>
+  ${(schSrchActive||schMgrActive)?`<div style="font-size:12px;color:#4f8ef7;background:#e8f0fe;border-radius:8px;padding:6px 12px;margin-bottom:12px">🔍 필터 적용 중 — 각 항목의 건수가 검색 결과 기준입니다</div>`:''}
   ${KEY_ITEMS.length?`<div class="stat-grid" style="margin-bottom:16px">${keyCards}</div>`:''}
   ${calHTML}
   <div style="font-size:12px;color:#888;margin-bottom:12px">★ 표시 항목은 주요 신고 · 마감일 기준 D-day 표시</div>
@@ -3104,6 +3137,40 @@ function registerToPeriod(label, type) {
   G.julgaePeriodIdx = G.periods.length - 1;
   saveToLS();
   switchTab('julgae');
+}
+
+function openScheduleClientList(ck, label) {
+  const allClients = (window._schedClientMap||{})[ck]||[];
+  window._sclSearch = '';
+  function doRender() {
+    const s = (window._sclSearch||'').trim();
+    const filtered = s ? allClients.filter(c=>c.name.includes(s)||(c.rep||'').includes(s)) : allClients;
+    const body = document.getElementById('scl-modal-body');
+    if (!body) return;
+    body.innerHTML = `
+      <div style="position:relative;margin-bottom:10px">
+        <input id="scl-inp" type="text" value="${esc(s)}" placeholder="거래처명 / 대표자 검색"
+          oninput="window._sclSearch=this.value;window._sclRender&&window._sclRender()"
+          style="width:100%;padding:8px 32px 8px 12px;border:1.5px solid ${s?'#4f8ef7':'#e0e0e0'};border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none">
+        ${s?`<button onclick="window._sclSearch='';window._sclRender&&window._sclRender()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:18px;color:#bbb;cursor:pointer;line-height:1">×</button>`:''}
+      </div>
+      <div style="font-size:12px;color:#888;margin-bottom:8px">총 ${filtered.length}개</div>
+      <div style="max-height:52vh;overflow-y:auto">
+        ${filtered.length===0?'<div style="text-align:center;color:#aaa;padding:24px;font-size:13px">검색 결과 없음</div>':
+          filtered.map(c=>`<div style="padding:9px 0;border-bottom:1px solid #f5f5f5">
+            <div style="font-weight:700;font-size:14px">${esc(c.name)}</div>
+            <div style="font-size:12px;color:#888">${esc(c.rep||'-')} · ${esc(c.taxType||'-')} · ${esc(getManagers(c).join(', ')||'(없음)')}</div>
+          </div>`).join('')
+        }
+      </div>`;
+    if (s) { const inp = document.getElementById('scl-inp'); if(inp){inp.focus();inp.setSelectionRange(s.length,s.length);} }
+  }
+  window._sclRender = doRender;
+  showModal(`<div style="max-width:480px">
+    <div class="modal-header"><h3>${esc(label)} · ${allClients.length}개</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body" id="scl-modal-body"></div>
+  </div>`);
+  doRender();
 }
 
 // ══════════════════════════════════════════════════════
