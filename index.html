@@ -96,6 +96,13 @@ label.flabel{font-size:11px;font-weight:600;color:#555;display:block;margin-bott
 input.finput,select.fsel,textarea.ftarea{width:100%;padding:5px 8px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;outline:none;font-family:inherit;box-sizing:border-box}
 select.fsel{background:#fff;cursor:pointer}
 textarea.ftarea{resize:vertical}
+/* 3열 컴팩트 편집 폼 */
+.form-cpt{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;align-items:start}
+.form-cpt .c2{grid-column:span 2}
+.form-cpt .c3{grid-column:1/-1}
+.ff{display:flex;align-items:center;gap:5px;min-width:0}
+.ffl{font-size:10px;color:#777;font-weight:700;white-space:nowrap;flex-shrink:0}
+.ff .finput,.ff .fsel,.ff .ftarea{flex:1;min-width:0;width:auto;padding:4px 6px;font-size:11px}
 input.finput:focus,select.fsel:focus,textarea.ftarea:focus{border-color:#4f8ef7}
 
 /* ── 버튼 */
@@ -2797,111 +2804,171 @@ function openForm(id) {
     <button class="close-btn" onclick="closeModal()">✕</button>
   </div>
   <div class="modal-body" id="form-body">
-    ${['name:거래처명 *','rep:대표자명 *','phone:연락처','email:이메일'].map(x=>{
-      const [k,l]=x.split(':');
-      return `<div><label class="flabel">${l}</label><input class="finput" id="f-${k}" value="${esc(c[k]||'')}" oninput="window._formData['${k}']=this.value"></div>`;
-    }).join('')}
+  <div class="form-cpt">
 
-    <div class="form-grid">
-      <div><label class="flabel">사업자등록번호</label><input class="finput" id="f-bizNo" value="${esc(c.bizNo||'')}" placeholder="000-00-00000" oninput="validateBizNo(this.value,this)"><div id="bizno-msg" style="font-size:11px;margin-top:3px"></div></div>
-      <div><label class="flabel" id="f-jumin-label">${c.taxType==='법인'?'법인등록번호':'주민등록번호'}</label><input class="finput" id="f-jumin" value="${esc(c.jumin||'')}" placeholder="000000-0000000" oninput="window._formData.jumin=this.value"></div>
+    <div class="ff c2">
+      <label class="ffl">상호 *</label>
+      <input class="finput" id="f-name" value="${esc(c.name||'')}" placeholder="거래처명" oninput="window._formData.name=this.value">
+    </div>
+    <div class="ff">
+      <label class="ffl">대표자 *</label>
+      <input class="finput" id="f-rep" value="${esc(c.rep||'')}" oninput="window._formData.rep=this.value">
     </div>
 
-    <div>
-      <label class="flabel">관계회사 그룹</label>
-      <div style="display:flex;gap:6px;align-items:center">
-        <input class="finput" style="flex:1" id="f-relatedGroup" value="${esc(c.relatedGroup||'')}"
-          placeholder="그룹명 입력 (비우면 대표자명으로 자동 감지)"
-          oninput="window._formData.relatedGroup=this.value;window._formData.soloGroup=false"
-          list="related-group-list">
-        ${c.relatedGroup||c.soloGroup?`<button type="button" onclick="document.getElementById('f-relatedGroup').value='';window._formData.relatedGroup='';window._formData.soloGroup=false" style="padding:4px 10px;border-radius:8px;border:1px solid #e0e0e0;background:#fff;color:#e53935;cursor:pointer;font-family:inherit;font-size:12px;white-space:nowrap">✕ 해제</button>`:''}
+    <div class="ff">
+      <label class="ffl">연락처</label>
+      <input class="finput" id="f-phone" value="${esc(c.phone||'')}" oninput="window._formData.phone=this.value">
+    </div>
+    <div class="ff c2">
+      <label class="ffl">이메일</label>
+      <input class="finput" id="f-email" value="${esc(c.email||'')}" oninput="window._formData.email=this.value">
+    </div>
+
+    <div class="c2">
+      <div class="ff">
+        <label class="ffl">사업자번호</label>
+        <input class="finput" id="f-bizNo" value="${esc(c.bizNo||'')}" placeholder="000-00-00000" oninput="validateBizNo(this.value,this)">
       </div>
-      ${_groupMembers.length>0?`<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;align-items:center"><span style="font-size:11px;color:#888">같은 그룹:</span>${_groupMembers.map(cl=>`<span style="background:#e8f0fe;color:#4f8ef7;border-radius:10px;padding:2px 10px;font-size:12px">👥 ${esc(cl.name)}</span>`).join('')}</div>`:''}
-      ${_allGroups.length>0?`<div style="margin-top:8px"><div style="font-size:11px;color:#888;margin-bottom:4px">기존 그룹에 포함:</div><div style="display:flex;flex-wrap:wrap;gap:4px">${_allGroups.map((g,gi)=>{const cnt=G.clients.filter(cl=>cl.id!==c.id&&cl.relatedGroup===g).length;return`<button type="button" onclick="(function(){var n=window._formGroupNames[${gi}];document.getElementById('f-relatedGroup').value=n;window._formData.relatedGroup=n;window._formData.soloGroup=false;})()" style="background:#f5f5f5;border:1px solid #e0e0e0;border-radius:10px;padding:3px 10px;font-size:12px;cursor:pointer;font-family:inherit">👥 ${esc(g)}<span style="color:#aaa;margin-left:4px">${cnt}개</span></button>`;}).join('')}</div></div>`:''}
-      <datalist id="related-group-list">${[...new Set(G.clients.map(cl=>cl.relatedGroup).filter(Boolean))].map(g=>`<option value="${esc(g)}">`).join('')}</datalist>
+      <div id="bizno-msg" style="font-size:10px;margin-top:2px;padding-left:2px"></div>
+    </div>
+    <div class="ff">
+      <label class="ffl" id="f-jumin-label">${c.taxType==='법인'?'법인번호':'주민번호'}</label>
+      <input class="finput" id="f-jumin" value="${esc(c.jumin||'')}" placeholder="000000-0000000" oninput="window._formData.jumin=this.value">
     </div>
 
-    <div class="form-grid">
-      <div><label class="flabel">과세유형</label><select class="fsel" onchange="onFormSelect('taxType',this.value)">
-        ${TAX_TYPES.slice(1).map(v=>`<option value="${v}"${c.taxType===v?' selected':''}>${v}</option>`).join('')}
-      </select></div>
-      <div><label class="flabel">부가세유형</label><select class="fsel" onchange="onFormSelect('vatType',this.value)">
-        ${VAT_TYPES.slice(1).map(v=>`<option value="${v}"${c.vatType===v?' selected':''}>${v}</option>`).join('')}
-      </select></div>
-      <div><label class="flabel">수금상태</label><select class="fsel" onchange="onFormSelect('feeStatus',this.value)">
-        ${FEE_STATUSES.slice(1).map(v=>`<option value="${v}"${c.feeStatus===v?' selected':''}>${v}</option>`).join('')}
-      </select></div>
+    <div class="c3">
+      <div class="ff">
+        <label class="ffl">관계사</label>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;gap:5px;align-items:center">
+            <input class="finput" style="flex:1;min-width:0;width:auto;padding:4px 6px;font-size:11px" id="f-relatedGroup" value="${esc(c.relatedGroup||'')}"
+              placeholder="그룹명 (비우면 대표자명으로 자동 감지)"
+              oninput="window._formData.relatedGroup=this.value;window._formData.soloGroup=false"
+              list="related-group-list">
+            ${c.relatedGroup||c.soloGroup?`<button type="button" onclick="document.getElementById('f-relatedGroup').value='';window._formData.relatedGroup='';window._formData.soloGroup=false" style="padding:3px 8px;border-radius:6px;border:1px solid #e0e0e0;background:#fff;color:#e53935;cursor:pointer;font-family:inherit;font-size:11px;white-space:nowrap">✕ 해제</button>`:''}
+          </div>
+          ${_groupMembers.length>0?`<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:3px;align-items:center"><span style="font-size:10px;color:#888">그룹:</span>${_groupMembers.map(cl=>`<span style="background:#e8f0fe;color:#4f8ef7;border-radius:8px;padding:1px 7px;font-size:11px">👥 ${esc(cl.name)}</span>`).join('')}</div>`:''}
+          ${_allGroups.length>0?`<div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:3px">${_allGroups.map((g,gi)=>{const cnt=G.clients.filter(cl=>cl.id!==c.id&&cl.relatedGroup===g).length;return`<button type="button" onclick="(function(){var n=window._formGroupNames[${gi}];document.getElementById('f-relatedGroup').value=n;window._formData.relatedGroup=n;window._formData.soloGroup=false;})()" style="background:#f5f5f5;border:1px solid #e0e0e0;border-radius:8px;padding:2px 7px;font-size:11px;cursor:pointer;font-family:inherit">👥 ${esc(g)}<span style="color:#aaa;margin-left:2px">${cnt}개</span></button>`;}).join('')}</div>`:''}
+          <datalist id="related-group-list">${[...new Set(G.clients.map(cl=>cl.relatedGroup).filter(Boolean))].map(g=>`<option value="${esc(g)}">`).join('')}</datalist>
+        </div>
+      </div>
     </div>
-    <div>
-      <label class="flabel">수임내용 <span style="font-weight:400;color:#aaa">(복수 선택 가능)</span></label>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px" id="form-dealTypes">
+
+    <div class="ff">
+      <label class="ffl">과세</label>
+      <select class="fsel" style="flex:1;min-width:0;width:auto;padding:4px 4px;font-size:11px" onchange="onFormSelect('taxType',this.value)">
+        ${TAX_TYPES.slice(1).map(v=>`<option value="${v}"${c.taxType===v?' selected':''}>${v}</option>`).join('')}
+      </select>
+    </div>
+    <div class="ff">
+      <label class="ffl">부가세</label>
+      <select class="fsel" style="flex:1;min-width:0;width:auto;padding:4px 4px;font-size:11px" onchange="onFormSelect('vatType',this.value)">
+        ${VAT_TYPES.slice(1).map(v=>`<option value="${v}"${c.vatType===v?' selected':''}>${v}</option>`).join('')}
+      </select>
+    </div>
+    <div class="ff">
+      <label class="ffl">수금</label>
+      <select class="fsel" style="flex:1;min-width:0;width:auto;padding:4px 4px;font-size:11px" onchange="onFormSelect('feeStatus',this.value)">
+        ${FEE_STATUSES.slice(1).map(v=>`<option value="${v}"${c.feeStatus===v?' selected':''}>${v}</option>`).join('')}
+      </select>
+    </div>
+
+    <div class="c3">
+      <div style="font-size:11px;font-weight:700;color:#555;margin-bottom:4px">수임내용 <span style="font-weight:400;color:#aaa">(복수 선택)</span></div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px" id="form-dealTypes">
         ${DEAL_TYPES.slice(1).map(v=>`<button type="button" onclick="toggleFormDealType('${v}')" class="contract-chip ${(window._formData.dealTypes||[]).includes(v)?'on':''}">${v}</button>`).join('')}
       </div>
     </div>
-    <div>
-      <label class="flabel">담당자 <span style="font-weight:400;color:#aaa">(복수 선택 가능)</span></label>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px" id="form-managers">
+
+    <div class="c3">
+      <div style="font-size:11px;font-weight:700;color:#555;margin-bottom:4px">담당자 <span style="font-weight:400;color:#aaa">(복수 선택)</span></div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px" id="form-managers">
         ${MANAGERS.slice(1).map(v=>`<button type="button" onclick="toggleFormManager('${v}')" class="contract-chip ${(window._formData.managers||[]).includes(v)?'on':''}">${v}</button>`).join('')}
       </div>
     </div>
 
-    <div class="form-grid">
-      <div><label class="flabel">업종</label><input class="finput" id="f-bizType" value="${esc(c.bizType||'')}" oninput="window._formData.bizType=this.value"></div>
-      <div><label class="flabel">업종코드</label><input class="finput" id="f-bizCode" value="${esc(c.bizCode||'')}" placeholder="예: 743002" maxlength="10" oninput="window._formData.bizCode=this.value"></div>
-      <div><label class="flabel">관할세무서</label><input class="finput" id="f-taxOffice" value="${esc(c.taxOffice||'')}" oninput="window._formData.taxOffice=this.value"></div>
+    <div class="ff">
+      <label class="ffl">업종</label>
+      <input class="finput" id="f-bizType" value="${esc(c.bizType||'')}" oninput="window._formData.bizType=this.value">
+    </div>
+    <div class="ff">
+      <label class="ffl">업종코드</label>
+      <input class="finput" id="f-bizCode" value="${esc(c.bizCode||'')}" placeholder="743002" maxlength="10" oninput="window._formData.bizCode=this.value">
+    </div>
+    <div class="ff">
+      <label class="ffl">세무서</label>
+      <input class="finput" id="f-taxOffice" value="${esc(c.taxOffice||'')}" oninput="window._formData.taxOffice=this.value">
     </div>
 
-    <div>
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <label class="flabel">월 수수료 (원)</label>
-        <button type="button" onclick="suggestFeeFromBosuTable()" style="padding:4px 10px;border-radius:7px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;font-size:11px;cursor:pointer;font-family:inherit">📋 보수표 추천</button>
+    <div class="c3" style="display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:11px;font-weight:700;color:#555">월 수수료 (원)</span>
+      <button type="button" onclick="suggestFeeFromBosuTable()" style="padding:3px 9px;border-radius:7px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;font-size:11px;cursor:pointer;font-family:inherit">📋 보수표 추천</button>
+    </div>
+    <div class="ff">
+      <label class="ffl">기장료</label>
+      <input type="number" class="finput" id="f-fee" value="${c.fee||0}" oninput="window._formData.fee=Number(this.value)">
+    </div>
+    <div class="ff">
+      <label class="ffl">신고대리</label>
+      <input type="number" class="finput" id="f-feeSingo" value="${c.feeSingo||0}" oninput="window._formData.feeSingo=Number(this.value)">
+    </div>
+    <div class="ff">
+      <label class="ffl">조정료</label>
+      <input type="number" class="finput" id="f-feeJojung" value="${c.feeJojung||0}" oninput="window._formData.feeJojung=Number(this.value)">
+    </div>
+    <div class="ff">
+      <label class="ffl">성실신고</label>
+      <input type="number" class="finput" id="f-feeSeongsi" value="${c.feeSeongsi||0}" oninput="window._formData.feeSeongsi=Number(this.value)">
+    </div>
+    <div id="fee-suggestion-box" class="c2"></div>
+
+    <div class="c3" style="border:1.5px solid #e0e0e0;border-radius:10px;overflow:hidden">
+      <div style="background:#f8f9ff;padding:8px 12px;font-size:11px;font-weight:700;color:#555;border-bottom:1px solid #e8eaf6">
+        수임계약항목 <span style="font-weight:400;color:#aaa;margin-left:4px">(${c.vatType} · ${c.taxType})</span>
       </div>
-      <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:8px;margin-top:4px">
-        <div><label class="flabel" style="font-size:11px;color:#888;margin-bottom:2px">기장료</label><input type="number" class="finput" id="f-fee" value="${c.fee||0}" oninput="window._formData.fee=Number(this.value)"></div>
-        <div><label class="flabel" style="font-size:11px;color:#888;margin-bottom:2px">신고대리</label><input type="number" class="finput" id="f-feeSingo" value="${c.feeSingo||0}" oninput="window._formData.feeSingo=Number(this.value)"></div>
-        <div><label class="flabel" style="font-size:11px;color:#888;margin-bottom:2px">조정료</label><input type="number" class="finput" id="f-feeJojung" value="${c.feeJojung||0}" oninput="window._formData.feeJojung=Number(this.value)"></div>
-        <div><label class="flabel" style="font-size:11px;color:#888;margin-bottom:2px">성실신고</label><input type="number" class="finput" id="f-feeSeongsi" value="${c.feeSeongsi||0}" oninput="window._formData.feeSeongsi=Number(this.value)"></div>
-      </div>
-      <div id="fee-suggestion-box"></div>
+      <div style="padding:10px" id="contract-area">${contractsHTML()}</div>
     </div>
 
-    <div style="border:1.5px solid #e0e0e0;border-radius:10px;overflow:hidden">
-      <div style="background:#f8f9ff;padding:9px 14px;font-size:12px;font-weight:700;color:#555;border-bottom:1px solid #e8eaf6">
-        수임 계약 항목
-        <span style="font-weight:400;color:#aaa;margin-left:6px">(${c.vatType} · ${c.taxType} 기준)</span>
-      </div>
-      <div style="padding:12px" id="contract-area">${contractsHTML()}</div>
+    <div class="ff">
+      <label class="ffl">수임일자</label>
+      <input type="date" class="finput" id="f-contractDate" value="${esc(c.contractDate||'')}" oninput="window._formData.contractDate=this.value">
     </div>
-
-    <div class="form-grid">
-      <div><label class="flabel">수임일자</label><input type="date" class="finput" id="f-contractDate" value="${esc(c.contractDate||'')}" oninput="window._formData.contractDate=this.value"></div>
-      <div><label class="flabel">거래처 상태</label><select class="fsel" onchange="onFormSelect('status',this.value)">
+    <div class="ff">
+      <label class="ffl">상태</label>
+      <select class="fsel" style="flex:1;min-width:0;width:auto;padding:4px 4px;font-size:11px" onchange="onFormSelect('status',this.value)">
         ${STATUS_LIST.map(v=>`<option${c.status===v?' selected':''}>${v}</option>`).join('')}
-      </select></div>
+      </select>
+    </div>
+    <div></div>
+
+    <div id="termination-area" class="c3">${terminationHTML()}</div>
+
+    <div class="c3">
+      <div class="ff" style="align-items:flex-start">
+        <label class="ffl" style="margin-top:5px">메모</label>
+        <textarea class="ftarea" rows="2" style="flex:1;min-width:0;width:auto;padding:4px 6px;font-size:11px" oninput="window._formData.memo=this.value">${esc(c.memo||'')}</textarea>
+      </div>
     </div>
 
-    <div id="termination-area">${terminationHTML()}</div>
-
-    <div><label class="flabel">메모</label><textarea class="ftarea" rows="3" oninput="window._formData.memo=this.value">${esc(c.memo||'')}</textarea></div>
-
-    <div>
-      <label class="flabel">태그 <span style="font-weight:400;color:#aaa">(Enter로 추가)</span></label>
-      <div id="form-tags-display" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">
+    <div class="c3">
+      <div style="font-size:11px;font-weight:700;color:#555;margin-bottom:4px">태그 <span style="font-weight:400;color:#aaa">(Enter로 추가)</span></div>
+      <div id="form-tags-display" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:5px">
         ${((G.clientTags||{})[c.id]||[]).map(t=>`<span style="background:#e8f0fe;color:#4f8ef7;border-radius:10px;padding:2px 10px;font-size:12px;display:flex;align-items:center;gap:4px">${esc(t)}<button type="button" onclick="removeFormTag('${esc(t)}')" style="border:none;background:transparent;color:#4f8ef7;cursor:pointer;padding:0;font-size:13px;line-height:1">×</button></span>`).join('')}
       </div>
       <input class="finput" id="form-tag-input" placeholder="태그 입력 후 Enter" onkeydown="addFormTag(event)">
     </div>
 
-    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 0">
+    <label class="c3" style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px 0">
       <input type="checkbox" id="f-seongsi" ${c.seongsi?'checked':''} onchange="window._formData.seongsi=this.checked" style="width:16px;height:16px;cursor:pointer">
-      <span style="font-size:13px;font-weight:600">성실신고확인 대상</span>
-      <span style="font-size:11px;color:#aaa">(체크 시 성실사업자 신고 리스트에 포함)</span>
+      <span style="font-size:12px;font-weight:600">성실신고확인 대상</span>
+      <span style="font-size:10px;color:#aaa">(체크 시 성실사업자 리스트 포함)</span>
     </label>
 
-    <div class="btn-row">
-      <button class="btn-secondary" onclick="closeModal()">취소</button>
-      <button class="btn-primary" onclick="saveForm(${isEdit?id:'null'})">  ${isEdit?'저장':'추가'}</button>
-    </div>
+  </div>
+  <div class="btn-row">
+    <button class="btn-secondary" onclick="closeModal()">취소</button>
+    <button class="btn-primary" onclick="saveForm(${isEdit?id:'null'})">  ${isEdit?'저장':'추가'}</button>
+  </div>
   </div>
   </div>`);
 }
@@ -2910,7 +2977,7 @@ window.onFormSelect = function(field, val) {
   window._formData[field] = val;
   if (field === 'taxType') {
     const lbl = document.getElementById('f-jumin-label');
-    if (lbl) lbl.textContent = val === '법인' ? '법인등록번호' : '주민등록번호';
+    if (lbl) lbl.textContent = val === '법인' ? '법인번호' : '주민번호';
   }
   if (field==='taxType'||field==='vatType') {
     // remove incompatible contracts
