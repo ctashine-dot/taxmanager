@@ -844,6 +844,8 @@ function filteredClients() {
     list.sort((a,b) => {
       let av, bv;
       if (field === 'n') { av = a.name||''; bv = b.name||''; return dir==='asc' ? av.localeCompare(bv,'ko') : bv.localeCompare(av,'ko'); }
+      if (field === 'r') { av = a.rep||''; bv = b.rep||''; return dir==='asc' ? av.localeCompare(bv,'ko') : bv.localeCompare(av,'ko'); }
+      if (field === 'd') { av = getDealTypes(a)[0]||''; bv = getDealTypes(b)[0]||''; return dir==='asc' ? av.localeCompare(bv,'ko') : bv.localeCompare(av,'ko'); }
       if (field === 'f') { av = a.fee||0; bv = b.fee||0; return dir==='asc' ? av-bv : bv-av; }
       if (field === 'm') { av = getManagers(a)[0]||''; bv = getManagers(b)[0]||''; return dir==='asc' ? av.localeCompare(bv,'ko') : bv.localeCompare(av,'ko'); }
       if (field === 'o') { av = a.taxOffice||''; bv = b.taxOffice||''; return dir==='asc' ? av.localeCompare(bv,'ko') : bv.localeCompare(av,'ko'); }
@@ -1406,7 +1408,6 @@ function renderClients() {
     <h2 style="font-size:20px;font-weight:800">거래처 목록</h2>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       ${hiddenChips}
-      ${(()=>{const sortLabels={n:'이름',f:'수수료',m:'담당자',o:'지역'};const sortDir=(G.clientSort||{dir:'asc'}).dir;const sortField=(G.clientSort||{field:'n'}).field;return`<span style="font-size:12px;color:#888">정렬:</span><select style="font-size:12px;padding:5px 8px;border:1.5px solid #e0e0e0;border-radius:8px;background:#f5f5f5;cursor:pointer;font-family:inherit" onchange="G.clientSort={field:this.value.split('_')[0],dir:this.value.split('_')[1]};G.clientPage=0;renderClients()">${['n_asc','n_desc','f_asc','f_desc','m_asc','m_desc','o_asc'].map(v=>{const [f,d]=v.split('_');const label=sortLabels[f]+(d==='asc'?'↑':'↓');return `<option value="${v}"${sortField===f&&sortDir===d?' selected':''}>${label}</option>`;}).join('')}</select>`;})()}
       <button class="btn-sm" style="background:${G.editMode?'#e8f5e9':'#f5f5f5'};color:${G.editMode?'#2e7d32':'#888'};border:2px solid ${G.editMode?'#43a047':'#e0e0e0'}" onclick="toggleEditMode()">${G.editMode?'✓ 수정모드 ON':'✏ 수정모드'}</button>
       <button class="btn-sm" style="background:${G.showTerminated?'#fff3e0':'#f5f5f5'};color:${G.showTerminated?'#e65100':'#888'};border:2px solid ${G.showTerminated?'#ffcc02':'#e0e0e0'}" onclick="toggleTerminated()">${G.showTerminated?'▲ 해지·폐업 숨기기':'해지·폐업 보기 ('+terminated+')'}</button>
       <button class="btn-sm" style="background:${G.showFavorites?'#fff8e1':'#f5f5f5'};color:${G.showFavorites?'#f57c00':'#888'};border:2px solid ${G.showFavorites?'#ffd54f':'#e0e0e0'}" onclick="G.showFavorites=!G.showFavorites;G.clientPage=0;renderClients()">⭐ 즐겨찾기${G.showFavorites?' ON':''}</button>
@@ -1423,7 +1424,7 @@ function renderClients() {
     </div>
   </div>
 
-  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:stretch;margin-bottom:10px">
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:stretch;margin-bottom:6px">
     <div style="position:relative;flex:2;min-width:130px">
       <input id="client-name-input" type="text" placeholder="거래처명" value="${esc(G.searchText||'')}" oninput="onClientNameSearch(this.value)" style="width:100%;padding:8px 30px 8px 12px;border-radius:9px;border:1.5px solid ${G.searchText?'#4f8ef7':'#e0e0e0'};font-size:13px;font-family:inherit;box-sizing:border-box;outline:none">
       ${G.searchText?`<button onclick="G.searchText='';G.clientPage=0;renderClients()" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:18px;color:#bbb;cursor:pointer;line-height:1">×</button>`:''}
@@ -1437,6 +1438,19 @@ function renderClients() {
     <div style="min-width:60px">${filterPopupBtn('filterTaxTypes','인격')}</div>
     <div style="min-width:75px">${filterPopupBtn('filterVatTypes','과세유형')}</div>
   </div>
+  ${(()=>{
+    const sf = (G.clientSort||{}).field||'n', sd = (G.clientSort||{}).dir||'asc';
+    const opts = [{k:'n',l:'업체명'},{k:'r',l:'대표자'},{k:'d',l:'수임내용'},{k:'f',l:'수수료'},{k:'m',l:'담당자'}];
+    const btns = opts.map(({k,l})=>{
+      const active = sf===k;
+      const nextDir = active && sd==='asc' ? 'desc' : 'asc';
+      const icon = active ? (sd==='asc'?' ↑':' ↓') : '';
+      const st = active ? 'background:#e8f0fe;color:#1565c0;border:1.5px solid #4f8ef7;font-weight:700' : 'background:#f5f5f5;color:#888;border:1.5px solid #e0e0e0';
+      return `<button onclick="G.clientSort={field:'${k}',dir:'${nextDir}'};G.clientPage=0;renderClients()" style="padding:5px 11px;border-radius:20px;font-size:12px;cursor:pointer;font-family:inherit;${st}">${l}${icon}</button>`;
+    }).join('');
+    const resetBtn = (sf!=='n'||sd!=='asc') ? `<button onclick="G.clientSort={field:'n',dir:'asc'};G.clientPage=0;renderClients()" style="padding:5px 9px;border-radius:20px;font-size:11px;cursor:pointer;font-family:inherit;background:#fdecea;color:#c62828;border:1.5px solid #ef9a9a" title="정렬 초기화">✕</button>` : '';
+    return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px"><span style="font-size:11px;color:#aaa;white-space:nowrap">정렬</span>${btns}${resetBtn}</div>`;
+  })()}
 
   <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
     ${sectionToggleBtn('clients-list')}
@@ -1487,8 +1501,8 @@ function renderClients() {
         <td data-label="과세유형" style="${hc['c_vatType']?'display:none':''}">${em?iSel('vatType',VAT_TYPES.slice(1),c.vatType):badge(c.vatType,c.vatType==='일반'?'blue':c.vatType==='간이'?'orange':'gray')}</td>
         <td data-label="담당자" style="color:#555;font-size:12px;${hc['c_manager']?'display:none':''}">${em?iSel('manager',MANAGERS.slice(1),getManagers(c)[0]||''):getManagers(c).join(', ')||'-'}</td>
         <td style="font-weight:600;font-size:11px;${hc['c_fee']?'display:none':''}">${em?`<div onclick="event.stopPropagation()" style="display:grid;grid-template-columns:auto 1fr;gap:2px 4px;align-items:center;font-size:10px"><span style="color:#888">기장</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'fee',this.value)" value="${c.fee||0}" class="inline-edit" style="width:65px"><span style="color:#888">신고</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeSingo',this.value)" value="${c.feeSingo||0}" class="inline-edit" style="width:65px"><span style="color:#888">조정</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeJojung',this.value)" value="${c.feeJojung||0}" class="inline-edit" style="width:65px"><span style="color:#888">성실</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeSeongsi',this.value)" value="${c.feeSeongsi||0}" class="inline-edit" style="width:65px"></div>`:(c.status==='정상'||c.status==='주의'?(()=>{const p=[];if(c.fee)p.push('<span style="color:#aaa;font-size:10px">기장</span> '+c.fee.toLocaleString());if(c.feeSingo)p.push('<span style="color:#aaa;font-size:10px">신고</span> '+c.feeSingo.toLocaleString());if(c.feeJojung)p.push('<span style="color:#aaa;font-size:10px">조정</span> '+c.feeJojung.toLocaleString());if(c.feeSeongsi)p.push('<span style="color:#aaa;font-size:10px">성실</span> '+c.feeSeongsi.toLocaleString());return p.length?p.join('<br>'):'-';})():'-')}</td>
-        <td data-label="상태" onclick="event.stopPropagation();openStatusModal(${c.id})" style="cursor:pointer;${hc['c_status']?'display:none':''}" title="클릭하여 상태 변경">${badge(c.status,statusColor(c.status))}</td>
-        <td data-label="CMS" onclick="event.stopPropagation();toggleCMS(${c.id})" style="cursor:pointer;${hc['c_cms']?'display:none':''}">${badge(c.cms?'가입':'미가입',c.cms?'green':'gray')}</td>
+        <td data-label="상태" ${em?`onclick="event.stopPropagation();openStatusModal(${c.id})" style="cursor:pointer;` : `style="opacity:.95;`}${hc['c_status']?'display:none':''}${em?`" title="클릭하여 상태 변경"` : `" title="상태 변경은 수정모드에서 가능합니다"`}>${badge(c.status,statusColor(c.status))}</td>
+        <td data-label="CMS" ${em?`onclick="event.stopPropagation();toggleCMS(${c.id})" style="cursor:pointer;` : `style="opacity:.95;`}${hc['c_cms']?'display:none':''}${em?`"` : `" title="CMS 변경은 수정모드에서 가능합니다"`}>${badge(c.cms?'가입':'미가입',c.cms?'green':'gray')}</td>
         <td style="text-align:center;color:#aaa;font-size:11px" id="expand-arrow-${c.id}">▼</td>
       </tr>
       <tr class="expand-row" id="expand-${c.id}" style="display:none">
