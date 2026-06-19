@@ -223,7 +223,7 @@ body.dark-mode .overlay { background: rgba(0,0,0,.65); }
   .client-table-wrap table tbody td:has(.td-name) {
     flex: 0 0 100%;
     display: block;
-    padding: 10px 44px 8px 12px;
+    padding: 10px 12px 8px 12px;
     border-bottom: 1px solid #eeeff6;
     box-sizing: border-box;
   }
@@ -236,17 +236,6 @@ body.dark-mode .overlay { background: rgba(0,0,0,.65); }
     padding: 8px 12px;
     border-bottom: 1px solid #f0f0f0;
     box-sizing: border-box;
-  }
-
-  /* 화살표 셀 — 우상단 절대 배치 */
-  .client-table-wrap table tbody td:last-child:not([data-label]) {
-    position: absolute;
-    top: 11px;
-    right: 10px;
-    padding: 0;
-    border: none;
-    background: transparent;
-    flex: none;
   }
 
   /* 데이터 셀 — 4열 그리드, 라벨 위·값 아래, 테두리 없음 */
@@ -269,22 +258,26 @@ body.dark-mode .overlay { background: rgba(0,0,0,.65); }
     white-space: nowrap;
     font-weight: 400;
   }
-  /* 모바일: 테이블 expand-row는 항상 숨김 (JS로 카드 내부에 직접 삽입) */
-  .client-table-wrap table tbody tr.expand-row { display: none !important; }
-
-  /* 카드 내부에 삽입되는 expand 패널 */
-  .mobile-expand-cell {
-    flex: 0 0 100%;
-    box-sizing: border-box;
-    padding: 0;
-    border-top: 1px solid #c5cae9;
-    background: #f0f4ff;
+  /* 클릭 시 아래로 펼쳐지는 확장 패널 */
+  .client-table-wrap table tbody tr.expand-row {
+    display: block;
+    margin-bottom: 10px;
+    border: 1px solid #c5cae9;
+    border-top: none;
     border-radius: 0 0 12px 12px;
-    min-width: 0;
+    background: #f0f4ff;
     overflow: hidden;
   }
-  .mobile-expand-cell .expand-inner {
-    padding: 12px 14px;
+  .client-table-wrap table tbody tr.expand-row td {
+    display: block;
+    padding: 0;
+    background: #f0f4ff;
+    box-sizing: border-box;
+  }
+  /* 확장된 카드: 하단 모서리 직각으로 */
+  .client-table-wrap table tbody tr.client-row.expanded {
+    margin-bottom: 0 !important;
+    border-radius: 12px 12px 0 0 !important;
   }
 
   .tbl-wrap { overflow-x: auto; }
@@ -1558,10 +1551,9 @@ function renderClients() {
         <td data-label="수수료" style="font-weight:600;font-size:11px;${hc['c_fee']?'display:none':''}">${em?`<div onclick="event.stopPropagation()" style="display:grid;grid-template-columns:auto 1fr;gap:2px 4px;align-items:center;font-size:10px"><span style="color:#888">기장</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'fee',this.value)" value="${c.fee||0}" class="inline-edit" style="width:65px"><span style="color:#888">신고</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeSingo',this.value)" value="${c.feeSingo||0}" class="inline-edit" style="width:65px"><span style="color:#888">조정</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeJojung',this.value)" value="${c.feeJojung||0}" class="inline-edit" style="width:65px"><span style="color:#888">성실</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeSeongsi',this.value)" value="${c.feeSeongsi||0}" class="inline-edit" style="width:65px"></div>`:(c.status==='정상'||c.status==='주의'?(()=>{const p=[];if(c.fee)p.push('<span style="color:#aaa;font-size:10px">기장</span> '+c.fee.toLocaleString());if(c.feeSingo)p.push('<span style="color:#aaa;font-size:10px">신고</span> '+c.feeSingo.toLocaleString());if(c.feeJojung)p.push('<span style="color:#aaa;font-size:10px">조정</span> '+c.feeJojung.toLocaleString());if(c.feeSeongsi)p.push('<span style="color:#aaa;font-size:10px">성실</span> '+c.feeSeongsi.toLocaleString());return p.length?p.join('<br>'):'-';})():'-')}</td>
         <td data-label="상태" ${em?`onclick="event.stopPropagation();openStatusModal(${c.id})" style="cursor:pointer;` : `style="opacity:.95;`}${hc['c_status']?'display:none':''}${em?`" title="클릭하여 상태 변경"` : `" title="상태 변경은 수정모드에서 가능합니다"`}>${badge(c.status,statusColor(c.status))}</td>
         <td data-label="CMS" ${em?`onclick="event.stopPropagation();toggleCMS(${c.id})" style="cursor:pointer;` : `style="opacity:.95;`}${hc['c_cms']?'display:none':''}${em?`"` : `" title="CMS 변경은 수정모드에서 가능합니다"`}>${badge(c.cms?'가입':'미가입',c.cms?'green':'gray')}</td>
-        <td style="text-align:center;color:#aaa;font-size:11px" id="expand-arrow-${c.id}">▼</td>
       </tr>
       <tr class="expand-row" id="expand-${c.id}" style="display:none">
-        <td colspan="${10-['c_rep','c_dealType','c_taxType','c_vatType','c_manager','c_fee','c_status','c_cms'].filter(k=>hc[k]).length}">
+        <td colspan="${9-['c_rep','c_dealType','c_taxType','c_vatType','c_manager','c_fee','c_status','c_cms'].filter(k=>hc[k]).length}">
           <div class="expand-inner">
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">연락처</div>${em?iInput('phone',c.phone,'placeholder="전화번호" style="width:140px"'):`<div style="font-weight:600">${c.phone?`<a href="tel:${esc(c.phone)}" style="color:#4f8ef7;text-decoration:none;font-weight:600">${esc(c.phone)}</a>`:'-'}</div>`}</div>
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">관할세무서</div>${em?iInput('taxOffice',c.taxOffice,'list="taxoffice-list" placeholder="세무서 선택·입력" style="width:150px"'):`<div style="font-weight:600">${esc(c.taxOffice||'-')}</div>`}</div>
@@ -2452,39 +2444,14 @@ function openQuickSheet(id) {
   </div>`);
 }
 
-function toggleMobileExpand(id) {
-  const expandSource = document.getElementById('expand-'+id);
-  if (!expandSource) return;
-  const isOpen = !!document.getElementById('m-expand-'+id);
-  // 모든 모바일 expand 닫기
-  document.querySelectorAll('[id^="m-expand-"]').forEach(el => el.remove());
-  document.querySelectorAll('[id^="expand-arrow-"]').forEach(r => { r.textContent = '▼'; r.closest('tr')?.classList.remove('expanded'); });
-  if (isOpen) return;
-  // expand-row 바로 앞 형제 = client-row
-  const clientRow = expandSource.previousElementSibling;
-  if (!clientRow) return;
-  const sourceInner = expandSource.querySelector('.expand-inner');
-  if (!sourceInner) return;
-  const cell = document.createElement('td');
-  cell.id = 'm-expand-'+id;
-  cell.className = 'mobile-expand-cell';
-  cell.innerHTML = sourceInner.outerHTML;
-  clientRow.appendChild(cell);
-  const arrow = document.getElementById('expand-arrow-'+id);
-  if (arrow) { arrow.textContent = '▲'; arrow.closest('tr')?.classList.add('expanded'); }
-}
-
 function toggleExpand(id) {
-  if (window.innerWidth <= 768) { toggleMobileExpand(id); return; }
   const row = document.getElementById('expand-'+id);
   if (!row) return;
   const isOpen = row.style.display !== 'none';
-  document.querySelectorAll('.expand-row').forEach(r => { r.style.display = 'none'; });
-  document.querySelectorAll('[id^="expand-arrow-"]').forEach(r => { r.textContent = '▼'; r.closest('tr')?.classList.remove('expanded'); });
+  document.querySelectorAll('.expand-row').forEach(r => { r.style.display = 'none'; r.previousElementSibling?.classList.remove('expanded'); });
   if (!isOpen) {
     row.style.display = '';
-    const arrow = document.getElementById('expand-arrow-'+id);
-    if (arrow) { arrow.textContent = '▲'; arrow.closest('tr')?.classList.add('expanded'); }
+    row.previousElementSibling?.classList.add('expanded');
   }
 }
 
@@ -2493,8 +2460,11 @@ function cycleFeeStatus(id) {
   const opts = ['수금완료','청구완료','미수금'];
   c.feeStatus = opts[(opts.indexOf(c.feeStatus)+1) % opts.length];
   saveToLS();
-  const cell = document.querySelector(`#expand-arrow-${id}`).closest('tr').querySelectorAll('td')[7];
-  if(cell) cell.innerHTML = badge(c.feeStatus, c.feeStatus==='수금완료'?'green':c.feeStatus==='청구완료'?'blue':'red');
+  const tr = document.getElementById('expand-'+id)?.previousElementSibling;
+  if (tr) {
+    const cell = [...tr.querySelectorAll('td')].find(td=>td.dataset.label==='상태');
+    if (cell) cell.innerHTML = badge(c.feeStatus, c.feeStatus==='수금완료'?'green':c.feeStatus==='청구완료'?'blue':'red');
+  }
 }
 
 function openStatusModal(id) {
