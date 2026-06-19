@@ -5254,7 +5254,7 @@ function syncFromRawData() {
     byName.set(_normName(c.name), c);
   });
 
-  const updates = [], unmatched = [];
+  const updates = [], unmatched = [], matched = [];
   for (const raw of EXCEL_RAW_DATA) {
     const nb = _normBizNo(raw.b);
     let client = (nb && nb !== '0000000000') ? byBizNo.get(nb) : null;
@@ -5273,50 +5273,98 @@ function syncFromRawData() {
     if (raw.d && raw.d !== (client.terminationDate||'')) chg.push({f:'terminationDate',l:'폐업일',o:client.terminationDate||'',nv:raw.d});
     if (raw.s==='폐업' && client.status!=='폐업' && client.status!=='해지') chg.push({f:'status',l:'상태',o:client.status,nv:'폐업'});
     if (chg.length) updates.push({id:client.id, cName:client.name, exName:raw.n, chg});
+    else matched.push({name:client.name, bizNo:client.bizNo||raw.b, manager:raw.m, fee:raw.f, vatType:raw.v});
   }
-  _showSyncModal(updates, unmatched);
+  _showSyncModal(updates, unmatched, matched);
 }
 
-function _showSyncModal(updates, unmatched) {
+function _syncDownloadCSV(rows, filename) {
+  const BOM = '﻿';
+  const lines = [['업체명','사업자번호','담당자','수수료','과세유형'].join(',')];
+  rows.forEach(r => {
+    const vals = [r.name||r.n, r.bizNo||r.b, r.manager||r.m, r.fee||r.f||0, r.vatType||r.v||''];
+    lines.push(vals.map(v=>'"'+String(v||'').replace(/"/g,'""')+'"').join(','));
+  });
+  const blob = new Blob([BOM+lines.join('\r\n')], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+
+function _showSyncModal(updates, unmatched, matched) {
   const fmt = v => typeof v === 'number' ? v.toLocaleString() : (v||'-');
+
   const updRows = updates.map(u => `
-    <div style="padding:10px 12px;border-bottom:1px solid #f0f0f0">
-      <div style="font-weight:700;font-size:13px;margin-bottom:4px">${esc(u.cName)}${u.cName!==u.exName?` <span style="font-size:11px;color:#888">→ ${esc(u.exName)}</span>`:''}</div>
-      ${u.chg.map(c=>`<span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 8px;border-radius:10px;font-size:11px;background:#fff3e0;color:#e65100"><b>${c.l}</b>: ${esc(fmt(c.o))} → <b>${esc(fmt(c.nv))}</b></span>`).join('')}
+    <div style="padding:10px 14px;border-bottom:1px solid #e8eaf6;background:#fff">
+      <div style="font-weight:700;font-size:13px;color:#222;margin-bottom:5px">${esc(u.cName)}${u.cName!==u.exName?` <span style="font-size:11px;color:#888;font-weight:400">→ ${esc(u.exName)}</span>`:''}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+      ${u.chg.map(c=>`<span style="padding:3px 9px;border-radius:10px;font-size:11px;background:#fff3e0;color:#bf360c;border:1px solid #ffcc80"><b>${c.l}</b> ${esc(fmt(c.o))} → <b style="color:#1565c0">${esc(fmt(c.nv))}</b></span>`).join('')}
+      </div>
     </div>`).join('');
 
   const unmRows = unmatched.map(u => `
-    <div style="padding:7px 12px;border-bottom:1px solid #f0f0f0;font-size:12px">
-      <b>${esc(u.n)}</b> <span style="color:#888">${esc(u.b)}</span>
-      <span style="margin-left:8px;color:#555">${esc(u.m)} · ${u.f?u.f.toLocaleString()+'원':'-'} · ${esc(u.v)||'-'}</span>
+    <div style="padding:9px 14px;border-bottom:1px solid #e8eaf6;background:#fff;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span style="font-weight:700;font-size:13px;color:#222;min-width:120px">${esc(u.n)}</span>
+      <span style="font-size:11px;color:#888;font-family:monospace">${esc(u.b)}</span>
+      <span style="font-size:12px;color:#555">${esc(u.m)}</span>
+      <span style="font-size:12px;color:#1565c0;font-weight:600">${u.f?u.f.toLocaleString()+'원':''}</span>
+      <span style="font-size:11px;padding:2px 7px;border-radius:8px;background:#f5f5f5;color:#666">${esc(u.v)||'과세유형미상'}</span>
     </div>`).join('');
 
-  showModal(`<div style="max-width:640px;width:min(640px,97vw)">
+  const matchRows = matched.map(m => `
+    <div style="padding:8px 14px;border-bottom:1px solid #e8eaf6;background:#fff;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span style="font-weight:600;font-size:13px;color:#222;min-width:130px">${esc(m.name)}</span>
+      <span style="font-size:12px;color:#555">${esc(m.manager)}</span>
+      <span style="font-size:12px;color:#1565c0;font-weight:600">${m.fee?m.fee.toLocaleString()+'원':''}</span>
+      <span style="font-size:11px;padding:2px 7px;border-radius:8px;background:#e8f5e9;color:#2e7d32">${esc(m.vatType)||''}</span>
+    </div>`).join('');
+
+  const tabBtn = (id,label,active) => `<button id="stab-${id}" onclick="_syncTab('${id}')"
+    style="flex:1;padding:10px 4px;border:none;font-size:12px;font-weight:${active?'700':'600'};
+    color:${active?'#1565c0':'#888'};background:${active?'#fff':'#f7f7f7'};
+    border-bottom:${active?'2px solid #1565c0':'2px solid transparent'};cursor:pointer;font-family:inherit">${label}</button>`;
+
+  showModal(`<div style="max-width:660px;width:min(660px,97vw)">
     <div class="modal-header"><h3>📊 세무사랑 데이터 동기화</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
     <div class="modal-body" style="padding:0;gap:0">
-      <div style="padding:12px 16px;background:#f0f7ff;border-bottom:1px solid #e0e0e0;font-size:13px">
-        <b style="color:#1565c0">${updates.length}개</b> 업체 정보 업데이트 예정 &nbsp;|&nbsp;
-        <b style="color:#c62828">${unmatched.length}개</b> 미매칭
+      <div style="padding:10px 16px;background:#e8f0fe;border-bottom:1px solid #c5cae9;font-size:13px;display:flex;flex-wrap:wrap;gap:8px">
+        <span>🔄 <b style="color:#1565c0">${updates.length}개</b> 업데이트</span>
+        <span>✅ <b style="color:#2e7d32">${matched.length}개</b> 동일</span>
+        <span>❌ <b style="color:#c62828">${unmatched.length}개</b> 미매칭</span>
       </div>
-      <div id="sync-tab-bar" style="display:flex;border-bottom:2px solid #e0e0e0">
-        <button id="stab-upd" onclick="_syncTab('upd')" style="flex:1;padding:10px;border:none;background:#fff;font-size:13px;font-weight:700;color:#1565c0;border-bottom:2px solid #1565c0;cursor:pointer;font-family:inherit">업데이트 (${updates.length})</button>
-        <button id="stab-um" onclick="_syncTab('um')" style="flex:1;padding:10px;border:none;background:#f9f9f9;font-size:13px;font-weight:600;color:#888;cursor:pointer;font-family:inherit">미매칭 (${unmatched.length})</button>
+      <div style="display:flex;border-bottom:2px solid #e0e0e0">
+        ${tabBtn('upd',`업데이트 (${updates.length})`,true)}
+        ${tabBtn('ok',`동일 (${matched.length})`,false)}
+        ${tabBtn('um',`미매칭 (${unmatched.length})`,false)}
       </div>
-      <div id="sync-pane-upd" style="max-height:55vh;overflow-y:auto">${updRows||'<div style="padding:20px;text-align:center;color:#888">변경사항 없음</div>'}</div>
-      <div id="sync-pane-um" style="max-height:55vh;overflow-y:auto;display:none">${unmRows||'<div style="padding:20px;text-align:center;color:#888">미매칭 없음</div>'}</div>
-      <div style="padding:12px 16px;display:flex;gap:8px;border-top:1px solid #f0f0f0">
-        <button onclick="closeModal()" style="flex:1;padding:11px;border-radius:8px;border:1.5px solid #e0e0e0;background:#f5f5f5;font-size:14px;cursor:pointer;font-family:inherit">취소</button>
-        <button onclick="_applySyncChanges()" style="flex:2;padding:11px;border-radius:8px;border:none;background:#1565c0;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">✓ ${updates.length}개 적용</button>
+      <div id="sync-pane-upd" style="max-height:52vh;overflow-y:auto;background:#fafafa">${updRows||'<div style="padding:24px;text-align:center;color:#888">변경사항 없음</div>'}</div>
+      <div id="sync-pane-ok"  style="max-height:52vh;overflow-y:auto;background:#fafafa;display:none">${matchRows||'<div style="padding:24px;text-align:center;color:#888">없음</div>'}</div>
+      <div id="sync-pane-um"  style="max-height:52vh;overflow-y:auto;background:#fafafa;display:none">${unmRows||'<div style="padding:24px;text-align:center;color:#888">미매칭 없음</div>'}</div>
+      <div style="padding:10px 14px;display:flex;gap:8px;border-top:1px solid #e0e0e0;flex-wrap:wrap">
+        <button onclick="_syncDownloadCSV(window._syncUnmatched,'미매칭_업체.csv')" style="padding:9px 12px;border-radius:8px;border:1.5px solid #e0e0e0;background:#f5f5f5;font-size:12px;cursor:pointer;font-family:inherit">⬇ 미매칭 다운로드</button>
+        <button onclick="_syncDownloadCSV(window._syncMatched,'동일_업체.csv')" style="padding:9px 12px;border-radius:8px;border:1.5px solid #e0e0e0;background:#f5f5f5;font-size:12px;cursor:pointer;font-family:inherit">⬇ 동일 다운로드</button>
+        <button onclick="closeModal()" style="flex:1;padding:9px;border-radius:8px;border:1.5px solid #e0e0e0;background:#f5f5f5;font-size:13px;cursor:pointer;font-family:inherit">취소</button>
+        <button onclick="_applySyncChanges()" style="flex:2;padding:9px;border-radius:8px;border:none;background:#1565c0;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">✓ ${updates.length}개 적용</button>
       </div>
     </div>
   </div>`);
   window._syncUpdates = updates;
+  window._syncUnmatched = unmatched;
+  window._syncMatched = matched;
 }
 function _syncTab(t) {
-  document.getElementById('sync-pane-upd').style.display = t==='upd'?'block':'none';
-  document.getElementById('sync-pane-um').style.display  = t==='um' ?'block':'none';
-  document.getElementById('stab-upd').style.cssText += t==='upd'?';color:#1565c0;border-bottom:2px solid #1565c0;background:#fff':';color:#888;border-bottom:none;background:#f9f9f9';
-  document.getElementById('stab-um').style.cssText  += t==='um' ?';color:#1565c0;border-bottom:2px solid #1565c0;background:#fff':';color:#888;border-bottom:none;background:#f9f9f9';
+  ['upd','ok','um'].forEach(id => {
+    const pane = document.getElementById('sync-pane-'+id);
+    const btn  = document.getElementById('stab-'+id);
+    if (!pane||!btn) return;
+    const active = id===t;
+    pane.style.display = active?'block':'none';
+    btn.style.color = active?'#1565c0':'#888';
+    btn.style.fontWeight = active?'700':'600';
+    btn.style.background = active?'#fff':'#f7f7f7';
+    btn.style.borderBottom = active?'2px solid #1565c0':'2px solid transparent';
+  });
 }
 function _applySyncChanges() {
   const updates = window._syncUpdates || [];
