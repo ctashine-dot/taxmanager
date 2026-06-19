@@ -376,6 +376,7 @@ let G = {
   julgaeDoneFilter: '전체',
   julgaeSort: 'name',
   julgaeSortDir: 'asc',
+  julgaeKeepFilters: false,
   dashMonthlyView: null,
   dashFilingView: null,
   clientPage: 0,
@@ -1128,7 +1129,7 @@ function _renderDashboardInner() {
       targets = applyReportFilter(G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'), latestPeriod);
     }
     const total = targets.length;
-    const done  = targets.filter(c=>{ const v=julgaeVal(pKey,c.id); return v.a||v.d||v.b; }).length;
+    const done  = targets.filter(c=>julgaeVal(pKey,c.id).a).length;
     const pct   = total ? Math.round(done/total*100) : 0;
     return `
     <div style="margin:0 0 14px">
@@ -3417,6 +3418,7 @@ function renderJulgae() {
     clients.forEach(c => _pushClient(c));
   }
 
+  let _rowN = 0;
   document.getElementById('page-julgae').innerHTML = `
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
     <h2 style="font-size:20px;font-weight:800">신고 및 결재</h2>
@@ -3484,7 +3486,7 @@ function renderJulgae() {
               const pEnroll = p.enrolled && p.enrolled.length > 0;
               const dd = julgaeDDay(p);
               return `<div style="display:flex;align-items:center;gap:3px">
-                <button onclick="G.julgaePeriodIdx=${i};G.julgaeSearch='';G.julgaeRepSearch='';G.julgaeManagers=[];G.julgaeDataFilter='전체';G.julgaeBookFilter='전체';G.julgaeDoneFilter='전체';G.julgaeFeeFilter='전체';renderJulgae()"
+                <button onclick="switchJulgaePeriod(${i})"
                   style="padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;border:2px solid ${i===idx?'#4f8ef7':'#e0e0e0'};background:${i===idx?'#e8f0fe':'#fff'};color:${i===idx?'#4f8ef7':'#555'}">
                   ${esc(p.label)}${pEnroll?` <span style="font-size:10px;background:#4f8ef7;color:#fff;border-radius:10px;padding:1px 6px;margin-left:4px">${p.enrolled.length}</span>`:''}${dd?` <span style="font-size:10px;background:${dd.color};color:#fff;border-radius:8px;padding:1px 6px;margin-left:3px">${dd.label}</span>`:''}
                 </button>
@@ -3549,6 +3551,7 @@ function renderJulgae() {
     <button class="btn-sm" style="background:${G.julgaeKanban?'#e8f0fe':'#f5f5f5'};color:${G.julgaeKanban?'#4f8ef7':'#555'};border:1.5px solid ${G.julgaeKanban?'#4f8ef7':'#e0e0e0'}" onclick="G.julgaeKanban=!G.julgaeKanban;renderJulgae()">📋 칸반뷰</button>
     <button class="btn-sm" style="background:${G.julgaeBulkMode?'#e8f5e9':'#f5f5f5'};color:${G.julgaeBulkMode?'#2e7d32':'#888'};border:1.5px solid ${G.julgaeBulkMode?'#43a047':'#e0e0e0'}" onclick="G.julgaeBulkMode=!G.julgaeBulkMode;G.julgaeBulkSelected=[];renderJulgae()">☑ 일괄처리${G.julgaeBulkMode?' ON':''}</button>
     <button class="btn-sm" style="background:#e8f0fe;color:#1565c0;border:1.5px solid #90caf9" onclick="openWithholdingModal()">📋 원천세</button>
+    <button class="btn-sm" style="background:${G.julgaeKeepFilters?'#fff8e1':'#f5f5f5'};color:${G.julgaeKeepFilters?'#e65100':'#888'};border:1.5px solid ${G.julgaeKeepFilters?'#ffcc80':'#e0e0e0'}" onclick="G.julgaeKeepFilters=!G.julgaeKeepFilters;renderJulgae()" title="기간 전환 시 현재 필터를 유지합니다">🔒 필터 유지${G.julgaeKeepFilters?' ON':''}</button>
   </div>
 
   ${(G.periodNotes||{})[pKey]?`<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:8px;padding:8px 14px;margin-bottom:10px;font-size:13px;color:#5d4037;display:flex;align-items:flex-start;gap:8px"><span style="font-size:15px;flex-shrink:0">📝</span><span style="flex:1">${esc((G.periodNotes||{})[pKey])}</span><button onclick="openPeriodNote('${pKey}')" style="font-size:11px;padding:2px 8px;border-radius:6px;border:1px solid #ffe082;background:#fff;color:#e65100;cursor:pointer;font-family:inherit;flex-shrink:0">수정</button></div>`:''}
@@ -3660,15 +3663,15 @@ function renderJulgae() {
         : '';
       return `<tr id="jr-${pKey2}-${c.id}" style="background:${rowBg}">
         ${G.julgaeBulkMode?`<td style="text-align:center;width:32px" onclick="event.stopPropagation();toggleJulgaeSelect(${c.id})"><input type="checkbox" ${(G.julgaeBulkSelected||[]).includes(c.id)?'checked':''} style="width:16px;height:16px;cursor:pointer" onclick="event.stopPropagation();toggleJulgaeSelect(${c.id})"></td>`:''}
-        <td style="color:#aaa;font-size:11px">${i+1}</td>
-        <td>${item.isGroupHeader
+        <td style="color:#aaa;font-size:11px">${++_rowN}</td>
+        <td onclick="openClientNotes(${c.id})" style="cursor:pointer">${item.isGroupHeader
           ?`<div style="display:flex;align-items:center;gap:6px"><button onclick="event.stopPropagation();toggleJulgaeGroup('${item.groupKey}')" style="border:none;background:none;cursor:pointer;font-size:13px;padding:0 2px;color:#7b1fa2">${item.expanded?'▼':'▶'}</button><div class="td-name">${esc(c.name)}</div><span style="background:#7b1fa2;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;white-space:nowrap">외 ${item.groupClients.length-1}개</span></div>`
           :item.isGroupChild
             ?`<div style="display:flex;align-items:center;gap:4px;padding-left:22px"><span style="color:#ccc;font-size:11px">└</span><div class="td-name" style="font-size:12px">${esc(c.name)}</div></div>`
             :`<div class="td-name">${esc(c.name)}</div>`
         }</td>
         <td style="font-size:12px;color:#444;${hc['j_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
-        <td style="color:#555;font-size:12px;${hc['j_manager']?'display:none':''}">${getManagers(c).join(', ')||'-'}</td>
+        <td style="color:#555;font-size:12px;${hc['j_manager']?'display:none':''}">${getManagers(c).length?getManagers(c).join(', '):'<span style="color:#ff7043;font-size:11px">⚠ 미지정</span>'}</td>
         <td style="text-align:center;${hc['j_data']?'display:none':''}" onclick="toggleJulgaeField('${pKey2}',${c.id},'d')">
           <div class="chk ${v.d?'on':''}" style="margin:0 auto;width:24px;height:24px">${v.d?'✓':''}</div>
         </td>
@@ -3738,6 +3741,16 @@ function renderJulgae() {
   </div>`:''}`}
   ` : ''}
   `}`;
+}
+
+function switchJulgaePeriod(idx) {
+  G.julgaePeriodIdx = idx;
+  if (!G.julgaeKeepFilters) {
+    G.julgaeSearch=''; G.julgaeRepSearch=''; G.julgaeManagers=[];
+    G.julgaeDataFilter='전체'; G.julgaeBookFilter='전체';
+    G.julgaeDoneFilter='전체'; G.julgaeFeeFilter='전체';
+  }
+  renderJulgae();
 }
 
 function toggleJulgaeGroup(key) {
