@@ -2888,14 +2888,18 @@ function openForm(id) {
     </div>
     <div id="fee-suggestion-box" class="c2"></div>
 
-    <div class="ff c3" style="flex-wrap:wrap;gap:4px 10px;align-items:center">
-      <label class="ffl" style="flex-shrink:0;min-width:48px">수임내용</label>
-      ${DEAL_TYPES.slice(1).map(v=>`<label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:12px;color:#333;font-weight:600;white-space:nowrap"><input type="checkbox" ${(window._formData.dealTypes||[]).includes(v)?'checked':''} onchange="(function(v,c){var l=window._formData.dealTypes||(window._formData.dealTypes=[]);var i=l.indexOf(v);if(c&&i<0)l.push(v);if(!c&&i>=0)l.splice(i,1);window._formData.dealType=l[0]||'';})('${v}',this.checked)" style="width:14px;height:14px;cursor:pointer;accent-color:#4f8ef7;flex-shrink:0"> ${v}</label>`).join('')}
+    <div class="ff">
+      <label class="ffl">수임내용</label>
+      <select class="fsel" onchange="window._formData.dealType=this.value;window._formData.dealTypes=this.value?[this.value]:[]">
+        ${DEAL_TYPES.slice(1).map(v=>`<option value="${v}"${(window._formData.dealTypes||['기장'])[0]===v?' selected':''}>${v}</option>`).join('')}
+      </select>
     </div>
-
-    <div class="ff c3" style="flex-wrap:wrap;gap:4px 10px;align-items:center">
-      <label class="ffl" style="flex-shrink:0;min-width:48px">담당자</label>
-      ${MANAGERS.slice(1).map(v=>`<label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:12px;color:#333;font-weight:600;white-space:nowrap"><input type="checkbox" ${(window._formData.managers||[]).includes(v)?'checked':''} onchange="(function(v,c){var l=window._formData.managers||(window._formData.managers=[]);var i=l.indexOf(v);if(c&&i<0)l.push(v);if(!c&&i>=0)l.splice(i,1);window._formData.manager=l[0]||'';})('${v}',this.checked)" style="width:14px;height:14px;cursor:pointer;accent-color:#4f8ef7;flex-shrink:0"> ${v}</label>`).join('')}
+    <div class="ff">
+      <label class="ffl">담당자</label>
+      <select class="fsel" onchange="window._formData.manager=this.value;window._formData.managers=this.value?[this.value]:[]">
+        <option value="">-</option>
+        ${MANAGERS.slice(1).map(v=>`<option value="${v}"${(window._formData.managers||[])[0]===v?' selected':''}>${v}</option>`).join('')}
+      </select>
     </div>
 
     <div class="c3" style="background:#f8f9ff;border:1px solid #e0e4f0;border-radius:10px;padding:10px">
