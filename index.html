@@ -480,6 +480,7 @@ let G = {
   sectionCollapsed: {},
   hiddenCols: {},
   feeHistory: {},  // {clientId: {ym: {date, amount}}}
+  adHocFees: {},  // {clientId: [{id, type, ym, amount, desc, date, collected, collectedDate}]}
   managerHistory: {},  // {clientId: [{date, from, to}]}
   feeChangeHistory: {},  // {clientId: [{date, from, to}]}
   clientTags: {},  // {clientId: ['VIP', '위험', ...]}
@@ -666,6 +667,7 @@ function saveToLS() {
     localStorage.setItem('tm_feePayments', JSON.stringify(G.feePayments||{}));
     localStorage.setItem('tm_filterPresets', JSON.stringify(G.filterPresets||[]));
     localStorage.setItem('tm_contactLogs', JSON.stringify(G.contactLogs||{}));
+    localStorage.setItem('tm_adHocFees', JSON.stringify(G.adHocFees||{}));
   } catch(e) {
     console.error('로컬 저장 실패:', e);
     showSaveError('로컬 저장 공간이 부족합니다');
@@ -693,6 +695,7 @@ function saveToLS() {
       feePayments: JSON.stringify(G.feePayments||{}),
       filterPresets: JSON.stringify(G.filterPresets||[]),
       contactLogs: JSON.stringify(G.contactLogs||{}),
+      adHocFees: JSON.stringify(G.adHocFees||{}),
     }).catch(e => {
       console.error('Firebase 저장 실패:', e);
       showSaveError('클라우드 저장 실패 — 로컬에만 저장됨');
@@ -1556,7 +1559,7 @@ function renderClients() {
         <td data-label="인격" style="${hc['c_taxType']?'display:none':''}">${em?iSel('taxType',TAX_TYPES.slice(1),c.taxType):badge(c.taxType,c.taxType==='법인'?'blue':'gray')}</td>
         <td data-label="과세유형" style="${hc['c_vatType']?'display:none':''}">${em?iSel('vatType',VAT_TYPES.slice(1),c.vatType):badge(c.vatType,c.vatType==='일반'?'blue':c.vatType==='간이'?'orange':c.vatType==='간세'?'teal':'gray')}</td>
         <td data-label="담당자" style="color:#555;font-size:12px;${hc['c_manager']?'display:none':''}">${em?iSel('manager',MANAGERS.slice(1),getManagers(c)[0]||''):getManagers(c).join(', ')||'-'}</td>
-        <td data-label="수수료" style="font-weight:600;font-size:11px;${hc['c_fee']?'display:none':''}">${em?`<div onclick="event.stopPropagation()" style="display:grid;grid-template-columns:auto 1fr;gap:2px 4px;align-items:center;font-size:10px"><span style="color:#888">기장</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'fee',this.value)" value="${c.fee||0}" class="inline-edit" style="width:65px"><span style="color:#888">신고</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeSingo',this.value)" value="${c.feeSingo||0}" class="inline-edit" style="width:65px"><span style="color:#888">조정</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeJojung',this.value)" value="${c.feeJojung||0}" class="inline-edit" style="width:65px"><span style="color:#888">성실</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'feeSeongsi',this.value)" value="${c.feeSeongsi||0}" class="inline-edit" style="width:65px"></div>`:(c.status==='정상'||c.status==='주의'?(()=>{const p=[];if(c.fee)p.push('<span style="color:#aaa;font-size:10px">기장</span> '+c.fee.toLocaleString());if(c.feeSingo)p.push('<span style="color:#aaa;font-size:10px">신고</span> '+c.feeSingo.toLocaleString());if(c.feeJojung)p.push('<span style="color:#aaa;font-size:10px">조정</span> '+c.feeJojung.toLocaleString());if(c.feeSeongsi)p.push('<span style="color:#aaa;font-size:10px">성실</span> '+c.feeSeongsi.toLocaleString());return p.length?p.join('<br>'):'-';})():'-')}</td>
+        <td data-label="수수료" style="font-weight:600;font-size:11px;${hc['c_fee']?'display:none':''}">${em?`<div onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:4px;font-size:10px"><span style="color:#888">기장</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'fee',this.value)" value="${c.fee||0}" class="inline-edit" style="width:70px"></div>`:(c.status==='정상'||c.status==='주의'?(()=>{const cym=currentYM();const pending=((G.adHocFees||{})[c.id]||[]).filter(f=>!f.collected&&f.ym===cym);const parts=[];if(c.fee)parts.push('<span style="color:#aaa;font-size:10px">기장</span> '+c.fee.toLocaleString());if(pending.length)parts.push('<span style="font-size:10px;color:#e65100">+'+pending.length+'건 미수</span>');return parts.length?parts.join('<br>'):'-';})():'-')}</td>
         <td data-label="상태" ${em?`onclick="event.stopPropagation();openStatusModal(${c.id})" style="cursor:pointer;` : `style="opacity:.95;`}${hc['c_status']?'display:none':''}${em?`" title="클릭하여 상태 변경"` : `" title="상태 변경은 수정모드에서 가능합니다"`}>${badge(c.status,statusColor(c.status))}</td>
         <td data-label="CMS" ${em?`onclick="event.stopPropagation();toggleCMS(${c.id})" style="cursor:pointer;` : `style="opacity:.95;`}${hc['c_cms']?'display:none':''}${em?`"` : `" title="CMS 변경은 수정모드에서 가능합니다"`}>${badge(c.cms?'가입':'미가입',c.cms?'green':'gray')}</td>
       </tr>
@@ -2732,13 +2735,11 @@ function openDetail(id) {
     ${progressSection}
     ${closureSection}
     ${!isTerminated?`<div class="detail-section">
-      <div class="detail-section-title">수수료</div>
+      <div class="detail-section-title" style="display:flex;justify-content:space-between;align-items:center">수수료<button onclick="event.stopPropagation();openAdHocFeeModal(${c.id})" style="font-size:11px;padding:2px 8px;border-radius:6px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;cursor:pointer;font-family:inherit;font-weight:600">+ 청구 추가</button></div>
       <div class="detail-section-body">
-        <div class="detail-row"><span class="lbl">기장료</span><strong>${(c.fee||0).toLocaleString()}원</strong></div>
-        <div class="detail-row"><span class="lbl">신고대리</span><strong>${(c.feeSingo||0).toLocaleString()}원</strong></div>
-        <div class="detail-row"><span class="lbl">조정료</span><strong>${(c.feeJojung||0).toLocaleString()}원</strong></div>
-        <div class="detail-row"><span class="lbl">성실신고</span><strong>${(c.feeSeongsi||0).toLocaleString()}원</strong></div>
+        <div class="detail-row"><span class="lbl">기장료</span><strong>${(c.fee||0).toLocaleString()}원/월</strong></div>
         <div class="detail-row"><span class="lbl">수금 상태</span>${badge(c.feeStatus,c.feeStatus==='수금완료'?'green':c.feeStatus==='청구완료'?'blue':'red')}</div>
+        ${(()=>{const fees=((G.adHocFees||{})[c.id]||[]);if(!fees.length)return'<div style="font-size:12px;color:#aaa;padding:4px 0">추가 청구 없음 (신고대리·조정료·성실신고)</div>';return fees.slice().reverse().map(f=>`<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid #f0f0f0;font-size:12px"><span style="background:${f.collected?'#e8f5e9':'#fff3e0'};color:${f.collected?'#2e7d32':'#e65100'};border-radius:5px;padding:1px 7px;font-size:11px;font-weight:700;flex-shrink:0">${esc(f.type)}</span><span style="color:#888;flex-shrink:0">${f.ym}</span><strong style="flex:1;text-align:right">${f.amount.toLocaleString()}원</strong>${f.desc?`<span style="color:#aaa;font-size:11px">${esc(f.desc)}</span>`:''}<span style="font-size:11px;${f.collected?'color:#2e7d32':'color:#e53935'};flex-shrink:0">${f.collected?'✓수금':'미수금'}</span></div>`).join('');})()}
       </div>
     </div>`:''}
     ${c.memo?`<div class="detail-section"><div class="detail-section-title">메모</div><div style="font-size:14px;color:#555;line-height:1.6;background:#fafbff;border-radius:8px;padding:10px 14px">${esc(c.memo)}</div></div>`:''}
@@ -2870,24 +2871,16 @@ function openForm(id) {
     </div>
 
     <div class="c3" style="display:flex;justify-content:space-between;align-items:center;background:#e8f0fe;border-radius:7px;padding:5px 10px">
-      <span style="font-size:11px;font-weight:700;color:#1565c0">월 수수료 (원)</span>
+      <span style="font-size:11px;font-weight:700;color:#1565c0">기장료 (월정, 원)</span>
       <button type="button" onclick="suggestFeeFromBosuTable()" style="padding:3px 9px;border-radius:7px;border:1.5px solid #4f8ef7;background:#fff;color:#4f8ef7;font-size:11px;cursor:pointer;font-family:inherit">📋 보수표 추천</button>
     </div>
     <div class="ff">
       <label class="ffl">기장료</label>
       <input type="number" class="finput" id="f-fee" value="${c.fee||0}" oninput="window._formData.fee=Number(this.value)">
     </div>
-    <div class="ff">
-      <label class="ffl">신고대리</label>
-      <input type="number" class="finput" id="f-feeSingo" value="${c.feeSingo||0}" oninput="window._formData.feeSingo=Number(this.value)">
-    </div>
-    <div class="ff">
-      <label class="ffl">조정료</label>
-      <input type="number" class="finput" id="f-feeJojung" value="${c.feeJojung||0}" oninput="window._formData.feeJojung=Number(this.value)">
-    </div>
-    <div class="ff">
-      <label class="ffl">성실신고</label>
-      <input type="number" class="finput" id="f-feeSeongsi" value="${c.feeSeongsi||0}" oninput="window._formData.feeSeongsi=Number(this.value)">
+    <div class="ff c2" style="background:#f0f7ff;border:1px dashed #90caf9">
+      <label class="ffl" style="color:#888">조정료·신고대리·성실신고</label>
+      <span style="font-size:11px;color:#888">신고 시 수수료 탭에서 청구 추가</span>
     </div>
     <div id="fee-suggestion-box" class="c2"></div>
 
@@ -3186,6 +3179,9 @@ window.saveForm = function(id) {
         if (!G.feeChangeHistory) G.feeChangeHistory = {};
         if (!G.feeChangeHistory[id]) G.feeChangeHistory[id] = [];
         G.feeChangeHistory[id].push({ date: new Date().toLocaleString('ko-KR'), from: oldFee, to: newFee });
+        // feeChanges: 월별 기장료 이력 (현재 월부터 적용)
+        if (!G.clients[idx].feeChanges) G.clients[idx].feeChanges = [];
+        G.clients[idx].feeChanges.push({ from: currentYM(), amount: newFee });
       }
       G.clients[idx] = {...G.clients[idx],...d};
     }
@@ -4435,6 +4431,14 @@ function currentYM() {
   return n.getFullYear() + '-' + String(n.getMonth()+1).padStart(2,'0');
 }
 
+// 특정 월에 적용되는 기장료 반환 (feeChanges 이력 참조)
+function getFeeForYM(c, ym) {
+  if (!c.feeChanges || !c.feeChanges.length) return c.fee || 0;
+  const sorted = [...c.feeChanges].sort((a,b)=>b.from.localeCompare(a.from));
+  const applicable = sorted.find(ch => ch.from <= ym);
+  return applicable ? applicable.amount : (c.feeChanges[0]?.amount || c.fee || 0);
+}
+
 function ymLabel(ym) {
   const [y, m] = ym.split('-');
   return y + '년 ' + Number(m) + '월';
@@ -4481,7 +4485,7 @@ function toggleMonthlyFee(clientId, ym) {
     </div>
     <div style="margin-bottom:10px">
       <label style="font-size:12px;color:#888;display:block;margin-bottom:4px">수납 금액 (원)</label>
-      <input type="number" id="pay-amount" value="${prev?.amount||c?.fee||0}" style="width:100%;padding:8px 10px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box">
+      <input type="number" id="pay-amount" value="${prev?.amount||getFeeForYM(c,ym)||0}" style="width:100%;padding:8px 10px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box">
     </div>
     <div style="margin-bottom:12px">
       <label style="font-size:12px;color:#888;display:block;margin-bottom:4px">메모 (선택)</label>
@@ -4509,6 +4513,82 @@ function confirmFeePayment(clientId, ym) {
   saveToLS(); closeModal(); renderFees();
 }
 
+function openAdHocFeeModal(clientId) {
+  const activeClients = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업');
+  const ym = currentYM();
+  showModal(`<div style="max-width:440px;width:min(440px,95vw)">
+    <div class="modal-header">
+      <h3>📋 추가 청구 등록</h3>
+      <button class="close-btn" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;color:#888;display:block;margin-bottom:4px">거래처</label>
+        <select id="adhoc-client" style="width:100%;padding:8px 10px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box">
+          ${activeClients.map(c=>`<option value="${c.id}"${c.id===clientId?' selected':''}>${esc(c.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;color:#888;display:block;margin-bottom:6px">청구 유형</label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${['신고대리','조정료','성실신고'].map(t=>`<label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;padding:6px 14px;border-radius:8px;border:1.5px solid #e0e0e0;background:#fff"><input type="radio" name="adhoc-type" value="${t}" ${t==='신고대리'?'checked':''}> ${t}</label>`).join('')}
+        </div>
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;color:#888;display:block;margin-bottom:4px">청구 월</label>
+        <input type="month" id="adhoc-ym" value="${ym}" style="width:100%;padding:8px 10px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box">
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;color:#888;display:block;margin-bottom:4px">청구액 (원)</label>
+        <input type="number" id="adhoc-amount" value="0" style="width:100%;padding:8px 10px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box" onclick="this.select()">
+      </div>
+      <div style="margin-bottom:16px">
+        <label style="font-size:12px;color:#888;display:block;margin-bottom:4px">설명 (선택)</label>
+        <input type="text" id="adhoc-desc" placeholder="예: 2026년 1기 부가세 신고" style="width:100%;padding:8px 10px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box">
+      </div>
+      <div style="display:flex;gap:8px">
+        <button onclick="saveAdHocFee()" class="btn-primary" style="flex:1;padding:10px">청구 추가</button>
+        <button onclick="closeModal()" style="padding:10px 16px;border-radius:8px;border:1px solid #e0e0e0;background:#fff;cursor:pointer;font-family:inherit">취소</button>
+      </div>
+    </div>
+  </div>`);
+}
+
+function saveAdHocFee() {
+  const clientId = Number(document.getElementById('adhoc-client')?.value);
+  const type = document.querySelector('input[name="adhoc-type"]:checked')?.value;
+  const ym = document.getElementById('adhoc-ym')?.value;
+  const amount = parseInt(document.getElementById('adhoc-amount')?.value||0);
+  const desc = document.getElementById('adhoc-desc')?.value?.trim()||'';
+  if (!clientId || !type || !ym || !amount) { alert('거래처, 유형, 월, 청구액을 입력해주세요.'); return; }
+  if (!G.adHocFees) G.adHocFees = {};
+  if (!G.adHocFees[clientId]) G.adHocFees[clientId] = [];
+  G.adHocFees[clientId].push({ id: Date.now(), type, ym, amount, desc, date: new Date().toLocaleString('ko-KR'), collected: false, collectedDate: null });
+  saveToLS();
+  closeModal();
+  if (G.currentTab==='fees') renderFees();
+  else if (G.currentTab==='clients') renderClients();
+}
+
+function toggleAdHocFeeCollected(clientId, feeId) {
+  const fees = (G.adHocFees||{})[clientId];
+  if (!fees) return;
+  const f = fees.find(x=>x.id===feeId);
+  if (!f) return;
+  f.collected = !f.collected;
+  f.collectedDate = f.collected ? new Date().toLocaleString('ko-KR') : null;
+  saveToLS();
+  renderFees();
+}
+
+function deleteAdHocFee(clientId, feeId) {
+  if (!confirm('이 청구 항목을 삭제하시겠습니까?')) return;
+  if (!G.adHocFees?.[clientId]) return;
+  G.adHocFees[clientId] = G.adHocFees[clientId].filter(f=>f.id!==feeId);
+  saveToLS();
+  renderFees();
+}
+
 function renderFees() {
   if (!G.feesYM) G.feesYM = currentYM();
   const ym = G.feesYM;
@@ -4519,16 +4599,16 @@ function renderFees() {
     getDealTypes(c).some(d => ['기장','고문','성실'].includes(d))
   );
 
-  // 이 달 수임 이후인 거래처만 + 수수료 0원 제외
+  // 이 달 수임 이후인 거래처만 + 수수료 0원 제외 (해당 월 기준 기장료 사용)
   const feeClients = monthlyClients.filter(c => {
-    if (!c.fee) return false; // 수수료 0원 제외
+    if (!getFeeForYM(c, ym)) return false; // 수수료 0원 제외
     if (!c.contractDate) return true;
     const s = c.contractDate.slice(0,7);
     return s <= ym;
   });
 
-  const mFeeTotal     = feeClients.reduce((a,c)=>a+(c.fee||0),0);
-  const mFeeCollected = feeClients.filter(c=>G.monthlyFees[c.id]?.[ym]).reduce((a,c)=>a+(c.fee||0),0);
+  const mFeeTotal     = feeClients.reduce((a,c)=>a+getFeeForYM(c,ym),0);
+  const mFeeCollected = feeClients.filter(c=>G.monthlyFees[c.id]?.[ym]).reduce((a,c)=>a+getFeeForYM(c,ym),0);
   const mFeeUnpaid    = mFeeTotal - mFeeCollected;
   const mFeePct       = mFeeTotal ? Math.round(mFeeCollected/mFeeTotal*100) : 0;
 
@@ -4552,8 +4632,20 @@ function renderFees() {
   const fCollected = filingFees.filter(x=>x.collected).reduce((a,x)=>a+x.fee,0);
   const fUnpaid    = fTotal - fCollected;
 
-  const grandTotal     = mFeeTotal + fTotal;
-  const grandCollected = mFeeCollected + fCollected;
+  // 추가 청구 (신고대리/조정료/성실신고) — G.adHocFees
+  const allAdHocFees = Object.entries(G.adHocFees||{}).flatMap(([cidStr, fees]) => {
+    const cid = Number(cidStr);
+    const client = G.clients.find(c=>c.id===cid);
+    if (!client) return [];
+    return (fees||[]).map(f=>({...f, client, clientId: cid}));
+  });
+  allAdHocFees.sort((a,b)=>b.ym.localeCompare(a.ym)||a.client.name.localeCompare(b.client.name,'ko'));
+  const adhocTotal     = allAdHocFees.reduce((s,f)=>s+f.amount,0);
+  const adhocCollected = allAdHocFees.filter(f=>f.collected).reduce((s,f)=>s+f.amount,0);
+  const adhocUnpaid    = adhocTotal - adhocCollected;
+
+  const grandTotal     = mFeeTotal + fTotal + adhocTotal;
+  const grandCollected = mFeeCollected + fCollected + adhocCollected;
   const grandUnpaid    = grandTotal - grandCollected;
 
   // 월 네비게이션
@@ -4617,7 +4709,7 @@ function renderFees() {
       <td style="${hc['fm_dealType']?'display:none':''}">${getDealTypes(c).map(d=>dealBadge(d)).join('')}</td>
       <td style="color:#555;font-size:12px;${hc['fm_manager']?'display:none':''}">${getManagers(c).join(', ')||'-'}</td>
       <td style="font-size:11px;color:#888;${hc['fm_contractDate']?'display:none':''}">${c.contractDate?c.contractDate.slice(0,7):'-'}</td>
-      <td style="text-align:right;font-weight:700;color:#7b1fa2;${hc['fm_fee']?'display:none':''}">${(c.fee||0).toLocaleString()}원</td>
+      <td style="text-align:right;font-weight:700;color:#7b1fa2;${hc['fm_fee']?'display:none':''}">${getFeeForYM(c,ym).toLocaleString()}원${getFeeForYM(c,ym)!==c.fee?`<div style="font-size:9px;color:#f57c00">변경됨</div>`:''}</td>
       <td style="text-align:center" onclick="toggleMonthlyFee(${c.id},'${ym}')">
         <div class="chk ${collected?'on':''}" style="margin:0 auto;width:26px;height:26px;${collected?'background:#c8e6c9;border-color:#2e7d32;color:#2e7d32':''}">${collected?'💰':''}</div>
         ${collected&&feeHist?`<div style="font-size:9px;color:#888;margin-top:1px">${feeHist.date.slice(0,10)}</div>`:''}
@@ -4629,8 +4721,8 @@ function renderFees() {
   };
   const monthlyRows = (_fmMgrKeys.length > 1 ? _fmMgrKeys : ['_all']).flatMap(mgrKey => {
     const cls = mgrKey === '_all' ? filteredFeeClients : _fmByMgr[mgrKey];
-    const subTotal = cls.reduce((a,c)=>a+(c.fee||0),0);
-    const subColl = cls.filter(c=>G.monthlyFees[c.id]?.[ym]).reduce((a,c)=>a+(c.fee||0),0);
+    const subTotal = cls.reduce((a,c)=>a+getFeeForYM(c,ym),0);
+    const subColl = cls.filter(c=>G.monthlyFees[c.id]?.[ym]).reduce((a,c)=>a+getFeeForYM(c,ym),0);
     const subPct = subTotal ? Math.round(subColl/subTotal*100) : 0;
     const header = _fmMgrKeys.length > 1 ? `<tr style="background:#e8eaf6"><td colspan="8" style="padding:4px 10px;font-size:11px;font-weight:700;color:#3949ab">👤 ${esc(mgrKey)} <span style="font-weight:400;color:#7986cb">${cls.length}개 업체 · ${subTotal.toLocaleString()}원 · 수금${subPct}%</span></td></tr>` : '';
     const rows = cls.map(_genFeeRow);
@@ -4794,6 +4886,46 @@ function renderFees() {
     </table></div>
     ${filteredFilingFees.length===0?'<div style="color:#aaa;text-align:center;padding:16px;font-size:13px">필터 조건에 맞는 항목 없음</div>':''}
     ` : '<div style="color:#aaa;text-align:center;padding:20px">신고 수수료 청구 내역 없음 (신고및결재 탭에서 수수료청구액 입력)</div>'}
+    </div>
+  </div>
+
+  <!-- 추가 청구 (신고대리·조정료·성실신고) -->
+  <div class="card" style="margin-top:16px;margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <div style="display:flex;align-items:center;gap:8px">
+        ${sectionToggleBtn('fees-adhoc')}
+        <div class="card-title" style="margin-bottom:0">📋 추가 청구 (신고대리·조정료·성실신고)</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:12px;color:#555">청구 ${adhocTotal.toLocaleString()}원 · 수금 ${adhocCollected.toLocaleString()}원 · 미수금 ${adhocUnpaid.toLocaleString()}원</span>
+        <button onclick="openAdHocFeeModal(null)" style="padding:5px 12px;border-radius:7px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">+ 청구 추가</button>
+      </div>
+    </div>
+    <div style="${(G.sectionCollapsed||{})['fees-adhoc']?'display:none':''}">
+    ${allAdHocFees.length > 0 ? `
+    <div class="tbl-wrap"><table>
+      <thead><tr>
+        <th style="padding:4px 8px">거래처</th>
+        <th style="padding:4px 6px">유형</th>
+        <th style="padding:4px 6px">청구월</th>
+        <th style="padding:4px 6px">설명</th>
+        <th style="text-align:right;padding:4px 6px">청구액</th>
+        <th style="width:60px;text-align:center;padding:3px">수금</th>
+        <th style="width:40px;text-align:center"></th>
+      </tr></thead>
+      <tbody>${allAdHocFees.map(f=>`<tr style="background:${f.collected?'#e8f5e9':'#fff'}">
+        <td><div style="font-weight:600;font-size:13px">${esc(f.client.name)}</div><div style="font-size:11px;color:#888">${esc(f.client.rep||'')}</div></td>
+        <td><span style="background:#f3e5f5;color:#7b1fa2;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700">${esc(f.type)}</span></td>
+        <td style="font-size:12px;color:#555">${f.ym}</td>
+        <td style="font-size:12px;color:#888">${esc(f.desc||'')}</td>
+        <td style="text-align:right;font-weight:700;color:#7b1fa2">${f.amount.toLocaleString()}원</td>
+        <td style="text-align:center;cursor:pointer" onclick="toggleAdHocFeeCollected(${f.clientId},${f.id})">
+          <div class="chk ${f.collected?'on':''}" style="margin:0 auto;width:26px;height:26px;${f.collected?'background:#c8e6c9;border-color:#2e7d32;color:#2e7d32':''}">${f.collected?'💰':''}</div>
+        </td>
+        <td style="text-align:center"><button onclick="deleteAdHocFee(${f.clientId},${f.id})" style="padding:2px 6px;border-radius:5px;border:1px solid #ef9a9a;background:#fdecea;color:#c62828;font-size:11px;cursor:pointer;font-family:inherit" title="삭제">✕</button></td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+    ` : '<div style="color:#aaa;text-align:center;padding:20px">추가 청구 내역 없음 — 거래처 목록 또는 위 버튼에서 신고대리·조정료·성실신고 수수료를 추가하세요</div>'}
     </div>
   </div>
 
@@ -7834,6 +7966,7 @@ async function loadFromFirebase() {
       G.feePayments = data.feePayments ? JSON.parse(data.feePayments) : {};
       G.filterPresets = data.filterPresets ? JSON.parse(data.filterPresets) : [];
       G.contactLogs = data.contactLogs ? JSON.parse(data.contactLogs) : {};
+      G.adHocFees = data.adHocFees ? JSON.parse(data.adHocFees) : {};
     } else {
       // 신규 계정: 로컬스토리지 데이터 마이그레이션 시도
       const saved = localStorage.getItem('tm_clients');
@@ -7865,6 +7998,7 @@ async function loadFromFirebase() {
         G.feePayments = JSON.parse(localStorage.getItem('tm_feePayments')||'{}');
         G.filterPresets = JSON.parse(localStorage.getItem('tm_filterPresets')||'[]');
         G.contactLogs = JSON.parse(localStorage.getItem('tm_contactLogs')||'{}');
+        G.adHocFees = JSON.parse(localStorage.getItem('tm_adHocFees')||'{}');
         saveToLS(); // Firebase에 업로드
       } else {
         const json = await decompressB64(CLIENTS_B64);
@@ -7902,6 +8036,7 @@ async function loadFromFirebase() {
     G.feePayments = JSON.parse(localStorage.getItem('tm_feePayments')||'{}');
     G.filterPresets = JSON.parse(localStorage.getItem('tm_filterPresets')||'[]');
     G.contactLogs = JSON.parse(localStorage.getItem('tm_contactLogs')||'{}');
+    G.adHocFees = JSON.parse(localStorage.getItem('tm_adHocFees')||'{}');
   }
   // Apply dark mode if saved
   if (localStorage.getItem('tm_darkMode')) { G.darkMode=true; document.body.classList.add('dark-mode'); }
