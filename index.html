@@ -207,6 +207,8 @@ body.dark-mode .stat-label { color: #aaa; }
 body.dark-mode .stat-sub { color: #888; }
 body.dark-mode .overlay { background: rgba(0,0,0,.65); }
 .client-mobile-filters { display: none; }
+.pwa-only { display: none; }
+@media (display-mode: standalone) { .pwa-only { display: inline-flex !important; } }
 @media (max-width: 768px) {
   #main { padding: 12px 8px; }
   .stat-grid { grid-template-columns: repeat(2, 1fr); }
@@ -331,6 +333,7 @@ body.dark-mode .overlay { background: rgba(0,0,0,.65); }
     TaxManager
   </div>
   <div id="header-btns">
+    <button class="hbtn pwa-only" onclick="window.location.reload()" title="새로고침">🔄</button>
     <span id="badge-no-data" class="badge-alert" style="display:none"></span>
     <button class="hbtn" onclick="openGlobalSearch()" title="전체 검색">🔍</button>
     <button class="hbtn" id="notif-btn" onclick="openNotificationCenter(this)" title="알림 센터" style="position:relative">🔔<span id="notif-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:#e53935;color:#fff;border-radius:10px;padding:1px 5px;font-size:10px;font-weight:700;line-height:1.4"></span></button>
@@ -7878,8 +7881,15 @@ function printFeeInvoice(clientId) {
     .tr td{padding:12px 12px}
     .note{font-size:11px;color:#aaa;margin-bottom:20px}
     .stamp{display:inline-block;border:2px solid #ccc;border-radius:6px;padding:10px 24px;font-size:12px;color:#999;margin-top:16px}
-    @media print{body{padding:20px}}
+    @media print{body{padding:20px}.toolbar{display:none!important}}
+    .toolbar{display:flex;gap:8px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #eee}
+    .toolbar button{padding:8px 18px;border-radius:8px;border:1.5px solid #ddd;background:#f5f5f5;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+    .toolbar button.primary{background:#4f8ef7;color:#fff;border-color:#4f8ef7}
   </style></head><body>
+    <div class="toolbar">
+      <button onclick="window.close()">← 닫기</button>
+      <button class="primary" onclick="window.print()">🖨 인쇄 / PDF</button>
+    </div>
     <div class="top">
       <div><div class="office-name">${esc(s.name||'세무회계사무소')}</div><div class="office-sub">대표세무사: ${esc(s.rep||'')} | ${esc(s.phone||'')}</div></div>
       <div><div class="doc-title">수 수 료 청 구 서</div><div class="doc-date">${now.toLocaleDateString('ko-KR')} 기준</div></div>
