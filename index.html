@@ -4230,10 +4230,8 @@ function renderJulgae() {
       const curYr = new Date().getFullYear();
       G.julgaeSelectedYears = yearOrder.includes(curYr) ? [curYr] : yearOrder.slice(-1);
     }
-    G.julgaeSelectedYears = (G.julgaeSelectedYears||[]).filter(y=>byYear[y]);
-    if (!G.julgaeSelectedYears.length && yearOrder.length) G.julgaeSelectedYears = yearOrder.slice(-1);
 
-    // Init selected periods from selected years on first load
+    // Init selected periods on first load
     if (!G.julgaeSelectedPeriods) {
       const curYr = new Date().getFullYear();
       const byDday = periods.filter(p=>{ const d=julgaeDDay(p); return d&&d.label.startsWith('D-')&&parseInt(d.label.slice(2))<=30; });
@@ -4244,33 +4242,14 @@ function renderJulgae() {
     }
 
     const selYears = new Set(G.julgaeSelectedYears);
-    const selSet = new Set(G.julgaeSelectedPeriods);
+    const selSet = new Set((G.julgaeSelectedPeriods||[]).map(x=>Number(x)));
     const _sl = p => p.label.replace(/^\d{2}년 /, '').replace('부가세 ', '부가').replace('법인세 신고', '법인세').replace('종합소득세 신고', '종소세').replace('성실신고사업자 신고', '성실신고').replace('사업장현황신고', '사업장현황').replace(' 신고', '').replace('확정신고', '확정').replace('예정신고', '예정');
-
-    // Year pills
-    const yearPills = yearOrder.map(yr => {
-      const label = yr==='other'?'기타':yr+'년';
-      const isSel = selYears.has(yr);
-      return `<button onclick="_julgaeToggleYear(${JSON.stringify(yr)})" style="padding:5px 12px;border-radius:16px;border:1.5px solid ${isSel?'#4f8ef7':'#e0e0e0'};background:${isSel?'#e8f0fe':'#f9f9f9'};color:${isSel?'#1565c0':'#555'};font-size:12px;font-weight:${isSel?700:500};cursor:pointer;font-family:inherit;white-space:nowrap">${label}</button>`;
-    }).join('');
-
-    // List pills (periods from selected years)
-    const panelPeriods = periods.filter(p => {
-      const m = p.label.match(/^(\d{2})년/);
-      const yr = m ? (2000+Number(m[1])) : 'other';
-      return selYears.has(yr);
-    });
-    const listPills = panelPeriods.length
-      ? panelPeriods.map(p => {
-          const isSel = selSet.has(p.id);
-          const dd = julgaeDDay(p);
-          const ddHtml = dd ? `<span style="font-size:9px;background:${dd.color};color:#fff;border-radius:4px;padding:0 4px;margin-left:3px">${dd.label}</span>` : '';
-          return `<button onclick="_julgaeTogglePeriod(${p.id})" style="padding:5px 10px;border-radius:16px;border:1.5px solid ${isSel?'#4f8ef7':'#e0e0e0'};background:${isSel?'#e8f0fe':'#f9f9f9'};color:${isSel?'#1565c0':'#555'};font-size:12px;font-weight:${isSel?700:500};cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:2px;white-space:nowrap">${p.locked?'🔒':''}${esc(_sl(p))}${ddHtml}</button>`;
-        }).join('')
-      : `<span style="font-size:12px;color:#aaa">연도를 선택해주세요</span>`;
+    const yrLabel = yr => yr==='other'?'기타':yr+'년';
+    const yrSelLabel = selYears.size ? [...selYears].map(yrLabel).join(', ') : '연도 선택';
+    const lstSelLabel = selSet.size ? selSet.size+'개 선택' : '리스트 선택';
 
     // Tiles
-    const shownPeriods = periods.map((p,i)=>({p,i})).filter(({p})=>selSet.has(p.id));
+    const shownPeriods = periods.map((p,i)=>({p,i})).filter(({p})=>selSet.has(Number(p.id)));
     const tiles = shownPeriods.map(({p,i}) => {
       const pKey = p.id;
       let targets;
@@ -4309,15 +4288,13 @@ function renderJulgae() {
         </div>
         ${lockBtn}
       </div>
-      <div style="display:grid;grid-template-columns:auto 1fr;gap:12px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #f0f0f0;align-items:start">
-        <div>
-          <div style="font-size:10px;font-weight:700;color:#aaa;letter-spacing:.5px;margin-bottom:6px">신고연도</div>
-          <div style="display:flex;flex-direction:column;gap:5px">${yearPills}</div>
-        </div>
-        <div style="min-width:0">
-          <div style="font-size:10px;font-weight:700;color:#aaa;letter-spacing:.5px;margin-bottom:6px">신고리스트 <span style="font-weight:400;color:#bbb">(${selSet.size}개 선택)</span></div>
-          <div style="display:flex;flex-wrap:wrap;gap:5px">${listPills}</div>
-        </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #f0f0f0;flex-wrap:wrap">
+        <button onclick="openJulgaeYearPicker(this)" style="padding:7px 14px;border-radius:10px;border:1.5px solid ${selYears.size?'#4f8ef7':'#e0e0e0'};background:${selYears.size?'#e8f0fe':'#f9f9f9'};color:${selYears.size?'#1565c0':'#555'};font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:5px">
+          📅 <span>${esc(yrSelLabel)}</span> ▾
+        </button>
+        <button onclick="openJulgaeListPicker(this)" style="padding:7px 14px;border-radius:10px;border:1.5px solid ${selSet.size?'#7b1fa2':'#e0e0e0'};background:${selSet.size?'#f3e5f5':'#f9f9f9'};color:${selSet.size?'#6a1b9a':'#555'};font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:5px">
+          📋 <span>${esc(lstSelLabel)}</span> ▾
+        </button>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:8px">${tiles||'<span style="font-size:12px;color:#aaa">리스트를 선택하면 여기에 표시됩니다</span>'}</div>
     </div>`;
@@ -4652,16 +4629,6 @@ function togglePeriodLock(periodId) {
   renderJulgae();
 }
 
-function _julgaeToggleYear(yr) {
-  const sy = G.julgaeSelectedYears || [];
-  G.julgaeSelectedYears = sy.includes(yr) ? sy.filter(y=>y!==yr) : [...sy, yr];
-  renderJulgae();
-}
-function _julgaeTogglePeriod(pid) {
-  const sp = G.julgaeSelectedPeriods || [];
-  G.julgaeSelectedPeriods = sp.includes(pid) ? sp.filter(x=>x!==pid) : [...sp, pid];
-  renderJulgae();
-}
 
 function julgaeChkDown(el, pKey, clientId, field, isOn) {
   window._jcFired = false;
@@ -4693,83 +4660,91 @@ function julgaeChkCancel(el) {
   el.style.opacity = '';
 }
 
-function openJulgaePeriodPicker(btnEl) {
-  const existing = document.getElementById('jpp-popup');
+function _jDdHtml(p) {
+  const d = julgaeDDay(p); if(!d) return '';
+  return `<span style="font-size:10px;background:${d.color};color:#fff;border-radius:6px;padding:1px 6px;margin-left:4px">${d.label}</span>`;
+}
+function openJulgaeYearPicker(btnEl) {
+  const existing = document.getElementById('jyr-popup');
   if (existing) { existing.remove(); return; }
-  const periods = G.periods;
-  const selSet = new Set(G.julgaeSelectedPeriods||[]);
   const byYear = {}; const yearOrder = [];
-  periods.forEach(p=>{
+  G.periods.forEach(p => {
     const m = p.label.match(/^(\d{2})년/);
     const yr = m ? (2000+Number(m[1])) : 'other';
     if (!byYear[yr]) { byYear[yr]=[]; yearOrder.push(yr); }
     byYear[yr].push(p);
   });
-  const rect = btnEl.getBoundingClientRect();
+  const selYears = new Set((G.julgaeSelectedYears||[]).map(Number));
   const pop = document.createElement('div');
-  pop.id = 'jpp-popup';
-  pop.className = 'fpop';
-  pop.style.cssText += 'max-height:80vh;overflow-y:auto;min-width:260px;';
-  const top = Math.min(rect.bottom + 6, window.innerHeight - 400);
-  const left = Math.max(8, Math.min(rect.right - 260, window.innerWidth - 268));
-  pop.style.top = top + 'px'; pop.style.left = left + 'px';
-
-  function _jppDdHtml(p) {
-    const tpl = (typeof PERIOD_TEMPLATES!=='undefined'?PERIOD_TEMPLATES:[]).find(t=>t.tpl===p.reportType||t.reportType===p.reportType);
-    if(!tpl||!tpl.deadline) return '';
-    const mm=tpl.deadline.match(/(\d+)월\s*(\d+)일/); if(!mm) return '';
-    const t0=new Date(); t0.setHours(0,0,0,0);
-    const y0=t0.getFullYear(); let dl=new Date(y0,Number(mm[1])-1,Number(mm[2]));
-    if(dl<t0) dl=new Date(y0+1,Number(mm[1])-1,Number(mm[2]));
-    const diff=Math.ceil((dl-t0)/86400000);
-    const color=diff<=0?'#c62828':diff<=7?'#e53935':diff<=30?'#e65100':'#aaa';
-    const lbl=diff<=0?'오늘 마감':'D-'+diff;
-    return `<span style="font-size:10px;background:${color};color:#fff;border-radius:6px;padding:1px 6px;margin-left:4px">${lbl}</span>`;
-  }
-
-  function showYears() {
-    pop.innerHTML = `
-      <div style="font-size:12px;font-weight:800;color:#333;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #f0f0f0">📅 신고연도 선택</div>
-      <div style="display:flex;flex-direction:column;gap:7px">
-        ${yearOrder.map(yr=>{
-          const label = yr==='other'?'기타':yr+'년';
-          const cnt = byYear[yr].filter(p=>selSet.has(p.id)).length;
-          const total = byYear[yr].length;
-          return `<button onclick="window._jppShowYear(${JSON.stringify(yr)})" style="padding:11px 14px;border-radius:10px;border:1.5px solid ${cnt>0?'#4f8ef7':'#e0e0e0'};background:${cnt>0?'#e8f0fe':'#f9f9f9'};text-align:left;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:space-between;width:100%">
-            <span style="font-size:15px;font-weight:700;color:${cnt>0?'#1565c0':'#333'}">${label}</span>
-            <span style="font-size:12px;color:#888">${total}개${cnt>0?` · <span style="color:#1565c0;font-weight:700">${cnt}개 선택</span>`:''} ▶</span>
-          </button>`;
-        }).join('')}
-      </div>`;
-  }
-
-  window._jppShowYear = function(yr) {
-    const ps = byYear[yr] || [];
-    const label = yr==='other'?'기타':yr+'년';
-    pop.innerHTML = `
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #f0f0f0">
-        <button onclick="window._jppShowYears()" style="padding:4px 10px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:12px;cursor:pointer;font-family:inherit">← 뒤로</button>
-        <span style="font-size:12px;font-weight:800;color:#333">📅 ${esc(label)} 신고리스트</span>
-      </div>
-      <div>${ps.map(p=>`<label style="display:flex;align-items:center;gap:9px;padding:7px 6px;cursor:pointer;border-radius:8px" onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background=''">
-        <input type="checkbox" class="jpp-chk" data-pid="${p.id}" ${selSet.has(p.id)?'checked':''} style="width:17px;height:17px;cursor:pointer;accent-color:#4f8ef7;flex-shrink:0">
-        <span style="font-size:13px;font-weight:500">${esc(p.label)}${_jppDdHtml(p)}${p.locked?'<span style="font-size:10px;margin-left:4px">🔒</span>':''}</span>
-      </label>`).join('')}</div>
-      <div style="display:flex;gap:6px;margin-top:12px;padding-top:10px;border-top:1px solid #f0f0f0">
-        <button onclick="document.querySelectorAll('.jpp-chk').forEach(c=>c.checked=true)" style="flex:1;padding:8px 4px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:13px;cursor:pointer;font-family:inherit">전체</button>
-        <button onclick="document.querySelectorAll('.jpp-chk').forEach(c=>c.checked=false)" style="flex:1;padding:8px 4px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:13px;cursor:pointer;font-family:inherit">해제</button>
-        <button onclick="_jppConfirm()" style="flex:2;padding:8px 10px;border-radius:8px;border:none;background:#4f8ef7;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">확인</button>
-      </div>`;
-  };
-
-  window._jppShowYears = showYears;
-  showYears();
+  pop.id = 'jyr-popup'; pop.className = 'fpop';
+  pop.style.cssText += 'min-width:200px;';
+  const rect = btnEl.getBoundingClientRect();
+  const top = Math.min(rect.bottom + 6, window.innerHeight - 300);
+  const left = Math.max(8, Math.min(rect.left, window.innerWidth - 220));
+  pop.style.top = top+'px'; pop.style.left = left+'px';
+  pop.innerHTML = `
+    <div style="font-size:12px;font-weight:800;color:#333;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #f0f0f0">📅 신고연도 선택</div>
+    <div>${yearOrder.map(yr=>{
+      const label = yr==='other'?'기타':yr+'년';
+      const isSel = typeof yr==='number' ? selYears.has(yr) : (G.julgaeSelectedYears||[]).includes(yr);
+      const cnt = byYear[yr].length;
+      return `<label style="display:flex;align-items:center;gap:9px;padding:8px 6px;cursor:pointer;border-radius:8px" onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background=''">
+        <input type="checkbox" class="jyr-chk" data-yr="${yr}" ${isSel?'checked':''} style="width:18px;height:18px;cursor:pointer;accent-color:#4f8ef7;flex-shrink:0">
+        <span style="font-size:14px;font-weight:600">${label}</span>
+        <span style="font-size:11px;color:#aaa;margin-left:auto">${cnt}개</span>
+      </label>`;
+    }).join('')}</div>
+    <div style="display:flex;gap:6px;margin-top:12px;padding-top:10px;border-top:1px solid #f0f0f0">
+      <button onclick="document.querySelectorAll('.jyr-chk').forEach(c=>c.checked=true)" style="flex:1;padding:8px 4px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:13px;cursor:pointer;font-family:inherit">전체</button>
+      <button onclick="document.querySelectorAll('.jyr-chk').forEach(c=>c.checked=false)" style="flex:1;padding:8px 4px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:13px;cursor:pointer;font-family:inherit">해제</button>
+      <button onclick="_jyrConfirm()" style="flex:2;padding:8px 10px;border-radius:8px;border:none;background:#4f8ef7;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">확인</button>
+    </div>`;
   document.body.appendChild(pop);
-  const outside = e => { if(!pop.contains(e.target)&&e.target!==btnEl){pop.remove();document.removeEventListener('click',outside);window._jppShowYear=null;window._jppShowYears=null;} };
+  const outside = e => { if(!pop.contains(e.target)&&e.target!==btnEl){pop.remove();document.removeEventListener('click',outside);} };
+  setTimeout(()=>document.addEventListener('click',outside),10);
+}
+function _jyrConfirm() {
+  G.julgaeSelectedYears = [...document.querySelectorAll('.jyr-chk:checked')].map(c => {
+    const v = c.dataset.yr; return v==='other'?'other':Number(v);
+  });
+  const pop = document.getElementById('jyr-popup'); if(pop) pop.remove();
+  renderJulgae();
+}
+function openJulgaeListPicker(btnEl) {
+  const existing = document.getElementById('jpp-popup');
+  if (existing) { existing.remove(); return; }
+  const selYearNums = new Set((G.julgaeSelectedYears||[]).map(y=>y==='other'?'other':Number(y)));
+  const allPeriods = G.periods;
+  const periods = selYearNums.size > 0 ? allPeriods.filter(p => {
+    const m = p.label.match(/^(\d{2})년/);
+    const yr = m ? (2000+Number(m[1])) : 'other';
+    return selYearNums.has(yr);
+  }) : allPeriods;
+  const selSet = new Set((G.julgaeSelectedPeriods||[]).map(x=>Number(x)));
+  const pop = document.createElement('div');
+  pop.id = 'jpp-popup'; pop.className = 'fpop';
+  pop.style.cssText += 'max-height:70vh;overflow-y:auto;min-width:260px;';
+  const rect = btnEl.getBoundingClientRect();
+  const top = Math.min(rect.bottom + 6, window.innerHeight - 400);
+  const left = Math.max(8, Math.min(rect.left, window.innerWidth - 280));
+  pop.style.top = top+'px'; pop.style.left = left+'px';
+  pop.innerHTML = `
+    <div style="font-size:12px;font-weight:800;color:#333;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #f0f0f0">📋 신고리스트 선택</div>
+    <div>${periods.length ? periods.map(p=>`<label style="display:flex;align-items:center;gap:9px;padding:7px 6px;cursor:pointer;border-radius:8px" onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background=''">
+      <input type="checkbox" class="jpp-chk" data-pid="${p.id}" ${selSet.has(Number(p.id))?'checked':''} style="width:17px;height:17px;cursor:pointer;accent-color:#7b1fa2;flex-shrink:0">
+      <span style="font-size:13px;font-weight:500">${esc(p.label)}${_jDdHtml(p)}${p.locked?'<span style="font-size:10px;margin-left:4px">🔒</span>':''}</span>
+    </label>`).join('') : '<div style="font-size:12px;color:#aaa;padding:10px 6px">연도를 먼저 선택해주세요</div>'}</div>
+    <div style="display:flex;gap:6px;margin-top:12px;padding-top:10px;border-top:1px solid #f0f0f0">
+      <button onclick="document.querySelectorAll('.jpp-chk').forEach(c=>c.checked=true)" style="flex:1;padding:8px 4px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:13px;cursor:pointer;font-family:inherit">전체</button>
+      <button onclick="document.querySelectorAll('.jpp-chk').forEach(c=>c.checked=false)" style="flex:1;padding:8px 4px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:13px;cursor:pointer;font-family:inherit">해제</button>
+      <button onclick="_jppConfirm()" style="flex:2;padding:8px 10px;border-radius:8px;border:none;background:#7b1fa2;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">확인</button>
+    </div>`;
+  document.body.appendChild(pop);
+  const outside = e => { if(!pop.contains(e.target)&&e.target!==btnEl){pop.remove();document.removeEventListener('click',outside);} };
   setTimeout(()=>document.addEventListener('click',outside),10);
 }
 function _jppConfirm() {
-  G.julgaeSelectedPeriods = [...document.querySelectorAll('.jpp-chk:checked')].map(c=>c.dataset.pid);
+  G.julgaeSelectedPeriods = [...document.querySelectorAll('.jpp-chk:checked')].map(c=>Number(c.dataset.pid));
   const pop = document.getElementById('jpp-popup'); if(pop) pop.remove();
   renderJulgae();
 }
