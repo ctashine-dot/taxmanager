@@ -5634,10 +5634,16 @@ function importClientsFromXLS() {
     dealType:(d.dealTypes||['기장'])[0], manager:(d.managers||[])[0]||''
   }, d));
   rebuildAllContracts(false);
+  // 기장료 일괄 변경 자동 적용
+  let feeCount = 0;
+  G.clients.forEach(c => {
+    const nf = _FEE_UPDATE_MAP[c.name];
+    if (nf !== undefined) { c.fee = nf; feeCount++; }
+  });
   saveToLS();
   closeModal();
   renderClients();
-  toast('거래처 데이터 교체 완료! '+G.clients.length+'개 거래처가 로드되었습니다.', 'success', 4000);
+  toast('거래처 데이터 교체 완료! '+G.clients.length+'개 거래처 로드, 기장료 '+feeCount+'건 자동 적용.', 'success', 4000);
 }
 function syncFromRawData() {
   const normNo = s => String(s||'').replace(/[^0-9]/g,'');
