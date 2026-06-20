@@ -501,7 +501,7 @@ let G = {
   julgaeBulkMode: false,
   julgaeBulkSelected: [],
   filterRisk: '',
-  clientSort: { field: 'n', dir: 'asc' },
+  clientSort: { field: 'd', dir: 'asc' },
   periodNotes: {},
   julgaeLinks: {},
   feePayments: {},
@@ -829,7 +829,7 @@ function getStats() {
 // ══════════════════════════════════════════════════════
 // 필터링
 // ══════════════════════════════════════════════════════
-const DEAL_SORT_ORDER = ['기장','성실','신고대리','종소세대리','고문'];
+const DEAL_SORT_ORDER = ['고문','성실','기장','신고대리','종소세대리'];
 function dealSortRank(dt) {
   const i = DEAL_SORT_ORDER.indexOf(dt);
   return i >= 0 ? i : DEAL_SORT_ORDER.length;
@@ -979,7 +979,7 @@ function filteredClients() {
     // 대표업체: groupMain=true 인 멤버, 없으면 수임일자 가장 빠른 멤버
     const lead = members.find(m=>m.groupMain) ||
       [...members].sort((a,b)=>csk(a).localeCompare(csk(b))||a.name.localeCompare(b.name,'ko'))[0];
-    groupSortKeys[k] = { dateKey: csk(lead), lead: lead.name, mainId: lead.id };
+    groupSortKeys[k] = { dateKey: csk(lead), lead: lead.name, mainId: lead.id, dealRank: Math.min(...members.map(m=>dealSortRankForClient(m))) };
   });
 
   // 검색 중일 때는 일치도 높은 순으로 정렬
@@ -999,15 +999,19 @@ function filteredClients() {
     return list.sort((a, b) => score(b) - score(a));
   }
 
-  // 정렬 적용 (기본: 수임일자 오름차순)
-  const {field, dir} = G.clientSort || {field:'c', dir:'asc'};
-  if (field !== 'c' || dir !== 'asc') {
+  // 정렬 적용 (기본: 수임내용순 → 수임일자 오름차순)
+  const {field, dir} = G.clientSort || {field:'d', dir:'asc'};
+  if (field !== 'd' || dir !== 'asc') {
     list.sort((a,b) => {
       let av, bv;
+      if (field === 'd') {
+        const ar = dealSortRankForClient(a), br = dealSortRankForClient(b);
+        if (ar !== br) return dir==='asc' ? ar-br : br-ar;
+        return csk(a).localeCompare(csk(b));
+      }
       if (field === 'c') { av = csk(a); bv = csk(b); return dir==='asc' ? av.localeCompare(bv) : bv.localeCompare(av); }
       if (field === 'n') { av = a.name||''; bv = b.name||''; return dir==='asc' ? av.localeCompare(bv,'ko') : bv.localeCompare(av,'ko'); }
       if (field === 'r') { av = a.rep||''; bv = b.rep||''; return dir==='asc' ? av.localeCompare(bv,'ko') : bv.localeCompare(av,'ko'); }
-      if (field === 'd') { av = getDealTypes(a)[0]||''; bv = getDealTypes(b)[0]||''; return dir==='asc' ? av.localeCompare(bv,'ko') : bv.localeCompare(av,'ko'); }
       if (field === 'f') { av = a.fee||0; bv = b.fee||0; return dir==='asc' ? av-bv : bv-av; }
       if (field === 'm') { av = getManagers(a)[0]||''; bv = getManagers(b)[0]||''; return dir==='asc' ? av.localeCompare(bv,'ko') : bv.localeCompare(av,'ko'); }
       if (field === 'o') { av = a.taxOffice||''; bv = b.taxOffice||''; return dir==='asc' ? av.localeCompare(bv,'ko') : bv.localeCompare(av,'ko'); }
@@ -1020,6 +1024,7 @@ function filteredClients() {
     const ka = getGroupKey(a), kb = getGroupKey(b);
     if (ka !== kb) {
       const ga = groupSortKeys[ka], gb = groupSortKeys[kb];
+      if (ga.dealRank !== gb.dealRank) return ga.dealRank - gb.dealRank;
       return ga.dateKey.localeCompare(gb.dateKey) || ga.lead.localeCompare(gb.lead, 'ko');
     }
     // 같은 그룹 내: 대표업체 먼저, 나머지는 수임일자 → 이름
@@ -1605,7 +1610,7 @@ function renderClients() {
 
   <div style="display:flex;align-items:center;justify-content:flex-end;gap:5px;flex-wrap:wrap;margin-bottom:8px">
     ${(()=>{
-      const sf = (G.clientSort||{}).field||'c', sd = (G.clientSort||{}).dir||'asc';
+      const sf = (G.clientSort||{}).field||'d', sd = (G.clientSort||{}).dir||'asc';
       const opts = [{k:'c',l:'수임일자'},{k:'n',l:'업체명'},{k:'r',l:'대표자'},{k:'d',l:'수임내용'},{k:'f',l:'수수료'},{k:'m',l:'담당자'}];
       const btns = opts.map(({k,l})=>{
         const active = sf===k;
@@ -1614,7 +1619,7 @@ function renderClients() {
         const st = active ? 'background:#e8f0fe;color:#1565c0;border:1.5px solid #4f8ef7;font-weight:700' : 'background:#f5f5f5;color:#888;border:1.5px solid #e0e0e0';
         return `<button onclick="G.clientSort={field:'${k}',dir:'${nextDir}'};G.clientPage=0;renderClients()" style="padding:4px 9px;border-radius:16px;font-size:11px;cursor:pointer;font-family:inherit;${st}">${l}${icon}</button>`;
       }).join('');
-      const resetBtn = (sf!=='c'||sd!=='asc') ? `<button onclick="G.clientSort={field:'c',dir:'asc'};G.clientPage=0;renderClients()" style="padding:4px 7px;border-radius:16px;font-size:10px;cursor:pointer;font-family:inherit;background:#fdecea;color:#c62828;border:1.5px solid #ef9a9a" title="정렬 초기화">✕</button>` : '';
+      const resetBtn = (sf!=='d'||sd!=='asc') ? `<button onclick="G.clientSort={field:'d',dir:'asc'};G.clientPage=0;renderClients()" style="padding:4px 7px;border-radius:16px;font-size:10px;cursor:pointer;font-family:inherit;background:#fdecea;color:#c62828;border:1.5px solid #ef9a9a" title="정렬 초기화">✕</button>` : '';
       return `<div style="display:contents">${btns}${resetBtn}</div>`;
     })()}
     <div style="font-size:12px;color:#888;white-space:nowrap;margin-left:4px">총 ${list.length}개 (${G.clientPage+1}/${totalPages})</div>
