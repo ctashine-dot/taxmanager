@@ -743,9 +743,9 @@ const CONTRACT_GROUPS = [
     {key:'부가세신고', label:'부가세 신고', vat:['일반','간이','간세'], tax:['법인','개인']},
     {key:'사업장현황신고', label:'사업장현황 신고', vat:['면세'], tax:['개인']},
     {key:'법인세', label:'법인세 신고', vat:['일반','간이','간세','면세'], tax:['법인']},
+    {key:'원천세', label:'원천세 신고', vat:['일반','간이','간세','면세'], tax:['법인','개인']},
     {key:'소득세', label:'소득세 신고', vat:['일반','간이','간세','면세'], tax:['개인']},
     {key:'세무조정', label:'세무조정', vat:['일반','간이','간세','면세'], tax:['법인','개인']},
-    {key:'원천세', label:'원천세 신고', vat:['일반','간이','간세','면세'], tax:['법인','개인']},
   ]},
 ];
 
@@ -753,6 +753,14 @@ function contractLabel(key) {
   for (const g of CONTRACT_GROUPS)
     for (const i of g.items) if (i.key === key) return i.label;
   return key;
+}
+
+function buildContractAreaHTML() {
+  const avail = availableContracts(window._formData.vatType, window._formData.taxType);
+  const items = avail.flatMap(g=>g.items);
+  const sel = window._formData.contracts||[];
+  const seongsiOn = window._formData.seongsi ? 'on' : '';
+  return `<div class="contract-chips">${items.map(item=>`<button type="button" class="contract-chip ${sel.includes(item.key)?'on':''}" onclick="toggleContract('${item.key}')">${item.label}</button>`).join('')}<button type="button" class="contract-chip ${seongsiOn}" onclick="window._formData.seongsi=!window._formData.seongsi;this.classList.toggle('on',window._formData.seongsi)">성실신고확인대상</button></div>`;
 }
 
 function availableContracts(vatType, taxType) {
@@ -874,11 +882,8 @@ function _onDealTypeChange(value) {
   window._formData.dealTypes = value ? [value] : [];
   if (!window._formIsNew) return;
   window._formData.contracts = getDefaultContracts(value, window._formData.taxType, window._formData.vatType);
-  var a = document.getElementById('contract-area');
-  if (!a) return;
-  const av = availableContracts(window._formData.vatType, window._formData.taxType);
-  const allItems = av.flatMap(g=>g.items);
-  a.innerHTML = '<div class="contract-chips">'+allItems.map(item => '<button type="button" class="contract-chip '+((window._formData.contracts||[]).includes(item.key)?'on':'')+'" onclick="toggleContract(\''+item.key+'\')">'+item.label+'</button>').join('')+'</div>';
+  const a = document.getElementById('contract-area');
+  if (a) a.innerHTML = buildContractAreaHTML();
 }
 
 function gradeBadge(grade, manual) {
@@ -2869,11 +2874,7 @@ function openForm(id) {
     : (isEdit && !c.soloGroup && c.rep ? G.clients.filter(cl=>cl.id!==c.id&&!cl.soloGroup&&!cl.relatedGroup&&cl.rep===c.rep) : []);
 
   window._formIsNew = (id === null);
-  function contractsHTML() {
-    const avail = availableContracts(window._formData.vatType, window._formData.taxType);
-    const allItems = avail.flatMap(g=>g.items);
-    return '<div class="contract-chips">' + allItems.map(item=>'<button type="button" class="contract-chip '+((window._formData.contracts||[]).includes(item.key)?'on':'')+'" onclick="toggleContract(\''+item.key+'\')">'+item.label+'</button>').join('') + '</div>';
-  }
+  function contractsHTML() { return buildContractAreaHTML(); }
 
   function terminationHTML() {
     const s = window._formData.status;
@@ -2920,18 +2921,16 @@ function openForm(id) {
     </div>
 
     <div class="c3" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <div>
-        <div class="ff">
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <div class="ff" style="flex:1">
           <label class="ffl">사업자번호</label>
           <input class="finput" id="f-bizNo" value="${esc(c.bizNo||'')}" placeholder="000-00-00000" oninput="validateBizNo(this.value,this)">
         </div>
-        <div id="bizno-msg" style="font-size:10px;margin-top:2px;padding-left:4px"></div>
+        <div id="bizno-msg" style="font-size:10px;padding-left:4px"></div>
       </div>
-      <div>
-        <div class="ff">
-          <label class="ffl" id="f-jumin-label">${c.taxType==='법인'?'법인번호':'주민번호'}</label>
-          <input class="finput" id="f-jumin" value="${esc(c.jumin||'')}" placeholder="000000-0000000" oninput="window._formData.jumin=this.value">
-        </div>
+      <div class="ff">
+        <label class="ffl" id="f-jumin-label">${c.taxType==='법인'?'법인번호':'주민번호'}</label>
+        <input class="finput" id="f-jumin" value="${esc(c.jumin||'')}" placeholder="000000-0000000" oninput="window._formData.jumin=this.value">
       </div>
     </div>
 
@@ -3011,7 +3010,7 @@ function openForm(id) {
           ${c.relatedGroup||c.soloGroup?`<button type="button" onclick="document.getElementById('f-relatedGroup').value='';window._formData.relatedGroup='';window._formData.soloGroup=false" style="padding:3px 8px;border-radius:6px;border:1px solid #fca5a5;background:#fef2f2;color:#e53935;cursor:pointer;font-family:inherit;font-size:11px;white-space:nowrap">✕</button>`:''}
         </div>
       </div>
-      ${_groupMembers.length>0?`<div style="display:flex;flex-wrap:wrap;gap:3px;align-items:center;margin-bottom:5px"><span style="font-size:10px;color:#888;margin-right:2px">같은 그룹:</span>${_groupMembers.map(cl=>`<span style="background:#e8f0fe;color:#4f8ef7;border-radius:8px;padding:1px 8px;font-size:11px">👥 ${esc(cl.name)}</span>`).join('')}</div>`:''}
+      ${_groupMembers.length>0?`<div style="margin-bottom:5px"><button type="button" id="members-toggle" onclick="(function(){var d=document.getElementById('members-list');var s=d.style.display==='none';d.style.display=s?'flex':'none';document.getElementById('members-toggle').textContent=s?'▲ 그룹원 (${_groupMembers.length}명)':'▼ 그룹원 (${_groupMembers.length}명)'})()" style="font-size:11px;color:#888;background:none;border:1px solid #e0e4f0;border-radius:6px;padding:3px 10px;cursor:pointer;font-family:inherit;width:100%;text-align:left">▼ 그룹원 (${_groupMembers.length}명)</button><div id="members-list" style="display:none;flex-wrap:wrap;gap:3px;align-items:center;padding-top:5px">${_groupMembers.map(cl=>`<span style="background:#e8f0fe;color:#4f8ef7;border-radius:8px;padding:1px 8px;font-size:11px">👥 ${esc(cl.name)}</span>`).join('')}</div></div>`:''}
       ${_allGroups.length>0?`
         <button type="button" id="groups-toggle" onclick="(function(){var d=document.getElementById('groups-list');var s=d.style.display==='none';d.style.display=s?'flex':'none';document.getElementById('groups-toggle').textContent=s?'▲ 접기':'▼ 기존 그룹 (${_allGroups.length}개)'})()" style="font-size:11px;color:#4f8ef7;background:none;border:1px solid #c5cae9;border-radius:6px;padding:3px 10px;cursor:pointer;font-family:inherit;width:100%;text-align:left">▼ 기존 그룹 (${_allGroups.length}개)</button>
         <div id="groups-list" style="display:none;flex-wrap:wrap;gap:4px;margin-top:5px">
@@ -3042,18 +3041,14 @@ function openForm(id) {
     </div>
 
     <div class="c3">
-      <div style="font-size:11px;font-weight:700;color:#555;margin-bottom:4px">태그 <span style="font-weight:400;color:#aaa">(Enter로 추가)</span></div>
-      <div id="form-tags-display" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:5px">
-        ${((G.clientTags||{})[c.id]||[]).map(t=>`<span style="background:#e8f0fe;color:#4f8ef7;border-radius:10px;padding:2px 10px;font-size:12px;display:flex;align-items:center;gap:4px">${esc(t)}<button type="button" onclick="removeFormTag('${esc(t)}')" style="border:none;background:transparent;color:#4f8ef7;cursor:pointer;padding:0;font-size:13px;line-height:1">×</button></span>`).join('')}
+      <div class="ff" style="margin-bottom:5px">
+        <label class="ffl">태그</label>
+        <input class="finput" id="form-tag-input" placeholder="입력 후 Enter" onkeydown="addFormTag(event)">
       </div>
-      <input class="finput" id="form-tag-input" placeholder="태그 입력 후 Enter" onkeydown="addFormTag(event)">
+      <div id="form-tags-display" style="display:flex;flex-wrap:wrap;gap:5px;padding:2px 4px;min-height:0">
+        ${((G.clientTags||{})[c.id]||[]).map(t=>`<span style="background:#4f8ef7;color:#fff;border-radius:10px;padding:3px 10px;font-size:12px;display:flex;align-items:center;gap:5px;font-weight:600">${esc(t)}<button type="button" onclick="removeFormTag('${esc(t)}')" style="border:none;background:rgba(255,255,255,0.3);color:#fff;cursor:pointer;padding:0 2px;font-size:13px;line-height:1;border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center">×</button></span>`).join('')}
+      </div>
     </div>
-
-    <label class="c3" style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px 0">
-      <input type="checkbox" id="f-seongsi" ${c.seongsi?'checked':''} onchange="window._formData.seongsi=this.checked" style="width:16px;height:16px;cursor:pointer;accent-color:#4f8ef7">
-      <span style="font-size:12px;font-weight:600">성실신고확인 대상</span>
-      <span style="font-size:10px;color:#aaa">(체크 시 성실사업자 리스트 포함)</span>
-    </label>
 
   </div>
   <div class="btn-row">
@@ -3082,11 +3077,7 @@ window.onFormSelect = function(field, val) {
     } else {
       window._formData.contracts = (window._formData.contracts||[]).filter(k=>avail.includes(k));
     }
-    document.getElementById('contract-area').innerHTML = (()=>{
-      const avail2 = availableContracts(window._formData.vatType,window._formData.taxType);
-      const items2 = avail2.flatMap(g=>g.items);
-      return '<div class="contract-chips">'+items2.map(item=>`<button type="button" class="contract-chip ${(window._formData.contracts||[]).includes(item.key)?'on':''}" onclick="toggleContract('${item.key}')">${item.label}</button>`).join('')+'</div>';
-    })();
+    document.getElementById('contract-area').innerHTML = buildContractAreaHTML();
   }
   if (field==='status') {
     document.getElementById('termination-area').innerHTML = (()=>{
@@ -3191,17 +3182,8 @@ window.toggleFormManager = function(v) {
 window.toggleContract = function(key) {
   const c = window._formData.contracts||[];
   window._formData.contracts = c.includes(key)?c.filter(x=>x!==key):[...c,key];
-  document.querySelectorAll('.contract-chip').forEach(el=>{
-    el.classList.toggle('on', window._formData.contracts.includes(el.textContent.trim()===contractLabel(key)?key:
-      CONTRACT_GROUPS.flatMap(g=>g.items).find(i=>i.label===el.textContent.trim())?.key||''));
-  });
-  // redraw chips
   const area = document.getElementById('contract-area');
-  if (area) {
-    const avail = availableContracts(window._formData.vatType, window._formData.taxType);
-    const items3 = avail.flatMap(g=>g.items);
-    area.innerHTML = '<div class="contract-chips">'+items3.map(item=>`<button type="button" class="contract-chip ${(window._formData.contracts||[]).includes(item.key)?'on':''}" onclick="toggleContract('${item.key}')">${item.label}</button>`).join('')+'</div>';
-  }
+  if (area) area.innerHTML = buildContractAreaHTML();
 };
 
 window.saveForm = function(id) {
