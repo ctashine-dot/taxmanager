@@ -1026,14 +1026,19 @@ function setClientGradeManual(clientId, grade) {
 
 function _filterJuminGroups(sortedList, getGroupKey) {
   const groups = {}, keyToLead = {}, final = [];
+  const relGroups = {}, relKeyToLead = {};
   for (const c of sortedList) {
     const gk = getGroupKey(c);
     if (gk.startsWith('J:')) {
       if (!keyToLead[gk]) { keyToLead[gk] = c.id; groups[c.id] = []; final.push(c); }
       else groups[keyToLead[gk]].push(c);
+    } else if (gk.startsWith('G:')) {
+      if (!relKeyToLead[gk]) { relKeyToLead[gk] = c.id; relGroups[c.id] = []; final.push(c); }
+      else relGroups[relKeyToLead[gk]].push(c);
     } else { final.push(c); }
   }
   window._juminGroups = groups;
+  window._relatedGroups = relGroups;
   return final;
 }
 
@@ -1096,6 +1101,7 @@ function filteredClients() {
       return 30;
     };
     window._juminGroups = {};
+    window._relatedGroups = {};
     return list.sort((a, b) => score(b) - score(a));
   }
 
@@ -1788,16 +1794,18 @@ function renderClients() {
       const iSel = (field,opts,val)=>`<select onclick="event.stopPropagation()" onchange="event.stopPropagation();updateClientField(${c.id},'${field}',this.value)" class="inline-edit">${opts.map(v=>`<option${val===v?' selected':''}>${esc(v)}</option>`).join('')}</select>`;
       const iInput = (field,val,attrs='')=>`<input ${attrs} onclick="event.stopPropagation()" onchange="event.stopPropagation();updateClientField(${c.id},'${field}',this.value)" value="${esc(val||'')}" class="inline-edit">`;
       const gk = getGroupKey(c);
-      const inGroup = groupCounts[gk] > 1;
+      const juminMembers = (window._juminGroups || {})[c.id] || [];
+      const isJuminLead = juminMembers.length > 0;
+      const relatedMembers = (window._relatedGroups || {})[c.id] || [];
+      const isRelatedLead = relatedMembers.length > 0;
+      const inGroup = groupCounts[gk] > 1 || isRelatedLead;
       const gc = inGroup ? groupColor(gk) : null;
       const groupLabel = inGroup ? (c.relatedGroup && c.relatedGroup.trim() ? c.relatedGroup.trim() : c.rep) : null;
       const groupDot = inGroup ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${gc};margin-right:5px;vertical-align:middle"></span>` : '';
       const groupSub = inGroup ? `<span style="font-size:10px;color:${gc};font-weight:600;margin-left:4px">👥 ${esc(groupLabel)}</span>` : '';
-      const juminMembers = (window._juminGroups || {})[c.id] || [];
-      const isJuminLead = juminMembers.length > 0;
       return `<tr class="client-row" onpointerdown="startLongPress(event,${c.id})" onpointermove="moveLongPress(event)" onpointerup="cancelLongPress()" onpointercancel="cancelLongPress()" oncontextmenu="event.preventDefault()" onclick="if(window._lpFired){window._lpFired=false}else{toggleExpand(${c.id})}" style="${inGroup?`border-left:3px solid ${gc}`:''}" >
         ${G.bulkMode?`<td onclick="event.stopPropagation();toggleClientSelect(${c.id})" style="width:32px;text-align:center;cursor:pointer"><input type="checkbox" ${(G.selectedClients||[]).includes(c.id)?'checked':''} style="width:16px;height:16px;cursor:pointer" onclick="event.stopPropagation();toggleClientSelect(${c.id})"></td>`:''}
-        <td><div class="td-name">${(()=>{const risk=clientRiskLevel(c);return risk==='red'?'<span title="위험" style="color:#e53935;margin-right:4px">●</span>':risk==='yellow'?'<span title="주의" style="color:#f57c00;margin-right:4px">●</span>':''})()}${groupDot}${esc(c.name)}<button onclick="event.stopPropagation();openClientNotes(${c.id})" style="margin-left:4px;padding:1px 5px;border-radius:5px;border:1px solid #e0e0e0;background:#f8f9ff;font-size:11px;cursor:pointer;vertical-align:middle" title="메모/이력">📝${(G.clientNotes||{})[c.id]?.length?` ${G.clientNotes[c.id].length}`:''}</button><button onclick="event.stopPropagation();toggleFavorite(${c.id})" style="margin-left:2px;padding:1px 4px;border-radius:5px;border:1px solid #e0e0e0;background:#fff;font-size:12px;cursor:pointer;vertical-align:middle" title="즐겨찾기">${(G.favorites||[]).includes(c.id)?'⭐':'☆'}</button>${isJuminLead ? `<button onclick="event.stopPropagation();toggleJuminGroup(${c.id})" id="jumin-btn-${c.id}" style="margin-left:4px;padding:1px 6px;border-radius:10px;background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;font-size:10px;font-weight:700;cursor:pointer;vertical-align:middle" title="같은 사업주의 다른 사업장">+${juminMembers.length}개 사업장</button>` : ''}</div>${(c.bizType||c.bizCode||groupSub)?`<div class="td-sub">${c.bizType?esc(c.bizType):''}${c.bizCode?` <span style="color:#aaa;font-size:10px">[${esc(c.bizCode)}]</span>`:''}${groupSub}</div>`:''}</td>
+        <td><div class="td-name">${(()=>{const risk=clientRiskLevel(c);return risk==='red'?'<span title="위험" style="color:#e53935;margin-right:4px">●</span>':risk==='yellow'?'<span title="주의" style="color:#f57c00;margin-right:4px">●</span>':''})()}${groupDot}${esc(c.name)}<button onclick="event.stopPropagation();openClientNotes(${c.id})" style="margin-left:4px;padding:1px 5px;border-radius:5px;border:1px solid #e0e0e0;background:#f8f9ff;font-size:11px;cursor:pointer;vertical-align:middle" title="메모/이력">📝${(G.clientNotes||{})[c.id]?.length?` ${G.clientNotes[c.id].length}`:''}</button><button onclick="event.stopPropagation();toggleFavorite(${c.id})" style="margin-left:2px;padding:1px 4px;border-radius:5px;border:1px solid #e0e0e0;background:#fff;font-size:12px;cursor:pointer;vertical-align:middle" title="즐겨찾기">${(G.favorites||[]).includes(c.id)?'⭐':'☆'}</button>${isJuminLead ? `<button onclick="event.stopPropagation();toggleJuminGroup(${c.id})" id="jumin-btn-${c.id}" style="margin-left:4px;padding:1px 6px;border-radius:10px;background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;font-size:10px;font-weight:700;cursor:pointer;vertical-align:middle" title="같은 사업주의 다른 사업장">+${juminMembers.length}개 사업장</button>` : ''}${isRelatedLead ? `<button onclick="event.stopPropagation();toggleRelatedGroup(${c.id})" id="related-btn-${c.id}" style="margin-left:4px;padding:1px 6px;border-radius:10px;background:#ede7f6;color:#6a1b9a;border:1px solid #ce93d8;font-size:10px;font-weight:700;cursor:pointer;vertical-align:middle" title="관계사 그룹">+${relatedMembers.length}개의 그룹</button>` : ''}</div>${(c.bizType||c.bizCode||groupSub)?`<div class="td-sub">${c.bizType?esc(c.bizType):''}${c.bizCode?` <span style="color:#aaa;font-size:10px">[${esc(c.bizCode)}]</span>`:''}${groupSub}</div>`:''}</td>
         <td data-label="대표자" style="font-size:12px;color:#444;${hc['c_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
         <td data-label="수임내용" style="${hc['c_dealType']?'display:none':''}">${em?iSel('dealType',DEAL_TYPES.slice(1),getDealTypes(c)[0]):getDealTypes(c).map(d=>dealBadge(d)).join('')}</td>
         <td data-label="인격" style="${hc['c_taxType']?'display:none':''}">${em?iSel('taxType',TAX_TYPES.slice(1),c.taxType):badge(c.taxType,c.taxType==='법인'?'blue':'gray')}</td>
@@ -1864,6 +1872,60 @@ function renderClients() {
           <td></td>
         </tr>
         <tr class="expand-row" id="expand-${m.id}" data-jumin-lead="${c.id}" style="display:none">
+          <td colspan="${10-['c_rep','c_dealType','c_taxType','c_vatType','c_manager','c_fee','c_status','c_cms','c_grade'].filter(k=>hc[k]).length}">
+            <div class="expand-inner">
+              <div style="flex-basis:100%;display:flex;align-items:center;gap:8px;padding:7px 10px;background:${m.gradeManual?'#fff8e1':'#f8f9ff'};border-radius:8px;border:1px solid ${m.gradeManual?'#ffe082':'#e8eaf6'}">
+                <span style="font-size:11px;color:#888;white-space:nowrap;font-weight:600">등급</span>
+                ${['A','B','C'].map(g=>{const cfg={A:{bg:'#e8f0fe',col:'#1565c0',bd:'#4f8ef7'},B:{bg:'#e8f5e9',col:'#2e7d32',bd:'#43a047'},C:{bg:'#f5f5f5',col:'#666',bd:'#bbb'}};const cv=cfg[g];const on=m.grade===g;return`<button onclick="event.stopPropagation();setClientGradeManual(${m.id},'${g}')" style="padding:3px 14px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:2px solid ${on?cv.bd:'#e0e0e0'};background:${on?cv.bg:'#fff'};color:${on?cv.col:'#ccc'};transition:all .12s">${g}</button>`;}).join('')}
+                ${m.gradeManual?`<button onclick="event.stopPropagation();setClientGradeManual(${m.id},null)" style="padding:3px 10px;border-radius:8px;border:1.5px solid #ffcc80;background:#fff3e0;color:#e65100;font-size:11px;cursor:pointer;font-family:inherit;margin-left:4px">↺ 자동산출</button>`:`<span style="font-size:11px;color:#aaa;margin-left:4px">자동산출 중</span>`}
+              </div>
+              <div><div style="font-size:11px;color:#888;margin-bottom:3px">연락처</div>${em?miInput('phone',m.phone,'placeholder="전화번호" style="width:140px"'):`<div style="font-weight:600">${m.phone?`<a href="tel:${esc(m.phone)}" style="color:#4f8ef7;text-decoration:none;font-weight:600">${esc(m.phone)}</a>`:'-'}</div>`}</div>
+              <div><div style="font-size:11px;color:#888;margin-bottom:3px">관할세무서</div>${em?miInput('taxOffice',m.taxOffice,'list="taxoffice-list" placeholder="세무서 선택·입력" style="width:150px"'):`<div style="font-weight:600">${esc(m.taxOffice||'-')}</div>`}</div>
+              <div><div style="font-size:11px;color:#888;margin-bottom:3px">수임일자</div>${em?miInput('contractDate',m.contractDate,'type="date"'):`<div style="font-weight:600">${esc(m.contractDate||'-')}</div>`}</div>
+              <div><div style="font-size:11px;color:#888;margin-bottom:3px">사업자번호</div>${em?miInput('bizNo',m.bizNo,'placeholder="000-00-00000" style="width:130px"'):`<div style="font-weight:600;font-family:monospace">${esc(m.bizNo||'-')}</div>`}</div>
+              <div><div style="font-size:11px;color:#888;margin-bottom:3px">${m.taxType==='법인'?'법인등록번호':'주민번호'}</div>${em?miInput('jumin',m.jumin,'placeholder="000000-0000000" style="width:150px"'):`<div style="font-weight:600;font-family:monospace">${m.jumin?esc(m.jumin.slice(0,6)+'-'+m.jumin.slice(6,7)+'••••••'):'-'}</div>`}</div>
+              ${m.openDate?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">개업연월일</div><div style="font-weight:600">${esc(m.openDate)}</div></div>`:''}
+              ${m.jointBiz?`<div>${badge('공동사업자','orange')}</div>`:''}
+              ${m.status==='해지'||m.status==='폐업'?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">수임해지일</div><div style="font-weight:600;color:#c62828">${esc(m.terminationDate||'-')}</div></div>`:''}
+              ${m.status==='폐업'?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">폐업연월일</div><div style="font-weight:600;color:#c62828">${esc(m.closeDate||'-')}</div></div>`:''}
+              ${mc?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">수임항목</div><div style="font-size:12px;color:#555">${esc(mc)}</div></div>`:''}
+              ${m.memo?`<div style="max-width:240px"><div style="font-size:11px;color:#888;margin-bottom:3px">메모</div><div style="font-size:12px;color:#555">${esc(m.memo)}</div></div>`:''}
+              ${((G.clientTags||{})[m.id]||[]).length?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">태그</div><div style="display:flex;flex-wrap:wrap;gap:4px">${((G.clientTags||{})[m.id]||[]).map(t=>`<span style="background:#e8f0fe;color:#4f8ef7;border-radius:10px;padding:2px 10px;font-size:11px">${esc(t)}</span>`).join('')}</div></div>`:''}
+              ${m.bizCode?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">업종코드</div><div style="font-weight:600;font-family:monospace;font-size:13px">${esc(m.bizCode)}</div></div>`:''}
+              ${m.seongsi?`<div>${badge('성실신고','purple')}</div>`:''}
+              ${(()=>{const docs=[{k:'contract',l:'수임계약서'},{k:'proxy',l:'위임장'},{k:'bizReg',l:'사업자등록증'},{k:'bank',l:'통장사본'},{k:'seal',l:'인감증명서'}];const dCheck=((G.docChecklist||{})[m.id]||{});return`<div style="flex-basis:100%"><div style="font-size:11px;color:#888;margin-bottom:5px">📋 서류 체크</div><div style="display:flex;flex-wrap:wrap;gap:5px">${docs.map(d=>`<button onclick="event.stopPropagation();toggleDocCheck(${m.id},'${d.k}')" style="padding:4px 10px;border-radius:12px;border:1.5px solid ${dCheck[d.k]?'#43a047':'#e0e0e0'};background:${dCheck[d.k]?'#e8f5e9':'#f5f5f5'};color:${dCheck[d.k]?'#2e7d32':'#888'};font-size:11px;cursor:pointer;font-family:inherit;font-weight:600">${dCheck[d.k]?'✓ ':''} ${d.l}</button>`).join('')}</div></div>`;})()}
+              ${(()=>{const cJulgae=(G.periods||[]).map(p=>{const pk=p.id+'|'+(p.reportType||p.type);const v=julgaeVal(pk,m.id);if(!v||(!v.d&&!v.b&&!v.a&&!v.fee&&!v.s))return null;return{label:p.label,v};}).filter(Boolean);if(!cJulgae.length)return'';return`<div style="flex-basis:100%"><div style="font-size:11px;color:#888;margin-bottom:4px">신고 현황</div><div style="display:flex;flex-wrap:wrap;gap:4px">${cJulgae.slice(-6).map(x=>`<div style="background:${x.v.a?'#e8f5e9':x.v.s?'#f3e5f5':'#f5f5f5'};border-radius:8px;padding:4px 10px;font-size:11px"><span style="font-weight:600">${esc(x.label)}</span><span style="margin-left:4px">${x.v.d?'📋':''}${x.v.b?'📖':''}${x.v.a?'✅':''}${x.v.s?'💰':''}</span></div>`).join('')}</div></div>`;})()}
+              <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+                <button class="btn-sm" style="background:#f8f9ff;color:#4f8ef7;border:1px solid #c5cae9" onclick="event.stopPropagation();openClientNotes(${m.id})">📝 메모/이력</button>
+                <button class="btn-sm" style="background:#f0f4ff;color:#4f8ef7" onclick="event.stopPropagation();openForm(${m.id})">✏ 수정</button>
+                <button class="btn-sm" style="background:#fdecea;color:#c62828;border:1px solid #ef9a9a" onclick="event.stopPropagation();deleteClient(${m.id})">🗑 삭제</button>
+              </div>
+            </div>
+          </td>
+        </tr>`;
+      }).join('') : ''}
+      ${isRelatedLead ? relatedMembers.map(m => {
+        const mc = (m.contracts||[]).map(k=>contractLabel(k)).join(', ');
+        const miSel = (field,opts,val)=>`<select onclick="event.stopPropagation()" onchange="event.stopPropagation();updateClientField(${m.id},'${field}',this.value)" class="inline-edit">${opts.map(v=>`<option${val===v?' selected':''}>${esc(v)}</option>`).join('')}</select>`;
+        const miInput = (field,val,attrs='')=>`<input ${attrs} onclick="event.stopPropagation()" onchange="event.stopPropagation();updateClientField(${m.id},'${field}',this.value)" value="${esc(val||'')}" class="inline-edit">`;
+        const mgk = getGroupKey(m), mgc = groupColor(mgk);
+        return `<tr class="client-row" data-related-lead="${c.id}" id="related-sub-${m.id}"
+          onpointerdown="startLongPress(event,${m.id})" onpointermove="moveLongPress(event)" onpointerup="cancelLongPress()" onpointercancel="cancelLongPress()" oncontextmenu="event.preventDefault()"
+          onclick="if(window._lpFired){window._lpFired=false}else{toggleExpand(${m.id})}"
+          style="display:none;background:#f3e5f5;border-left:3px solid ${mgc}">
+          ${G.bulkMode?`<td onclick="event.stopPropagation();toggleClientSelect(${m.id})" style="width:32px;text-align:center;cursor:pointer"><input type="checkbox" ${(G.selectedClients||[]).includes(m.id)?'checked':''} style="width:16px;height:16px;cursor:pointer" onclick="event.stopPropagation();toggleClientSelect(${m.id})"></td>`:''}
+          <td><div class="td-name"><span style="color:#9c27b0;font-size:12px;margin-right:3px;vertical-align:middle">↳</span>${(()=>{const risk=clientRiskLevel(m);return risk==='red'?'<span style="color:#e53935;margin-right:4px">●</span>':risk==='yellow'?'<span style="color:#f57c00;margin-right:4px">●</span>':'';})()}${esc(m.name)}<button onclick="event.stopPropagation();openClientNotes(${m.id})" style="margin-left:4px;padding:1px 5px;border-radius:5px;border:1px solid #e0e0e0;background:#f8f9ff;font-size:11px;cursor:pointer;vertical-align:middle" title="메모/이력">📝${(G.clientNotes||{})[m.id]?.length?` ${G.clientNotes[m.id].length}`:''}</button><button onclick="event.stopPropagation();toggleFavorite(${m.id})" style="margin-left:2px;padding:1px 4px;border-radius:5px;border:1px solid #e0e0e0;background:#fff;font-size:12px;cursor:pointer;vertical-align:middle" title="즐겨찾기">${(G.favorites||[]).includes(m.id)?'⭐':'☆'}</button></div>${m.bizType||m.bizCode?`<div class="td-sub">${m.bizType?esc(m.bizType):''}${m.bizCode?` <span style="color:#aaa;font-size:10px">[${esc(m.bizCode)}]</span>`:''}</div>`:''}</td>
+          <td data-label="대표자" style="font-size:12px;color:#444;${hc['c_rep']?'display:none':''}">${esc(m.rep)||'-'}</td>
+          <td data-label="수임내용" style="${hc['c_dealType']?'display:none':''}">${em?miSel('dealType',DEAL_TYPES.slice(1),getDealTypes(m)[0]):getDealTypes(m).map(d=>dealBadge(d)).join('')}</td>
+          <td data-label="인격" style="${hc['c_taxType']?'display:none':''}">${em?miSel('taxType',TAX_TYPES.slice(1),m.taxType):badge(m.taxType,m.taxType==='법인'?'blue':'gray')}</td>
+          <td data-label="과세유형" style="${hc['c_vatType']?'display:none':''}">${em?miSel('vatType',VAT_TYPES.slice(1),m.vatType):badge(m.vatType,m.vatType==='일반'?'blue':m.vatType==='간이'?'orange':m.vatType==='간세'?'teal':'gray')}</td>
+          <td data-label="담당자" style="color:#555;font-size:12px;${hc['c_manager']?'display:none':''}">${em?miSel('manager',MANAGERS.slice(1),getManagers(m)[0]||''):getManagers(m).join(', ')||'-'}</td>
+          <td data-label="수수료" style="font-weight:600;font-size:11px;${hc['c_fee']?'display:none':''}">${m.fee?m.fee.toLocaleString()+' <span style="color:#aaa;font-size:10px">기장</span>':'-'}</td>
+          <td data-label="상태" style="opacity:.95;${hc['c_status']?'display:none':''}">${badge(m.status,statusColor(m.status))}</td>
+          <td data-label="CMS" style="opacity:.95;${hc['c_cms']?'display:none':''}">${badge(m.cms?'가입':'미가입',m.cms?'green':'gray')}</td>
+          <td data-label="등급" style="text-align:center;${hc['c_grade']?'display:none':''}">${gradeBadge(m.grade,m.gradeManual)}</td>
+        </tr>
+        <tr class="expand-row" id="expand-${m.id}" data-related-lead="${c.id}" style="display:none">
           <td colspan="${10-['c_rep','c_dealType','c_taxType','c_vatType','c_manager','c_fee','c_status','c_cms','c_grade'].filter(k=>hc[k]).length}">
             <div class="expand-inner">
               <div style="flex-basis:100%;display:flex;align-items:center;gap:8px;padding:7px 10px;background:${m.gradeManual?'#fff8e1':'#f8f9ff'};border-radius:8px;border:1px solid ${m.gradeManual?'#ffe082':'#e8eaf6'}">
@@ -2813,6 +2875,17 @@ function toggleJuminGroup(leadId) {
   expandRows.forEach(r => r.style.display = 'none');
   const btn = document.getElementById(`jumin-btn-${leadId}`);
   if (btn) btn.innerHTML = isExpanded ? `+${mainRows.length}개 사업장` : `▲ 접기`;
+}
+
+function toggleRelatedGroup(leadId) {
+  const mainRows = document.querySelectorAll(`.client-row[data-related-lead="${leadId}"]`);
+  const expandRows = document.querySelectorAll(`.expand-row[data-related-lead="${leadId}"]`);
+  if (!mainRows.length) return;
+  const isExpanded = mainRows[0].style.display !== 'none';
+  mainRows.forEach(r => r.style.display = isExpanded ? 'none' : '');
+  expandRows.forEach(r => r.style.display = 'none');
+  const btn = document.getElementById(`related-btn-${leadId}`);
+  if (btn) btn.innerHTML = isExpanded ? `+${mainRows.length}개의 그룹` : `▲ 접기`;
 }
 
 function cycleFeeStatus(id) {
@@ -4143,7 +4216,19 @@ function renderJulgae() {
     신고리스트가 없습니다. <b>+ 신고리스트 추가</b> 버튼을 눌러 시작하세요.</div>` : `
 
   ${(()=>{
-    const tiles = periods.map((p, i) => {
+    // Init selected periods: auto-pick D-day≤30 or current-year periods on first load
+    if (!G.julgaeSelectedPeriods) {
+      const curYr = new Date().getFullYear();
+      const curYrStr = String(curYr).slice(2) + '년';
+      const byDday = periods.filter(p=>{ const d=julgaeDDay(p); return d&&d.label.startsWith('D-')&&parseInt(d.label.slice(2))<=30; });
+      G.julgaeSelectedPeriods = byDday.length
+        ? byDday.map(p=>p.id)
+        : periods.filter(p=>p.label.startsWith(curYrStr)).map(p=>p.id);
+      if (!G.julgaeSelectedPeriods.length) G.julgaeSelectedPeriods = periods.slice(-3).map(p=>p.id);
+    }
+    const selSet = new Set(G.julgaeSelectedPeriods);
+    const shownPeriods = periods.map((p,i)=>({p,i})).filter(({p})=>selSet.has(p.id));
+    const tiles = shownPeriods.map(({p,i}) => {
       const pKey = p.id;
       let targets;
       if (p.enrolled?.length > 0) {
@@ -4155,63 +4240,38 @@ function renderJulgae() {
       const done = targets.filter(c => julgaeVal(pKey, c.id).a).length;
       const pct = total ? Math.round(done/total*100) : 0;
       const isActive = i === idx;
+      const isLocked = !!p.locked;
       const bg = pct===100?'#e8f5e9':pct>=70?'#e8f0fe':pct>=30?'#fff8e1':'#fdecea';
       const border = isActive?'#4f8ef7':(pct===100?'#81c784':pct>=70?'#7c4dff':pct>=30?'#ffca28':'#ef9a9a');
       const col = pct===100?'#2e7d32':pct>=70?'#4527a0':pct>=30?'#e65100':'#c62828';
       const shortLabel = p.label.replace(/^\d{2}년 /, '').replace('부가세 ', '부가').replace('법인세 신고', '법인세').replace('종합소득세 신고', '종소세').replace('성실신고사업자 신고', '성실신고').replace('사업장현황신고', '사업장현황').replace(' 신고', '').replace('확정신고', '확정').replace('예정신고', '예정');
       return `<div onclick="G.julgaePeriodIdx=${i};renderJulgae()" style="cursor:pointer;padding:7px 10px;border-radius:8px;border:2px solid ${border};background:${isActive?'#e8f0fe':bg};min-width:80px;text-align:center;transition:box-shadow .1s${isActive?';box-shadow:0 2px 8px rgba(79,142,247,.3)':''}" title="${esc(p.label)} — ${done}/${total} 완료">
-        <div style="font-size:10px;color:${isActive?'#1565c0':'#888'};margin-bottom:3px;font-weight:${isActive?700:400}">${esc(shortLabel)}</div>
+        <div style="font-size:10px;color:${isActive?'#1565c0':'#888'};margin-bottom:3px;font-weight:${isActive?700:400}">${isLocked?'🔒 ':''}${esc(shortLabel)}</div>
         <div style="font-size:14px;font-weight:800;color:${isActive?'#1565c0':col}">${pct}%</div>
         <div class="progress-bar" style="height:4px;margin-top:4px"><div class="progress-fill" style="width:${pct}%;background:${border}"></div></div>
         <div style="font-size:9px;color:#aaa;margin-top:2px">${done}/${total}</div>
       </div>`;
     }).join('');
+    const dd = period ? julgaeDDay(period) : null;
+    const ddBadge = dd ? `<span style="font-size:11px;background:${dd.color};color:#fff;border-radius:8px;padding:1px 8px;margin-left:6px">${dd.label}</span>` : '';
+    const lockBtn = period ? (period.locked
+      ? `<button onclick="togglePeriodLock('${period.id}')" style="padding:4px 10px;border-radius:6px;border:1.5px solid #43a047;background:#e8f5e9;color:#2e7d32;font-size:12px;cursor:pointer;font-family:inherit">🔓 해제</button>`
+      : `<button onclick="togglePeriodLock('${period.id}')" style="padding:4px 10px;border-radius:6px;border:1.5px solid #e53935;background:#fdecea;color:#c62828;font-size:12px;cursor:pointer;font-family:inherit">🔒 마감</button>`)
+      : '';
     return `<div class="card" style="padding:12px 14px;margin-bottom:12px">
-      <div style="font-size:12px;color:#888;margin-bottom:8px;font-weight:600">신고기간 진행 현황 — 클릭하여 이동</div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px">${tiles}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:6px">
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#888;font-weight:600">
+          신고기간 진행 현황${period?` — <b style="color:#333">${esc(period.label)}</b>${ddBadge}`:''}
+          ${period?.locked?'<span style="background:#e53935;color:#fff;border-radius:8px;padding:1px 8px;font-size:11px">마감됨</span>':''}
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          ${lockBtn}
+          <button onclick="openJulgaePeriodPicker(this)" style="padding:4px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7">📅 기간 선택 ${selSet.size>0?'('+selSet.size+')':''}▾</button>
+        </div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">${tiles||'<span style="font-size:12px;color:#aaa">기간 선택 버튼으로 리스트를 추가하세요</span>'}</div>
     </div>`;
   })()}
-
-  <div style="margin-bottom:16px">
-    ${(()=>{
-      const byYear = {}; const yearOrder = [];
-      periods.forEach((p,i)=>{
-        const m = p.label.match(/^(\d{2})년/);
-        const yr = m ? (2000+Number(m[1])) : 'other';
-        if (!byYear[yr]) { byYear[yr]=[]; yearOrder.push(yr); }
-        byYear[yr].push({p,i});
-      });
-      const currentYr = new Date().getFullYear();
-      yearOrder.forEach(yr=>{
-        if (window._julgaeYearsOpen[yr]===undefined) {
-          const hasSelected = byYear[yr].some(({i})=>i===idx);
-          window._julgaeYearsOpen[yr] = hasSelected || yr===currentYr;
-        }
-      });
-      return yearOrder.map(yr=>{
-        const isOpen = window._julgaeYearsOpen[yr];
-        const label = yr==='other'?'기타':(yr+'년');
-        return `<div style="margin-bottom:6px">
-          <button onclick="toggleJulgaeYear(${yr==='other'?'\'other\'':yr})" style="padding:5px 12px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;border:2px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;margin-bottom:6px">
-            ${label} ${isOpen?'▲':'▼'}
-          </button>
-          ${isOpen?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-left:4px">
-            ${byYear[yr].map(({p,i})=>{
-              const pEnroll = p.enrolled && p.enrolled.length > 0;
-              const dd = julgaeDDay(p);
-              return `<div style="display:flex;align-items:center;gap:3px">
-                <button onclick="switchJulgaePeriod(${i})"
-                  style="padding:7px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;border:2px solid ${i===idx?'#4f8ef7':'#e0e0e0'};background:${i===idx?'#e8f0fe':'#fff'};color:${i===idx?'#4f8ef7':'#555'}">
-                  ${esc(p.label)}${pEnroll?` <span style="font-size:10px;background:#4f8ef7;color:#fff;border-radius:10px;padding:1px 6px;margin-left:4px">${p.enrolled.length}</span>`:''}${dd?` <span style="font-size:10px;background:${dd.color};color:#fff;border-radius:8px;padding:1px 6px;margin-left:3px">${dd.label}</span>`:''}
-                </button>
-                <button onclick="deletePeriod('${p.id}')" style="padding:4px 7px;border-radius:6px;font-size:11px;border:1px solid #e0e0e0;background:#fff;color:#e53935;cursor:pointer;font-family:inherit" title="삭제">✕</button>
-              </div>`;
-            }).join('')}
-          </div>`:''}
-        </div>`;
-      }).join('');
-    })()}
-  </div>
 
   ${period ? `
   <div class="stat-grid" style="margin-bottom:14px">
@@ -4371,8 +4431,8 @@ function renderJulgae() {
       <th style="padding:4px 6px;${_hcStyle('j_manager')}"><div style="display:flex;align-items:center">${filterPopupBtn('julgaeManagers','담당자')}${_hcBtn('j_manager')}</div></th>
       <th style="width:56px;text-align:center;padding:3px;${_hcStyle('j_data')}"><div style="display:flex;align-items:center">${julgaeCycleBtn('julgaeDataFilter','자료')}${_hcBtn('j_data')}</div></th>
       <th style="width:56px;text-align:center;padding:3px;${_hcStyle('j_book')}"><div style="display:flex;align-items:center">${julgaeCycleBtn('julgaeBookFilter','기장')}${_hcBtn('j_book')}</div></th>
-      <th style="width:56px;text-align:center;padding:3px;${_hcStyle('j_done')}"><div style="display:flex;align-items:center">${julgaeCycleBtn('julgaeDoneFilter','결재')}${_hcBtn('j_done')}</div></th>
       <th style="width:56px;text-align:center;padding:3px;${_hcStyle('j_consul')}"><div style="display:flex;align-items:center">${julgaeCycleBtn('julgaeConsulFilter','상담')}${_hcBtn('j_consul')}</div></th>
+      <th style="width:56px;text-align:center;padding:3px;${_hcStyle('j_done')}"><div style="display:flex;align-items:center">${julgaeCycleBtn('julgaeDoneFilter','결재')}${_hcBtn('j_done')}</div></th>
       ${isIncomeType?`
         <th style="width:100px;text-align:right;${_hcStyle('j_col_revenue')}"><div style="display:flex;align-items:center;justify-content:flex-end">수입금액${_hcBtn('j_col_revenue')}</div></th>
         <th style="width:100px;text-align:right;${_hcStyle('j_col_income')}"><div style="display:flex;align-items:center;justify-content:flex-end">소득금액${_hcBtn('j_col_income')}</div></th>
@@ -4444,11 +4504,11 @@ function renderJulgae() {
         <td style="text-align:center;${hc['j_book']?'display:none':''}" onclick="toggleJulgaeField('${pKey2}',${c.id},'b')">
           <div class="chk ${v.b?'on':''}" style="margin:0 auto;width:24px;height:24px">${v.b?'✓':''}</div>
         </td>
-        <td style="text-align:center;${hc['j_done']?'display:none':''}" onclick="toggleJulgaeField('${pKey2}',${c.id},'a')">
-          <div class="chk ${v.a?'on':''}" style="margin:0 auto;width:24px;height:24px">${v.a?'✓':''}</div>
-        </td>
         <td style="text-align:center;${hc['j_consul']?'display:none':''}" onclick="toggleJulgaeField('${pKey2}',${c.id},'c')">
           <div class="chk ${v.c?'on':''}" style="margin:0 auto;width:24px;height:24px;${v.c?'background:#e3f2fd;border-color:#1565c0;color:#1565c0':''}">${v.c?'💬':''}</div>
+        </td>
+        <td style="text-align:center;${hc['j_done']?'display:none':''}" onclick="toggleJulgaeField('${pKey2}',${c.id},'a')">
+          <div class="chk ${v.a?'on':''}" style="margin:0 auto;width:24px;height:24px">${v.a?'✓':''}</div>
         </td>
         ${isIncomeType?`
           <td style="text-align:right;padding:4px 8px;${hc['j_col_revenue']?'display:none':''}">${niInput(c.id,'revenue',v.revenue)}${prevRevTxt}${bosuBadge}</td>
@@ -4542,6 +4602,8 @@ function removeFromJulgaeGroup(pKey2, clientId) {
 
 function toggleJulgaeField(pKey, clientId, field) {
   if (!pKey) return;
+  const period = G.periods.find(p=>p.id===pKey);
+  if (period?.locked) { toast('마감된 리스트는 수정할 수 없습니다','warning'); return; }
   if (!G.julgae[pKey]) G.julgae[pKey] = {};
   const cur = julgaeVal(pKey, clientId);
   cur[field] = !cur[field];
@@ -4550,8 +4612,82 @@ function toggleJulgaeField(pKey, clientId, field) {
   renderJulgae();
 }
 
+function togglePeriodLock(periodId) {
+  const p = G.periods.find(x=>x.id===periodId); if(!p) return;
+  p.locked = !p.locked;
+  saveToLS();
+  renderJulgae();
+}
+
+function openJulgaePeriodPicker(btnEl) {
+  const existing = document.getElementById('jpp-popup');
+  if (existing) { existing.remove(); return; }
+  const periods = G.periods;
+  const selSet = new Set(G.julgaeSelectedPeriods||[]);
+  const byYear = {}; const yearOrder = [];
+  periods.forEach((p,i)=>{
+    const m = p.label.match(/^(\d{2})년/);
+    const yr = m ? (2000+Number(m[1])) : 'other';
+    if (!byYear[yr]) { byYear[yr]=[]; yearOrder.push(yr); }
+    byYear[yr].push({p,i});
+  });
+  const rect = btnEl.getBoundingClientRect();
+  const pop = document.createElement('div');
+  pop.id = 'jpp-popup';
+  pop.className = 'fpop';
+  pop.style.cssText += 'max-height:80vh;overflow-y:auto;min-width:260px;';
+  const top = Math.min(rect.bottom + 6, window.innerHeight - 400);
+  const left = Math.max(8, Math.min(rect.right - 260, window.innerWidth - 268));
+  pop.style.top = top + 'px'; pop.style.left = left + 'px';
+  const rows = yearOrder.map(yr=>{
+    const label = yr==='other' ? '기타' : yr+'년';
+    return `<div style="margin-bottom:10px">
+      <div style="font-size:11px;font-weight:800;color:#888;margin-bottom:5px;text-transform:uppercase">${label}</div>
+      ${byYear[yr].map(({p})=>{
+        const dd = (() => {
+          const tpl = (typeof PERIOD_TEMPLATES!=='undefined'?PERIOD_TEMPLATES:[]).find(t=>t.tpl===p.reportType||t.reportType===p.reportType);
+          if(!tpl||!tpl.deadline) return null;
+          const mm=tpl.deadline.match(/(\d+)월\s*(\d+)일/); if(!mm) return null;
+          const t0=new Date(); t0.setHours(0,0,0,0);
+          const y0=t0.getFullYear(); let dl=new Date(y0,Number(mm[1])-1,Number(mm[2]));
+          if(dl<t0) dl=new Date(y0+1,Number(mm[1])-1,Number(mm[2]));
+          const diff=Math.ceil((dl-t0)/86400000);
+          if(diff<=0) return {label:'오늘 마감',color:'#c62828'};
+          if(diff<=7) return {label:'D-'+diff,color:'#e53935'};
+          if(diff<=30) return {label:'D-'+diff,color:'#e65100'};
+          return {label:'D-'+diff,color:'#aaa'};
+        })();
+        const ddHtml = dd ? `<span style="font-size:10px;background:${dd.color};color:#fff;border-radius:6px;padding:1px 6px;margin-left:4px">${dd.label}</span>` : '';
+        const lockHtml = p.locked ? '<span style="font-size:10px;margin-left:4px">🔒</span>' : '';
+        return `<label style="display:flex;align-items:center;gap:9px;padding:7px 6px;cursor:pointer;border-radius:8px" onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background=''">
+          <input type="checkbox" class="jpp-chk" data-pid="${p.id}" ${selSet.has(p.id)?'checked':''} style="width:17px;height:17px;cursor:pointer;accent-color:#4f8ef7;flex-shrink:0">
+          <span style="font-size:13px;font-weight:500">${esc(p.label)}${ddHtml}${lockHtml}</span>
+        </label>`;
+      }).join('')}
+    </div>`;
+  }).join('');
+  pop.innerHTML = `
+    <div style="font-size:12px;font-weight:800;color:#333;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #f0f0f0">📅 신고리스트 선택</div>
+    <div>${rows}</div>
+    <div style="display:flex;gap:6px;margin-top:12px;padding-top:10px;border-top:1px solid #f0f0f0">
+      <button onclick="document.querySelectorAll('.jpp-chk').forEach(c=>c.checked=true)" style="flex:1;padding:8px 4px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:13px;cursor:pointer;font-family:inherit">전체</button>
+      <button onclick="document.querySelectorAll('.jpp-chk').forEach(c=>c.checked=false)" style="flex:1;padding:8px 4px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:13px;cursor:pointer;font-family:inherit">해제</button>
+      <button onclick="_jppConfirm()" style="flex:2;padding:8px 10px;border-radius:8px;border:none;background:#4f8ef7;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">확인</button>
+    </div>`;
+  document.body.appendChild(pop);
+  const outside = e => { if(!pop.contains(e.target)&&e.target!==btnEl){pop.remove();document.removeEventListener('click',outside);} };
+  setTimeout(()=>document.addEventListener('click',outside),10);
+}
+function _jppConfirm() {
+  G.julgaeSelectedPeriods = [...document.querySelectorAll('.jpp-chk:checked')].map(c=>c.dataset.pid);
+  const pop = document.getElementById('jpp-popup'); if(pop) pop.remove();
+  renderJulgae();
+}
+
 function updateJulgaeNum(pKey, clientId, field, rawVal) {
   if (!pKey) return;
+  const period0 = G.periods.find(p=>p.id===pKey);
+  if (period0?.locked) { toast('마감된 리스트는 수정할 수 없습니다','warning'); return; }
   if (!G.julgae[pKey]) G.julgae[pKey] = {};
   const cur = julgaeVal(pKey, clientId);
   cur[field] = Number(rawVal) || 0;
