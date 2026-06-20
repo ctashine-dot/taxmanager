@@ -83,7 +83,7 @@ td{padding:10px 12px;vertical-align:middle}
 
 /* ── 모달 */
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px}
-.modal{background:#fff;border-radius:16px;width:100%;max-width:520px;margin:0 auto;box-shadow:0 8px 40px rgba(0,0,0,.22);position:relative}
+.modal,.overlay>div{background:#fff;border-radius:16px;width:100%;max-width:520px;margin:0 auto;box-shadow:0 8px 40px rgba(0,0,0,.22);position:relative}
 .modal-header{padding:10px 14px 8px;border-bottom:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:#fff;z-index:1;border-radius:16px 16px 0 0}
 .modal-header h3{font-size:15px;font-weight:800}
 .modal-body{padding:10px 14px;display:flex;flex-direction:column;gap:6px}
@@ -197,7 +197,7 @@ body.dark-mode tbody tr:nth-child(even) { background: #1e1e30; }
 body.dark-mode tbody tr:hover { background: #2a2a40; }
 body.dark-mode td, body.dark-mode th { color: #ddd; border-color: #2a2a40; }
 body.dark-mode .filter-bar { background: #1a1a2e; }
-body.dark-mode .modal { background: #1a1a2e; }
+body.dark-mode .modal, body.dark-mode .overlay>div { background: #1a1a2e; }
 body.dark-mode .modal-header { background: #1a1a2e; border-color: #2a2a40; }
 body.dark-mode .finput, body.dark-mode .fsel { background: #242440; color: #ddd; border-color: #3a3a50; }
 body.dark-mode .tbl-wrap { box-shadow: 0 1px 4px rgba(0,0,0,.3); }
@@ -332,7 +332,7 @@ body.dark-mode .overlay { background: rgba(0,0,0,.65); }
     <button class="hbtn" onclick="openGlobalSearch()" title="전체 검색">🔍</button>
     <button class="hbtn" id="notif-btn" onclick="openNotificationCenter(this)" title="알림 센터" style="position:relative">🔔<span id="notif-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:#e53935;color:#fff;border-radius:10px;padding:1px 5px;font-size:10px;font-weight:700;line-height:1.4"></span></button>
     <button class="hbtn" onclick="openBosuTable()">📋 보수표</button>
-    <button class="hbtn" onclick="openSettings()">⚙ 설정</button>
+    <button class="hbtn" id="settings-btn" onclick="openSettings()" style="position:relative">⚙ 설정<span id="settings-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:#e53935;color:#fff;border-radius:50%;width:14px;height:14px;font-size:9px;font-weight:700;line-height:14px;text-align:center">!</span></button>
     <button class="hbtn" onclick="toggleDarkMode()" title="다크모드">🌙</button>
     <button class="hbtn" onclick="document.dispatchEvent(new KeyboardEvent('keydown',{key:'?',bubbles:true}))" title="단축키 도움말">⌨</button>
     <button class="hbtn blue" onclick="openExcel()">↓ 엑셀</button>
@@ -522,7 +522,9 @@ let G = {
     feeTarget: 0,
     invoiceSeq: 0,
     autoCreatePeriods: false,
-    dashWidgets: {}
+    dashWidgets: {},
+    feeApplied: false,
+    xlsApplied: false
   }
 };
 
@@ -5616,8 +5618,10 @@ function applyFeeUpdates() {
   Object.keys(_FEE_UPDATE_MAP).forEach(name => {
     if (!G.clients.find(c => c.name === name)) notFound.push(name);
   });
+  G.settings.feeApplied = true;
   saveToLS();
   if (G.currentTab === 'clients') renderClients();
+  updateSettingsBadge();
   if (notFound.length) toast('수수료 변경 완료: ' + updated + '개. 미매칭: ' + notFound.join(', '), 'warning', 6000);
   else toast('수수료 변경 완료: ' + updated + '개 거래처', 'success');
   closeModal();
@@ -5640,9 +5644,12 @@ function importClientsFromXLS() {
     const nf = _FEE_UPDATE_MAP[c.name];
     if (nf !== undefined) { c.fee = nf; feeCount++; }
   });
+  G.settings.xlsApplied = true;
+  G.settings.feeApplied = true;
   saveToLS();
   closeModal();
   renderClients();
+  updateSettingsBadge();
   toast('거래처 데이터 교체 완료! '+G.clients.length+'개 거래처 로드, 기장료 '+feeCount+'건 자동 적용.', 'success', 4000);
 }
 function syncFromRawData() {
@@ -7351,16 +7358,16 @@ function openSettings() {
       <div style="font-size:12px;color:#888;margin-bottom:10px;line-height:1.6">모든 거래처의 수임계약항목을 수임내용·인격·과세유형 기준으로 다시 설정합니다.<br>기존 수동 설정은 초기화됩니다.</div>
       <button type="button" class="btn-sm" style="background:#f57f17;color:#fff;border:none" onclick="if(confirm('모든 거래처의 수임계약항목을 일괄 재설정합니다.\n기존 수동 설정이 초기화됩니다. 계속하시겠습니까?')){rebuildAllContracts();closeModal();}">⟳ 전체 거래처 수임계약항목 재설정</button>
     </div>
-    <div style="border:1px solid #e3f2fd;border-radius:10px;padding:14px;background:#f0f8ff;margin-top:4px">
+    ${!s.feeApplied ? `<div style="border:1px solid #e3f2fd;border-radius:10px;padding:14px;background:#f0f8ff;margin-top:4px">
       <div style="font-weight:700;font-size:13px;margin-bottom:6px">💴 기장료 일괄 변경 (최수이 담당 거래처)</div>
       <div style="font-size:12px;color:#888;margin-bottom:10px;line-height:1.6">사진 목록의 기장료로 해당 거래처를 일괄 변경합니다.</div>
       <button type="button" class="btn-sm" style="background:#1565c0;color:#fff;border:none" onclick="applyFeeUpdates()">💴 기장료 일괄 변경 적용</button>
-    </div>
-    <div style="border:1px solid #ffcdd2;border-radius:10px;padding:14px;background:#fff5f5;margin-top:4px">
+    </div>` : ''}
+    ${!s.xlsApplied ? `<div style="border:1px solid #ffcdd2;border-radius:10px;padding:14px;background:#fff5f5;margin-top:4px">
       <div style="font-weight:700;font-size:13px;margin-bottom:6px">📥 거래처 데이터 교체 (엑셀 일괄 로드)</div>
       <div style="font-size:12px;color:#888;margin-bottom:10px;line-height:1.6">현재 거래처 목록을 모두 삭제하고 엑셀 파일에서 가져온 624개 거래처로 교체합니다.<br>⚠ 기존 데이터(메모·신고현황·수납이력 등)는 모두 사라집니다.</div>
       <button type="button" class="btn-sm" style="background:#c62828;color:#fff;border:none" onclick="importClientsFromXLS()">🔄 거래처 전체 교체 (엑셀 624개)</button>
-    </div>
+    </div>` : ''}
     <div style="border:1px solid #e0e0e0;border-radius:10px;padding:14px;background:#f8f9ff;margin-top:4px">
       <div style="font-weight:700;font-size:13px;margin-bottom:10px">📊 대시보드 위젯 표시 설정</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
@@ -7377,8 +7384,15 @@ function openSettings() {
     <div class="btn-row"><button class="btn-secondary" onclick="closeModal()">취소</button><button class="btn-primary" onclick="saveSettings()">저장</button></div>
   </div></div>`);
   updateSettingsPreview();
+  updateSettingsBadge();
 }
 
+function updateSettingsBadge() {
+  const badge = document.getElementById('settings-badge');
+  if (!badge) return;
+  const pending = !G.settings.feeApplied || !G.settings.xlsApplied;
+  badge.style.display = pending ? 'inline-block' : 'none';
+}
 function getAIKey() { return G.settings?.aiKey || ''; }
 function aiHeaders() {
   return {'Content-Type':'application/json','x-api-key':getAIKey(),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'};
@@ -8329,12 +8343,15 @@ async function loadFromFirebase() {
     migrateJulgae();
     computeGrades();
     if (G.settings?.managers) MANAGERS = ['전체', ...G.settings.managers];
+    if (G.settings.feeApplied === undefined) G.settings.feeApplied = false;
+    if (G.settings.xlsApplied === undefined) G.settings.xlsApplied = false;
     updateBadge();
   } catch(e) {
     console.error('초기화 오류:', e);
   } finally {
     document.getElementById('loading').style.display = 'none';
     document.getElementById('page-dashboard').style.display = 'block';
+    updateSettingsBadge();
     renderDashboard();
     if (G.settings?.autoCreatePeriods) {
       const yr = new Date().getFullYear();
