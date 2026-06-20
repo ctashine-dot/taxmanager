@@ -846,6 +846,7 @@ function getManagers(c) {
 }
 function getUnpaidStreak(c, currentYM) {
   if (!c.fee) return 0;
+  const UNPAID_START = '2026-06';
   const adjYM = (ym, delta) => {
     const [y,m] = ym.split('-').map(Number);
     const d = new Date(y, m-1+delta, 1);
@@ -853,13 +854,78 @@ function getUnpaidStreak(c, currentYM) {
   };
   let count = 0, checkYM = currentYM;
   const start = c.contractDate ? c.contractDate.slice(0,7) : '2000-01';
+  const effectiveStart = start >= UNPAID_START ? start : UNPAID_START;
   while (count < 36) {
-    if (checkYM < start) break;
+    if (checkYM < effectiveStart) break;
     if (G.monthlyFees[c.id]?.[checkYM]) break;
     count++;
     checkYM = adjYM(checkYM, -1);
   }
   return count;
+}
+function isMonthCollected(clientId, ym) {
+  return ym < '2026-06' || !!(G.monthlyFees[clientId]?.[ym]);
+}
+function handleActualAmount(clientId, ym, input) {
+  const actualAmt = parseInt(String(input.value).replace(/[^0-9]/g,'')) || 0;
+  if (!actualAmt) { input.value = ''; return; }
+  const c = G.clients.find(x => x.id === clientId);
+  const feeAmt = getFeeForYM(c, ym);
+  window._pendingActual = { clientId, ym, actualAmt, feeAmt };
+  function applyActual(updateFee) {
+    const { clientId, ym, actualAmt, feeAmt } = window._pendingActual;
+    if (!G.monthlyFees[clientId]) G.monthlyFees[clientId] = {};
+    G.monthlyFees[clientId][ym] = true;
+    if (!G.feeHistory) G.feeHistory = {};
+    if (!G.feeHistory[clientId]) G.feeHistory[clientId] = {};
+    G.feeHistory[clientId][ym] = { date: new Date().toLocaleString('ko-KR') };
+    if (!G.feePayments) G.feePayments = {};
+    if (!G.feePayments[clientId]) G.feePayments[clientId] = {};
+    const diff = feeAmt - actualAmt;
+    G.feePayments[clientId][ym] = { method: 'CMS', amount: actualAmt, underpaid: diff > 0 ? diff : 0, date: new Date().toISOString().slice(0,10), note: '' };
+    if (updateFee) {
+      const cl = G.clients.find(x => x.id === clientId);
+      if (cl) cl.fee = actualAmt;
+    }
+    saveToLS(); closeModal(); renderFees();
+  }
+  window._applyActual = applyActual;
+  if (actualAmt === feeAmt) { applyActual(false); return; }
+  const diff = feeAmt - actualAmt;
+  showModal(`<div style="max-width:360px;width:min(360px,95vw)">
+    <div class="modal-header"><h3>💳 실수금액 처리</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:#444;margin-bottom:16px">${esc(c.name)} · ${ym}<br>수수료 <b>${feeAmt.toLocaleString()}원</b> / 실수금액 <b>${actualAmt.toLocaleString()}원</b><br>${diff>0?`<span style="color:#e53935">차액 ${diff.toLocaleString()}원 미수금</span>`:`<span style="color:#2e7d32">초과 수납 ${Math.abs(diff).toLocaleString()}원</span>`}</p>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button onclick="window._applyActual(false)" class="btn-primary" style="padding:10px;text-align:left">${diff>0?`📌 차액 ${diff.toLocaleString()}원을 미수금으로 기록`:`💰 ${actualAmt.toLocaleString()}원으로 수납 처리`}</button>
+        <button onclick="window._applyActual(true)" style="padding:10px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;cursor:pointer;font-family:inherit;text-align:left">✏ 수수료를 ${actualAmt.toLocaleString()}원으로 변경 후 수납</button>
+        <button onclick="closeModal()" style="padding:8px;border-radius:8px;border:1px solid #e0e0e0;background:#fff;cursor:pointer;font-family:inherit;font-size:12px;color:#888">취소</button>
+      </div>
+    </div>
+  </div>`);
+}
+function bulkToggleFees(ym, markPaid) {
+  if (!G.monthlyFees) G.monthlyFees = {};
+  const now = new Date().toLocaleString('ko-KR');
+  const today = new Date().toISOString().slice(0,10);
+  const visibleClients = window._feesVisibleClients || [];
+  visibleClients.forEach(c => {
+    if (!G.monthlyFees[c.id]) G.monthlyFees[c.id] = {};
+    if (markPaid) {
+      G.monthlyFees[c.id][ym] = true;
+      if (!G.feeHistory) G.feeHistory = {};
+      if (!G.feeHistory[c.id]) G.feeHistory[c.id] = {};
+      G.feeHistory[c.id][ym] = { date: now };
+      if (!G.feePayments) G.feePayments = {};
+      if (!G.feePayments[c.id]) G.feePayments[c.id] = {};
+      G.feePayments[c.id][ym] = { method: 'CMS', amount: getFeeForYM(c,ym), note: '', date: today };
+    } else {
+      G.monthlyFees[c.id][ym] = false;
+      if (G.feePayments?.[c.id]) delete G.feePayments[c.id][ym];
+      if (G.feeHistory?.[c.id]) delete G.feeHistory[c.id][ym];
+    }
+  });
+  saveToLS(); renderFees();
 }
 function dealSortRankForClient(c) {
   return Math.min(...getDealTypes(c).map(dt => dealSortRank(dt)));
@@ -4579,39 +4645,22 @@ function toggleMonthlyFee(clientId, ym) {
   if (!G.monthlyFees[clientId]) G.monthlyFees[clientId] = {};
   const current = G.monthlyFees[clientId][ym];
   if (current) {
-    // Toggle off — clear payment
     G.monthlyFees[clientId][ym] = false;
     if (G.feePayments?.[clientId]) delete G.feePayments[clientId][ym];
-    saveToLS(); renderFees(); return;
+    if (G.feeHistory?.[clientId]) delete G.feeHistory[clientId][ym];
+  } else {
+    const c = G.clients.find(x => x.id === clientId);
+    const feeAmt = getFeeForYM(c, ym);
+    G.monthlyFees[clientId][ym] = true;
+    if (!G.feeHistory) G.feeHistory = {};
+    if (!G.feeHistory[clientId]) G.feeHistory[clientId] = {};
+    G.feeHistory[clientId][ym] = { date: new Date().toLocaleString('ko-KR') };
+    if (!G.feePayments) G.feePayments = {};
+    if (!G.feePayments[clientId]) G.feePayments[clientId] = {};
+    G.feePayments[clientId][ym] = { method: 'CMS', amount: feeAmt, note: '', date: new Date().toISOString().slice(0,10) };
   }
-  // Toggle on — show payment detail modal
-  const c = G.clients.find(x=>x.id===clientId);
-  const prev = G.feePayments?.[clientId]?.[ym];
-  showModal(`<div style="max-width:400px;width:min(400px,95vw)">
-  <div class="modal-header">
-    <h3>💳 수납 상세 — ${esc(c?.name||'')} ${ym}</h3>
-    <button class="close-btn" onclick="closeModal()">✕</button>
-  </div>
-  <div class="modal-body">
-    <div style="margin-bottom:10px">
-      <label style="font-size:12px;color:#888;display:block;margin-bottom:4px">수납 방식</label>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        ${['계좌이체','CMS','현금','카드','기타'].map(m=>`<label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer"><input type="radio" name="pay-method" value="${m}" ${(prev?.method||'계좌이체')===m?'checked':''}> ${m}</label>`).join('')}
-      </div>
-    </div>
-    <div style="margin-bottom:10px">
-      <label style="font-size:12px;color:#888;display:block;margin-bottom:4px">수납 금액 (원)</label>
-      <input type="number" id="pay-amount" value="${prev?.amount||getFeeForYM(c,ym)||0}" style="width:100%;padding:8px 10px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box">
-    </div>
-    <div style="margin-bottom:12px">
-      <label style="font-size:12px;color:#888;display:block;margin-bottom:4px">메모 (선택)</label>
-      <input type="text" id="pay-note" value="${esc(prev?.note||'')}" placeholder="추가 메모..." style="width:100%;padding:8px 10px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box">
-    </div>
-    <div style="display:flex;gap:8px">
-      <button onclick="confirmFeePayment(${clientId},'${ym}')" class="btn-primary" style="flex:1;padding:10px">수납 확인</button>
-      <button onclick="closeModal()" style="padding:10px 16px;border-radius:8px;border:1px solid #e0e0e0;background:#fff;cursor:pointer;font-family:inherit">취소</button>
-    </div>
-  </div></div>`);
+  saveToLS();
+  renderFees();
 }
 function confirmFeePayment(clientId, ym) {
   const method = document.querySelector('input[name="pay-method"]:checked')?.value||'계좌이체';
@@ -4724,7 +4773,7 @@ function renderFees() {
   });
 
   const mFeeTotal     = feeClients.reduce((a,c)=>a+getFeeForYM(c,ym),0);
-  const mFeeCollected = feeClients.filter(c=>G.monthlyFees[c.id]?.[ym]).reduce((a,c)=>a+getFeeForYM(c,ym),0);
+  const mFeeCollected = feeClients.filter(c=>isMonthCollected(c.id,ym)).reduce((a,c)=>a+getFeeForYM(c,ym),0);
   const mFeeUnpaid    = mFeeTotal - mFeeCollected;
   const mFeePct       = mFeeTotal ? Math.round(mFeeCollected/mFeeTotal*100) : 0;
 
@@ -4809,7 +4858,8 @@ function renderFees() {
   });
   const _fmMgrKeys = Object.keys(_fmByMgr).sort((a,b)=>a.localeCompare(b,'ko'));
   const _genFeeRow = c => {
-    const collected = G.monthlyFees[c.id]?.[ym] || false;
+    const collected = isMonthCollected(c.id, ym);
+    const oldMonth = ym < '2026-06';
     const feeHist = ((G.feeHistory||{})[c.id]||{})[ym];
     const streak = !collected ? getUnpaidStreak(c, ym) : 0;
     const streakBadge = streak >= 2
@@ -4825,8 +4875,11 @@ function renderFees() {
       <td style="${hc['fm_dealType']?'display:none':''}">${getDealTypes(c).map(d=>dealBadge(d)).join('')}</td>
       <td style="color:#555;font-size:12px;${hc['fm_manager']?'display:none':''}">${getManagers(c).join(', ')||'-'}</td>
       <td style="font-size:11px;color:#888;${hc['fm_contractDate']?'display:none':''}">${c.contractDate?c.contractDate.slice(0,7):'-'}</td>
-      <td style="text-align:right;font-weight:700;color:#7b1fa2;${hc['fm_fee']?'display:none':''}">${getFeeForYM(c,ym).toLocaleString()}원${getFeeForYM(c,ym)!==c.fee?`<div style="font-size:9px;color:#f57c00">변경됨</div>`:''}</td>
-      <td style="text-align:center" onclick="toggleMonthlyFee(${c.id},'${ym}')">
+      <td style="text-align:right;font-weight:700;color:#7b1fa2;${hc['fm_fee']?'display:none':''}">
+        <div>${getFeeForYM(c,ym).toLocaleString()}원${getFeeForYM(c,ym)!==c.fee?`<span style="font-size:9px;color:#f57c00;margin-left:3px">변경됨</span>`:''}</div>
+        ${!oldMonth&&!collected?`<input type="number" placeholder="${getFeeForYM(c,ym)}" style="width:80px;margin-top:3px;padding:2px 5px;border:1px solid #ddd;border-radius:5px;font-size:11px;text-align:right;font-family:inherit" title="실수금액 입력 후 Enter" onblur="if(this.value)handleActualAmount(${c.id},'${ym}',this)" onkeydown="if(event.key==='Enter')this.blur()">`:``}
+      </td>
+      <td ${!oldMonth?`onclick="toggleMonthlyFee(${c.id},'${ym}')" style="text-align:center;cursor:pointer"`:`style="text-align:center;opacity:.5"`}>
         <div class="chk ${collected?'on':''}" style="margin:0 auto;width:26px;height:26px;${collected?'background:#c8e6c9;border-color:#2e7d32;color:#2e7d32':''}">${collected?'💰':''}</div>
         ${collected&&feeHist?`<div style="font-size:9px;color:#888;margin-top:1px">${feeHist.date.slice(0,10)}</div>`:''}
       </td>
@@ -4835,6 +4888,7 @@ function renderFees() {
       </td>
     </tr>`;
   };
+  window._feesVisibleClients = filteredFeeClients;
   const monthlyRows = (_fmMgrKeys.length > 1 ? _fmMgrKeys : ['_all']).flatMap(mgrKey => {
     const cls = mgrKey === '_all' ? filteredFeeClients : _fmByMgr[mgrKey];
     const subTotal = cls.reduce((a,c)=>a+getFeeForYM(c,ym),0);
@@ -4872,6 +4926,7 @@ function renderFees() {
       const months = clientMonths(c);
       for (let i=1; i<=6; i++) {
         const checkYM = adjYM2(curYM, -i);
+        if (checkYM < '2026-06') continue;
         if (!months.includes(checkYM)) continue;
         if (G.monthlyFees[c.id]?.[checkYM]) continue; // already collected
         if (i===1) { aging.m1.count++; aging.m1.total += c.fee||0; }
@@ -4966,7 +5021,13 @@ function renderFees() {
         <th style="padding:4px 6px;${_hcStyle('fm_manager')}"><div style="display:flex;align-items:center">${filterPopupBtn('feesManagerFilter','담당자')}${_hcBtn('fm_manager')}</div></th>
         <th style="${_hcStyle('fm_contractDate')}"><div style="display:flex;align-items:center;justify-content:center">수임일${_hcBtn('fm_contractDate')}</div></th>
         <th style="text-align:right;${_hcStyle('fm_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">월수수료${_hcBtn('fm_fee')}</div></th>
-        <th style="width:56px;text-align:center;padding:3px">${feesCycleBtn('feesCollectFilter','수금',['전체','수금','미수금'])}</th>
+        <th style="width:56px;text-align:center;padding:3px">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+            ${feesCycleBtn('feesCollectFilter','수금',['전체','수금','미수금'])}
+            <button onclick="bulkToggleFees('${ym}',true)" style="padding:1px 5px;border-radius:4px;border:1px solid #81c784;background:#e8f5e9;color:#2e7d32;font-size:9px;cursor:pointer;font-family:inherit;width:100%">전체수금</button>
+            <button onclick="bulkToggleFees('${ym}',false)" style="padding:1px 5px;border-radius:4px;border:1px solid #ef9a9a;background:#fdecea;color:#c62828;font-size:9px;cursor:pointer;font-family:inherit;width:100%">전체취소</button>
+          </div>
+        </th>
         <th style="width:52px;text-align:center;font-size:11px">계산서</th>
       </tr></thead>
       <tbody>${monthlyRows}</tbody>
