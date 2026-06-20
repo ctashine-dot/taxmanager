@@ -755,6 +755,16 @@ function contractLabel(key) {
   return key;
 }
 
+function rebuildAllContracts(showToast = true) {
+  G.clients.forEach(c => {
+    const dt = getDealTypes(c)[0] || '';
+    if (!dt) { if (!c.contracts) c.contracts = []; return; }
+    c.contracts = getDefaultContracts(dt, c.taxType, c.vatType);
+  });
+  saveToLS();
+  if (showToast) toast('수임계약항목이 전체 재설정되었습니다.', 'success');
+}
+
 function buildContractAreaHTML() {
   const avail = availableContracts(window._formData.vatType, window._formData.taxType);
   const items = avail.flatMap(g=>g.items);
@@ -7201,6 +7211,11 @@ function openSettings() {
         매년 1월 자동 생성 알림
       </label>
     </div>
+    <div style="border:1px solid #ffe082;border-radius:10px;padding:14px;background:#fffde7">
+      <div style="font-weight:700;font-size:13px;margin-bottom:6px">📋 수임계약항목 일괄 재설정</div>
+      <div style="font-size:12px;color:#888;margin-bottom:10px;line-height:1.6">모든 거래처의 수임계약항목을 수임내용·인격·과세유형 기준으로 다시 설정합니다.<br>기존 수동 설정은 초기화됩니다.</div>
+      <button type="button" class="btn-sm" style="background:#f57f17;color:#fff;border:none" onclick="if(confirm('모든 거래처의 수임계약항목을 일괄 재설정합니다.\n기존 수동 설정이 초기화됩니다. 계속하시겠습니까?')){rebuildAllContracts();closeModal();}">⟳ 전체 거래처 수임계약항목 재설정</button>
+    </div>
     <div style="border:1px solid #e0e0e0;border-radius:10px;padding:14px;background:#f8f9ff;margin-top:4px">
       <div style="font-weight:700;font-size:13px;margin-bottom:10px">📊 대시보드 위젯 표시 설정</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
@@ -8036,14 +8051,9 @@ function migrateJulgae() {
   if (contractsMigrated) saveToLS();
 
   // 수임계약항목 전체 재설정 (dealType/vatType/taxType 기준 — 최초 1회)
-  if (!localStorage.getItem('tm_contractsRebuildV1')) {
-    G.clients.forEach(c => {
-      const dt = getDealTypes(c)[0] || '';
-      if (!dt) { if (!c.contracts) c.contracts = []; return; }
-      c.contracts = getDefaultContracts(dt, c.taxType, c.vatType);
-    });
-    localStorage.setItem('tm_contractsRebuildV1', '1');
-    saveToLS();
+  if (!localStorage.getItem('tm_contractsRebuildV2')) {
+    rebuildAllContracts(false);
+    localStorage.setItem('tm_contractsRebuildV2', '1');
   }
 
   // 수수료 4종 필드 마이그레이션: feeSingo가 미정의인 거래처에 한해 deal type 기준으로 이동
