@@ -2927,9 +2927,11 @@ function openForm(id) {
         </div>
         <div id="bizno-msg" style="font-size:10px;margin-top:2px;padding-left:4px"></div>
       </div>
-      <div class="ff">
-        <label class="ffl" id="f-jumin-label">${c.taxType==='법인'?'법인번호':'주민번호'}</label>
-        <input class="finput" id="f-jumin" value="${esc(c.jumin||'')}" placeholder="000000-0000000" oninput="window._formData.jumin=this.value">
+      <div>
+        <div class="ff">
+          <label class="ffl" id="f-jumin-label">${c.taxType==='법인'?'법인번호':'주민번호'}</label>
+          <input class="finput" id="f-jumin" value="${esc(c.jumin||'')}" placeholder="000000-0000000" oninput="window._formData.jumin=this.value">
+        </div>
       </div>
     </div>
 
@@ -2965,13 +2967,10 @@ function openForm(id) {
       <input class="finput" id="f-taxOffice" value="${esc(c.taxOffice||'')}" oninput="window._formData.taxOffice=this.value">
     </div>
 
-    <div class="c3" style="display:flex;justify-content:space-between;align-items:center;background:#e8f0fe;border-radius:7px;padding:5px 10px">
-      <span style="font-size:11px;font-weight:700;color:#1565c0">기장료 (월정, 원)</span>
-      <button type="button" onclick="suggestFeeFromBosuTable()" style="padding:3px 9px;border-radius:7px;border:1.5px solid #4f8ef7;background:#fff;color:#4f8ef7;font-size:11px;cursor:pointer;font-family:inherit">📋 보수표 추천</button>
-    </div>
-    <div class="ff">
-      <label class="ffl">기장료</label>
-      <input type="number" class="finput" id="f-fee" value="${c.fee||0}" oninput="window._formData.fee=Number(this.value)">
+    <div class="c3" style="display:flex;align-items:center;gap:8px;background:#e8f0fe;border-radius:7px;padding:5px 10px">
+      <span style="font-size:11px;font-weight:700;color:#1565c0;white-space:nowrap">기장료 (월정, 원)</span>
+      <input type="number" class="finput" id="f-fee" value="${c.fee||0}" style="flex:1;min-width:60px;max-width:130px;background:#fff;border-color:#c5d8fc;padding:3px 8px;font-size:12px" oninput="window._formData.fee=Number(this.value)">
+      <button type="button" onclick="suggestFeeFromBosuTable()" style="padding:3px 9px;border-radius:7px;border:1.5px solid #4f8ef7;background:#fff;color:#4f8ef7;font-size:11px;cursor:pointer;font-family:inherit;white-space:nowrap">📋 보수표 추천</button>
     </div>
     <div class="ff c2" style="background:#f0f7ff;border:1px dashed #90caf9">
       <label class="ffl" style="color:#888">조정료·신고대리·성실신고</label>
@@ -2995,10 +2994,14 @@ function openForm(id) {
       </div>
     </div>
 
+    <div class="c3 ff" style="align-items:flex-start;gap:8px">
+      <label class="ffl" style="margin-top:3px;white-space:nowrap">수임계약항목</label>
+      <div id="contract-area" style="flex:1;min-width:0">${contractsHTML()}</div>
+    </div>
+
     <div class="c3" style="background:#f8f9ff;border:1px solid #e0e4f0;border-radius:10px;padding:10px">
-      <div class="fsec">관계사 그룹</div>
-      <div class="ff" style="margin-bottom:${_allGroups.length>0||_groupMembers.length>0?'6px':'0'}">
-        <label class="ffl">그룹명</label>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:${_allGroups.length>0||_groupMembers.length>0?'6px':'0'}">
+        <span style="font-size:11px;font-weight:700;color:#3949ab;white-space:nowrap;flex-shrink:0">관계사 그룹</span>
         <div style="flex:1;min-width:0;display:flex;gap:5px;align-items:center">
           <input class="finput" style="flex:1" id="f-relatedGroup" value="${esc(c.relatedGroup||'')}"
             placeholder="비우면 대표자명으로 자동 감지"
@@ -3014,13 +3017,6 @@ function openForm(id) {
         <div id="groups-list" style="display:none;flex-wrap:wrap;gap:4px;margin-top:5px">
           ${_allGroups.map((g,gi)=>{const cnt=G.clients.filter(cl=>cl.id!==c.id&&cl.relatedGroup===g).length;return`<button type="button" onclick="(function(){var n=window._formGroupNames[${gi}];document.getElementById('f-relatedGroup').value=n;window._formData.relatedGroup=n;window._formData.soloGroup=false;})()" style="background:#e8f0fe;border:1px solid #c5cae9;border-radius:8px;padding:3px 10px;font-size:11px;cursor:pointer;font-family:inherit;color:#1565c0">👥 ${esc(g)}<span style="color:#888;margin-left:3px;font-size:10px">${cnt}개</span></button>`;}).join('')}
         </div>`:''}
-    </div>
-
-    <div class="c3" style="border:1.5px solid #e0e0e0;border-radius:10px;overflow:hidden">
-      <div style="background:#f8f9ff;padding:8px 12px;font-size:11px;font-weight:700;color:#555;border-bottom:1px solid #e8eaf6">
-        수임계약항목 <span style="font-weight:400;color:#aaa;margin-left:4px">(${c.vatType} · ${c.taxType})</span>
-      </div>
-      <div style="padding:10px" id="contract-area">${contractsHTML()}</div>
     </div>
 
     <div class="c3" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -3088,7 +3084,8 @@ window.onFormSelect = function(field, val) {
     }
     document.getElementById('contract-area').innerHTML = (()=>{
       const avail2 = availableContracts(window._formData.vatType,window._formData.taxType);
-      return avail2.map(g=>`<div class="contract-group"><div class="contract-group-title">${g.label}</div><div class="contract-chips">${g.items.map(item=>`<button type="button" class="contract-chip ${(window._formData.contracts||[]).includes(item.key)?'on':''}" onclick="toggleContract('${item.key}')">${item.label}</button>`).join('')}</div></div>`).join('');
+      const items2 = avail2.flatMap(g=>g.items);
+      return '<div class="contract-chips">'+items2.map(item=>`<button type="button" class="contract-chip ${(window._formData.contracts||[]).includes(item.key)?'on':''}" onclick="toggleContract('${item.key}')">${item.label}</button>`).join('')+'</div>';
     })();
   }
   if (field==='status') {
@@ -3202,7 +3199,8 @@ window.toggleContract = function(key) {
   const area = document.getElementById('contract-area');
   if (area) {
     const avail = availableContracts(window._formData.vatType, window._formData.taxType);
-    area.innerHTML = avail.map(g=>`<div class="contract-group"><div class="contract-group-title">${g.label}</div><div class="contract-chips">${g.items.map(item=>`<button type="button" class="contract-chip ${(window._formData.contracts||[]).includes(item.key)?'on':''}" onclick="toggleContract('${item.key}')">${item.label}</button>`).join('')}</div></div>`).join('');
+    const items3 = avail.flatMap(g=>g.items);
+    area.innerHTML = '<div class="contract-chips">'+items3.map(item=>`<button type="button" class="contract-chip ${(window._formData.contracts||[]).includes(item.key)?'on':''}" onclick="toggleContract('${item.key}')">${item.label}</button>`).join('')+'</div>';
   }
 };
 
