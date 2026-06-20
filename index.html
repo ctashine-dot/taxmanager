@@ -4358,8 +4358,8 @@ function renderJulgae() {
       return `<tr id="jr-${pKey2}-${c.id}" style="background:${rowBg}">
         ${G.julgaeBulkMode?`<td style="text-align:center;width:32px" onclick="event.stopPropagation();toggleJulgaeSelect(${c.id})"><input type="checkbox" ${(G.julgaeBulkSelected||[]).includes(c.id)?'checked':''} style="width:16px;height:16px;cursor:pointer" onclick="event.stopPropagation();toggleJulgaeSelect(${c.id})"></td>`:''}
         <td style="color:#aaa;font-size:11px">${++_rowN}</td>
-        <td onclick="openClientNotes(${c.id})" style="cursor:pointer">${item.isGroupHeader
-          ?`<div style="display:flex;align-items:center;gap:6px"><button onclick="event.stopPropagation();toggleJulgaeGroup('${item.groupKey}')" style="border:none;background:none;cursor:pointer;font-size:13px;padding:0 2px;color:#7b1fa2">${item.expanded?'▼':'▶'}</button><div class="td-name">${esc(c.name)}</div><span style="background:#7b1fa2;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;white-space:nowrap">외 ${item.groupClients.length-1}개</span>${_noteIcon}</div>`
+        <td onclick="${item.isGroupHeader?`toggleJulgaeGroup('${item.groupKey}')`:`openClientNotes(${c.id})`}" style="cursor:pointer">${item.isGroupHeader
+          ?`<div class="td-name" style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span><span style="background:#7b1fa2;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;white-space:nowrap;flex-shrink:0">+${item.groupClients.length-1} ${item.expanded?'▲':'▼'}</span>${_noteIcon}</div>`
           :item.isGroupChild
             ?`<div style="display:flex;align-items:center;gap:4px;padding-left:22px"><span style="color:#ccc;font-size:11px">└</span><div class="td-name" style="font-size:12px">${esc(c.name)}</div>${_noteIcon}</div>`
             :`<div class="td-name" style="display:flex;align-items:center">${esc(c.name)}${_noteIcon}</div>`
