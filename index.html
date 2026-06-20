@@ -1157,8 +1157,8 @@ function _renderDashboardInner() {
   const thisYM = (()=>{const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');})();
   const feeActive = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업');
 
-  // 월정 수수료 (이달 기준)
-  const monthlyClients = feeActive.filter(c=>getDealTypes(c).some(d=>['기장','고문','성실'].includes(d))&&(!c.contractDate||c.contractDate.slice(0,7)<=thisYM));
+  // 월정 수수료 (이달 기준) — feeByManager 와 동일 로직
+  const monthlyClients = feeActive.filter(c=>getDealTypes(c).some(d=>['기장','고문','성실'].includes(d)));
   const monthlyTotal     = monthlyClients.reduce((a,c)=>a+(c.fee||0),0);
   const monthlyCollected = monthlyClients.filter(c=>G.monthlyFees[c.id]?.[thisYM]).reduce((a,c)=>a+(c.fee||0),0);
 
@@ -1671,7 +1671,6 @@ function renderClients() {
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">수임일자</div>${em?iInput('contractDate',c.contractDate,'type="date"'):`<div style="font-weight:600">${esc(c.contractDate||'-')}</div>`}</div>
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">사업자번호</div>${em?iInput('bizNo',c.bizNo,'placeholder="000-00-00000" style="width:130px"'):`<div style="font-weight:600;font-family:monospace">${esc(c.bizNo||'-')}</div>`}</div>
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">${c.taxType==='법인'?'법인등록번호':'주민번호'}</div>${em?iInput('jumin',c.jumin,'placeholder="000000-0000000" style="width:150px"'):`<div style="font-weight:600;font-family:monospace">${c.jumin?esc(c.jumin.slice(0,6)+'-'+c.jumin.slice(6,7)+'••••••'):'-'}</div>`}</div>
-            ${(()=>{const regNos=[];if(c.bizNo)regNos.push(`<span style="font-size:11px;color:#555"><b>사업자</b> ${esc(c.bizNo)}</span>`);if(c.taxType==='법인'&&c.jumin)regNos.push(`<span style="font-size:11px;color:#555"><b>법인</b> ${esc(c.jumin.slice(0,6)+'-'+c.jumin.slice(6,7)+'••••••')}</span>`);else if(c.taxType!=='법인'&&c.jumin)regNos.push(`<span style="font-size:11px;color:#555"><b>주민</b> ${esc(c.jumin.slice(0,6)+'-'+c.jumin.slice(6,7)+'••••••')}</span>`);return regNos.length?`<div style="flex-basis:100%;display:flex;flex-wrap:wrap;gap:10px;padding:6px 10px;background:#f0f4ff;border-radius:6px;margin-top:4px">${regNos.join('')}</div>`:'';})()}
             ${c.status==='해지'||c.status==='폐업'?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">해지/폐업일</div><div style="font-weight:600;color:#c62828">${esc(c.terminationDate||'-')}</div></div>`:''}
             ${contracts?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">수임항목</div><div style="font-size:12px;color:#555">${esc(contracts)}</div></div>`:''}
             ${c.memo?`<div style="max-width:240px"><div style="font-size:11px;color:#888;margin-bottom:3px">메모</div><div style="font-size:12px;color:#555">${esc(c.memo)}</div></div>`:''}
@@ -2864,6 +2863,7 @@ function openForm(id) {
   };
 
   window._formData = {...c, dealTypes: getDealTypes(c), managers: getManagers(c)};
+  window._formDataSnapshot = JSON.stringify(window._formData);
   window._formTags = [...((G.clientTags||{})[c.id]||[])];
 
   // Pre-compute group data for form UI
@@ -2921,18 +2921,16 @@ function openForm(id) {
     </div>
 
     <div class="c3" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <div style="display:flex;flex-direction:column;gap:2px">
-        <div class="ff" style="flex:1">
-          <label class="ffl">사업자번호</label>
-          <input class="finput" id="f-bizNo" value="${esc(c.bizNo||'')}" placeholder="000-00-00000" oninput="validateBizNo(this.value,this)">
-        </div>
-        <div id="bizno-msg" style="font-size:10px;padding-left:4px"></div>
+      <div class="ff">
+        <label class="ffl">사업자번호</label>
+        <input class="finput" id="f-bizNo" value="${esc(c.bizNo||'')}" placeholder="000-00-00000" oninput="validateBizNo(this.value,this)">
       </div>
       <div class="ff">
         <label class="ffl" id="f-jumin-label">${c.taxType==='법인'?'법인번호':'주민번호'}</label>
         <input class="finput" id="f-jumin" value="${esc(c.jumin||'')}" placeholder="000000-0000000" oninput="window._formData.jumin=this.value">
       </div>
     </div>
+    <div id="bizno-msg" class="c3" style="font-size:10px;padding-left:4px;margin-top:-4px;min-height:0"></div>
 
     <div class="ff">
       <label class="ffl">과세</label>
@@ -3275,6 +3273,7 @@ window.saveForm = function(id) {
     if (savedId) G.clientTags[savedId] = window._formTags;
   }
   saveToLS();
+  window._formDataSnapshot = undefined;
   closeModal();
   if (G.currentTab==='clients') renderClients();
   else if (G.currentTab==='dashboard') renderDashboard();
@@ -7966,6 +7965,13 @@ function showModal(html) {
   mc.innerHTML = `<div class="overlay" onclick="if(event.target===this)closeModal()">${html}</div>`;
 }
 function closeModal() {
+  if (window._formDataSnapshot !== undefined) {
+    const cur = JSON.stringify(window._formData);
+    if (cur !== window._formDataSnapshot) {
+      if (!confirm('변경사항이 저장되지 않습니다. 닫으시겠습니까?')) return;
+    }
+    window._formDataSnapshot = undefined;
+  }
   document.getElementById('modal-container').innerHTML='';
 }
 
@@ -8028,6 +8034,18 @@ function migrateJulgae() {
     }
   });
   if (contractsMigrated) saveToLS();
+
+  // 수임계약항목 전체 재설정 (dealType/vatType/taxType 기준 — 최초 1회)
+  if (!localStorage.getItem('tm_contractsRebuildV1')) {
+    G.clients.forEach(c => {
+      const dt = getDealTypes(c)[0] || '';
+      if (!dt) { if (!c.contracts) c.contracts = []; return; }
+      c.contracts = getDefaultContracts(dt, c.taxType, c.vatType);
+    });
+    localStorage.setItem('tm_contractsRebuildV1', '1');
+    saveToLS();
+  }
+
   // 수수료 4종 필드 마이그레이션: feeSingo가 미정의인 거래처에 한해 deal type 기준으로 이동
   const bookingTypes = ['기장', '고문', '성실'];
   let feesMigrated = false;
