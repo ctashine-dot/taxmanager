@@ -1740,14 +1740,21 @@ function renderClients() {
   ${G.editMode?`<div style="background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#2e7d32">✏ <b>수정모드</b> — 수임내용·인격·과세유형·담당자·수수료를 클릭해 바로 변경하세요. 행을 펼치면 전화번호·관할세무서·수임일자도 수정할 수 있습니다.</div>`:''}
 
   <div class="client-mobile-filters">
-    ${(()=>{const a=G.searchText;return`<button onclick="openClientNameSearch(this)" style="padding:5px 11px;border-radius:16px;font-size:12px;cursor:pointer;font-family:inherit;border:1.5px solid ${a?'#4f8ef7':'#ddd'};background:${a?'#e8f0fe':'#fff'};color:${a?'#1565c0':'#555'};display:flex;align-items:center;gap:4px"><span>🔍 ${a?esc(a):'업체명'}</span></button>`;})()}
-    ${(()=>{const a=G.clientRepSearch;return`<button onclick="openClientRepSearch(this)" style="padding:5px 11px;border-radius:16px;font-size:12px;cursor:pointer;font-family:inherit;border:1.5px solid ${a?'#4f8ef7':'#ddd'};background:${a?'#e8f0fe':'#fff'};color:${a?'#1565c0':'#555'};display:flex;align-items:center;gap:4px"><span>🔍 ${a?esc(a):'대표자'}</span></button>`;})()}
-    ${filterPopupBtn('filterDealTypes','수임내용')}
-    ${filterPopupBtn('filterTaxTypes','인격')}
-    ${filterPopupBtn('filterVatTypes','과세유형')}
-    ${filterPopupBtn('filterManagers','담당자')}
-    ${filterPopupBtn('filterCMS','CMS')}
-    ${filterPopupBtn('filterFeeStatuses','수수료상태')}
+    ${(()=>{
+      const pill = (active, label, onclick) => `<button onclick="${onclick}" style="padding:5px 11px;border-radius:16px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap;border:1.5px solid ${active?'#4f8ef7':'#ddd'};background:${active?'#e8f0fe':'#fff'};color:${active?'#1565c0':'#555'}">${label}</button>`;
+      const filterPill = (field, label) => { const v=G[field]||[]; return pill(v.length>0, label+(v.length?` (${v.length})`:'')+'▾', `openFilterPopup('${field}',this)`); };
+      const sa = G.searchText, ra = G.clientRepSearch;
+      return [
+        pill(!!sa, '🔍 '+(sa?esc(sa):'업체명'), 'openClientNameSearch(this)'),
+        pill(!!ra, '🔍 '+(ra?esc(ra):'대표자'), 'openClientRepSearch(this)'),
+        filterPill('filterDealTypes','수임내용'),
+        filterPill('filterTaxTypes','인격'),
+        filterPill('filterVatTypes','과세유형'),
+        filterPill('filterManagers','담당자'),
+        filterPill('filterCMS','CMS'),
+        filterPill('filterFeeStatuses','수수료상태'),
+      ].join('');
+    })()}
   </div>
 
   <div class="tbl-wrap client-table-wrap" style="${(G.sectionCollapsed||{})['clients-list']?'display:none':''}">
