@@ -4249,11 +4249,17 @@ function renderJulgae() {
       const bg = pct===100?'#e8f5e9':pct>=70?'#e8f0fe':pct>=30?'#fff8e1':'#fdecea';
       const border = isActive?'#4f8ef7':(pct===100?'#81c784':pct>=70?'#7c4dff':pct>=30?'#ffca28':'#ef9a9a');
       const col = pct===100?'#2e7d32':pct>=70?'#4527a0':pct>=30?'#e65100':'#c62828';
-      return `<div onclick="G.julgaePeriodIdx=${i};renderJulgae()" style="cursor:pointer;padding:7px 10px;border-radius:8px;border:2px solid ${border};background:${isActive?'#e8f0fe':bg};min-width:80px;text-align:center;transition:box-shadow .1s${isActive?';box-shadow:0 2px 8px rgba(79,142,247,.3)':''}" title="${esc(p.label)} — ${done}/${total} 완료">
-        <div style="font-size:10px;color:${isActive?'#1565c0':'#888'};margin-bottom:3px;font-weight:${isActive?700:400}">${isLocked?'🔒 ':''}${esc(_sl(p))}</div>
-        <div style="font-size:14px;font-weight:800;color:${isActive?'#1565c0':col}">${pct}%</div>
-        <div class="progress-bar" style="height:4px;margin-top:4px"><div class="progress-fill" style="width:${pct}%;background:${border}"></div></div>
-        <div style="font-size:9px;color:#aaa;margin-top:2px">${done}/${total}</div>
+      return `<div style="position:relative;display:inline-block">
+        <div onclick="G.julgaePeriodIdx=${i};renderJulgae()" style="cursor:pointer;padding:7px 10px 7px 10px;border-radius:8px;border:2px solid ${border};background:${isActive?'#e8f0fe':bg};min-width:80px;text-align:center;transition:box-shadow .1s${isActive?';box-shadow:0 2px 8px rgba(79,142,247,.3)':''}" title="${esc(p.label)} — ${done}/${total} 완료">
+          <div style="font-size:10px;color:${isActive?'#1565c0':'#888'};margin-bottom:3px;font-weight:${isActive?700:400}">${isLocked?'🔒 ':''}${esc(_sl(p))}</div>
+          <div style="font-size:14px;font-weight:800;color:${isActive?'#1565c0':col}">${pct}%</div>
+          <div class="progress-bar" style="height:4px;margin-top:4px"><div class="progress-fill" style="width:${pct}%;background:${border}"></div></div>
+          <div style="font-size:9px;color:#aaa;margin-top:2px">${done}/${total}</div>
+        </div>
+        ${isLocked
+          ? `<div title="마감된 리스트는 삭제할 수 없습니다" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:#ccc;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:not-allowed">🔒</div>`
+          : `<button onclick="event.stopPropagation();deletePeriod('${p.id}')" title="리스트 삭제" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:#e53935;color:#fff;font-size:11px;font-weight:700;border:none;cursor:pointer;padding:0;line-height:1;display:flex;align-items:center;justify-content:center">✕</button>`
+        }
       </div>`;
     }).join('');
 
@@ -5604,9 +5610,13 @@ function savePeriod() {
 }
 
 function deletePeriod(id) {
-  if (!confirm('이 신고기간과 결재 데이터를 삭제하시겠습니까?')) return;
-  G.periods = G.periods.filter(p => p.id !== id);
+  const p = G.periods.find(x => x.id === id);
+  if (!p) return;
+  if (p.locked) { toast('마감된 리스트는 삭제할 수 없습니다', 'warning'); return; }
+  if (!confirm(`"${p.label}" 리스트와 결재 데이터를 삭제하시겠습니까?`)) return;
+  G.periods = G.periods.filter(x => x.id !== id);
   delete G.julgae[id];
+  if (G.julgaeSelectedPeriods) G.julgaeSelectedPeriods = G.julgaeSelectedPeriods.filter(x => x !== id);
   G.julgaePeriodIdx = Math.max(0, Math.min(G.julgaePeriodIdx, G.periods.length - 1));
   saveToLS();
   renderJulgae();
