@@ -885,6 +885,47 @@ function buildClientGroupMap(allClients) {
   };
 }
 
+function gradeBadge(grade, manual) {
+  if (!grade) return '<span style="color:#ccc;font-size:11px">-</span>';
+  const cfg = {A:{bg:'#e8f0fe',col:'#1565c0',bd:'#4f8ef7'},B:{bg:'#e8f5e9',col:'#2e7d32',bd:'#43a047'},C:{bg:'#f5f5f5',col:'#888',bd:'#bbb'}};
+  const c = cfg[grade] || cfg.C;
+  return `<span style="padding:2px 8px;border-radius:12px;border:1.5px solid ${c.bd};background:${c.bg};color:${c.col};font-size:11px;font-weight:700">${grade}${manual?'<span style="font-size:9px;opacity:.6;margin-left:1px">M</span>':''}</span>`;
+}
+
+function computeGrades() {
+  const active = G.clients.filter(c => c.status !== '해지' && c.status !== '폐업');
+  G.clients.filter(c => c.status === '해지' || c.status === '폐업').forEach(c => { if (!c.gradeManual) c.grade = ''; });
+  const autoTargets = active.filter(c => !c.gradeManual);
+  const ym = (()=>{const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');})();
+  const fee = c => (c.feeChanges&&c.feeChanges.length ? (()=>{const s=[...c.feeChanges].sort((a,b)=>b.from.localeCompare(a.from));const ap=s.find(ch=>ch.from<=ym);return ap?ap.amount:(c.feeChanges[0]?.amount||c.fee||0);})() : c.fee||0);
+  const sorted = [...autoTargets].sort((a, b) => fee(b) - fee(a));
+  const n = sorted.length;
+  const aCut = Math.ceil(n * 0.2);
+  const bCut = Math.ceil(n * 0.7);
+  sorted.forEach((c, idx) => {
+    let grade;
+    if (idx < aCut && fee(c) > 0) grade = 'A';
+    else if (idx < bCut) grade = 'B';
+    else grade = 'C';
+    const target = G.clients.find(x => x.id === c.id);
+    if (target) target.grade = grade;
+  });
+}
+
+function setClientGradeManual(clientId, grade) {
+  const c = G.clients.find(x => x.id === clientId);
+  if (!c) return;
+  if (grade === null) {
+    c.gradeManual = false;
+    computeGrades();
+  } else {
+    c.grade = grade;
+    c.gradeManual = true;
+  }
+  saveToLS();
+  renderClients();
+}
+
 function filteredClients() {
   const getGroupKey = buildClientGroupMap(G.clients);
   const list = G.clients.filter(c => {
@@ -907,6 +948,7 @@ function filteredClients() {
     }
     if (G.filterRisk==='위험' && clientRiskLevel(c)!=='red') return false;
     if (G.filterRisk==='주의' && clientRiskLevel(c)!=='yellow') return false;
+    if (G.filterGrade && c.grade !== G.filterGrade) return false;
     return true;
   });
   if (G.showFavorites) list = list.filter(c=>(G.favorites||[]).includes(c.id));
@@ -1220,6 +1262,23 @@ function _renderDashboardInner() {
     </div>`;
   })()}
 
+  ${(()=>{
+    const active = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업');
+    const grades = ['A','B','C'];
+    const gCfg = {A:{col:'#1565c0',bg:'#e8f0fe',bd:'#4f8ef7',label:'A등급'},B:{col:'#2e7d32',bg:'#e8f5e9',bd:'#43a047',label:'B등급'},C:{col:'#555',bg:'#f5f5f5',bd:'#bbb',label:'C등급'}};
+    const cards = grades.map(g=>{
+      const gc=gCfg[g];
+      const cls=active.filter(c=>c.grade===g);
+      const feeSum=cls.reduce((a,c)=>a+(c.fee||0),0);
+      return `<div class="stat-card" style="border-left:4px solid ${gc.bd};cursor:pointer" onclick="G.filterGrade=G.filterGrade==='${g}'?'':'${g}';G.clientPage=0;switchTab('clients');renderClients()">
+        <div class="stat-label" style="color:${gc.col};font-weight:700">${gc.label}</div>
+        <div class="stat-value" style="color:${gc.col}">${cls.length}</div>
+        <div class="stat-sub">${feeSum?feeSum.toLocaleString()+'원/월':'-'}</div>
+      </div>`;
+    }).join('');
+    return `<div style="margin-bottom:8px"><div style="font-size:13px;font-weight:700;color:#555;margin-bottom:7px">🏅 거래처 등급</div><div class="stat-grid">${cards}</div></div>`;
+  })()}
+
   <div class="stat-grid">
     <div class="stat-card" style="border-left:4px solid #4f8ef7">
       <div class="stat-label">활성 거래처</div>
@@ -1508,7 +1567,7 @@ function renderClients() {
   const filterRowSel = `style="width:100%;font-size:11px;padding:3px 4px;border:1px solid #ddd;border-radius:6px"`;
 
   const hc = G.hiddenCols || {};
-  const hiddenChips = _hcChips([['c_rep','대표자'],['c_dealType','수임내용'],['c_taxType','인격'],['c_vatType','과세유형'],['c_manager','담당자'],['c_fee','수수료'],['c_status','상태'],['c_cms','CMS']]);
+  const hiddenChips = _hcChips([['c_rep','대표자'],['c_dealType','수임내용'],['c_taxType','인격'],['c_vatType','과세유형'],['c_manager','담당자'],['c_fee','수수료'],['c_status','상태'],['c_cms','CMS'],['c_grade','등급']]);
 
   document.getElementById('page-clients').innerHTML = `
   <div style="margin-bottom:10px">
@@ -1520,13 +1579,14 @@ function renderClients() {
       <button class="btn-sm" style="background:${G.showFavorites?'#fff8e1':'#f5f5f5'};color:${G.showFavorites?'#f57c00':'#888'};border:2px solid ${G.showFavorites?'#ffd54f':'#e0e0e0'}" onclick="G.showFavorites=!G.showFavorites;G.clientPage=0;renderClients()">⭐ 즐겨찾기${G.showFavorites?' ON':''}</button>
       <button class="btn-sm" style="background:${(G.filterTags||[]).length?'#e8f0fe':'#f5f5f5'};color:${(G.filterTags||[]).length?'#4f8ef7':'#888'};border:1.5px solid ${(G.filterTags||[]).length?'#4f8ef7':'#e0e0e0'}" onclick="openTagFilterDropdown(this)">🏷 태그${(G.filterTags||[]).length?' ('+G.filterTags.length+')':''}</button>
       <button class="btn-sm" style="background:${G.filterRisk==='위험'?'#fdecea':G.filterRisk==='주의'?'#fff3e0':'#f5f5f5'};color:${G.filterRisk==='위험'?'#c62828':G.filterRisk==='주의'?'#e65100':'#888'};border:1.5px solid ${G.filterRisk==='위험'?'#ef9a9a':G.filterRisk==='주의'?'#ffcc80':'#e0e0e0'}" onclick="G.filterRisk=G.filterRisk===''?'위험':G.filterRisk==='위험'?'주의':'';G.clientPage=0;renderClients()">● 위험도${G.filterRisk?' ('+G.filterRisk+')':' (전체)'}</button>
+      <button class="btn-sm" style="background:${G.filterGrade==='A'?'#e8f0fe':G.filterGrade==='B'?'#e8f5e9':G.filterGrade==='C'?'#f5f5f5':'#f5f5f5'};color:${G.filterGrade==='A'?'#1565c0':G.filterGrade==='B'?'#2e7d32':G.filterGrade==='C'?'#888':'#888'};border:1.5px solid ${G.filterGrade==='A'?'#4f8ef7':G.filterGrade==='B'?'#43a047':G.filterGrade==='C'?'#bbb':'#e0e0e0'};font-weight:${G.filterGrade?'700':'400'}" onclick="G.filterGrade=G.filterGrade===''?'A':G.filterGrade==='A'?'B':G.filterGrade==='B'?'C':'';G.clientPage=0;renderClients()">등급${G.filterGrade?' ('+G.filterGrade+')':''}</button>
       <button class="btn-sm" style="background:#f0f8ff;color:#1565c0;border:1.5px solid #90caf9" onclick="openImportModal()">📥 세무사랑 가져오기</button>
       <button class="btn-sm" style="background:#f3e5f5;color:#6a1b9a;border:1.5px solid #ce93d8" onclick="openFilterPresets(this)">⭐ 프리셋${(G.filterPresets||[]).length?' ('+(G.filterPresets||[]).length+')':''}</button>
       <button class="btn-sm" style="background:${G.bulkMode?'#e8f5e9':'#f5f5f5'};color:${G.bulkMode?'#2e7d32':'#888'};border:2px solid ${G.bulkMode?'#43a047':'#e0e0e0'}" onclick="G.bulkMode=!G.bulkMode;G.selectedClients=[];renderClients()">☑ 일괄편집${G.bulkMode?' ON':''}</button>
       <button class="btn-sm" style="background:#e8f5e9;color:#2e7d32;border:1.5px solid #a5d6a7" onclick="openManagerTransferModal()">👤 담당자 이동</button>
       <button class="btn-sm" style="background:#fff3e0;color:#e65100;border:1.5px solid #ffcc80" onclick="openNotesSearch()">🔍 메모검색</button>
       <button class="btn-sm" style="background:#e8f5e9;color:#1b5e20;border:1.5px solid #81c784" onclick="exportClientsToExcel()">📊 Excel 내보내기</button>
-      ${(()=>{const hasFilter=G.searchText||G.clientRepSearch||(G.filterManagers||[]).length||(G.filterTaxTypes||[]).length||(G.filterVatTypes||[]).length||(G.filterFeeStatuses||[]).length||(G.filterDealTypes||[]).length||(G.filterCMS||[]).length||(G.filterTags||[]).length||G.filterRisk||G.showFavorites;return hasFilter?`<button class="btn-sm" style="background:#fdecea;color:#c62828;border:1.5px solid #ef9a9a;font-weight:700" onclick="G.searchText='';G.clientRepSearch='';G.filterManagers=[];G.filterTaxTypes=[];G.filterVatTypes=[];G.filterFeeStatuses=[];G.filterDealTypes=[];G.filterCMS=[];G.filterTags=[];G.filterRisk='';G.showFavorites=false;G.clientPage=0;renderClients()">✕ 필터초기화</button>`:'';})()}
+      ${(()=>{const hasFilter=G.searchText||G.clientRepSearch||(G.filterManagers||[]).length||(G.filterTaxTypes||[]).length||(G.filterVatTypes||[]).length||(G.filterFeeStatuses||[]).length||(G.filterDealTypes||[]).length||(G.filterCMS||[]).length||(G.filterTags||[]).length||G.filterRisk||G.filterGrade||G.showFavorites;return hasFilter?`<button class="btn-sm" style="background:#fdecea;color:#c62828;border:1.5px solid #ef9a9a;font-weight:700" onclick="G.searchText='';G.clientRepSearch='';G.filterManagers=[];G.filterTaxTypes=[];G.filterVatTypes=[];G.filterFeeStatuses=[];G.filterDealTypes=[];G.filterCMS=[];G.filterTags=[];G.filterRisk='';G.filterGrade='';G.showFavorites=false;G.clientPage=0;renderClients()">✕ 필터초기화</button>`:'';})()}
       <button class="btn-primary btn-sm" onclick="openForm(null)" style="padding:8px 14px">+ 거래처 추가</button>
     </div>
   </div>
@@ -1565,6 +1625,7 @@ function renderClients() {
       <th style="${_hcStyle('c_fee')}"><div style="display:flex;align-items:center;justify-content:center">수수료${_hcBtn('c_fee')}</div></th>
       <th style="${_hcStyle('c_status')}"><div style="display:flex;align-items:center;justify-content:center">상태${_hcBtn('c_status')}</div></th>
       <th style="padding:4px 6px;${_hcStyle('c_cms')}"><div style="display:flex;align-items:center">${filterPopupBtn('filterCMS','CMS')}${_hcBtn('c_cms')}</div></th>
+      <th style="width:42px;text-align:center;${_hcStyle('c_grade')}"><div style="display:flex;align-items:center;justify-content:center">등급${_hcBtn('c_grade')}</div></th>
       <th style="width:28px"></th>
     </tr>
     </thead>
@@ -1595,10 +1656,16 @@ function renderClients() {
         <td data-label="수수료" style="font-weight:600;font-size:11px;${hc['c_fee']?'display:none':''}">${em?`<div onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:4px;font-size:10px"><span style="color:#888">기장</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'fee',this.value)" value="${c.fee||0}" class="inline-edit" style="width:70px"></div>`:(c.status==='정상'||c.status==='주의'?(()=>{const cym=currentYM();const pending=((G.adHocFees||{})[c.id]||[]).filter(f=>!f.collected&&f.ym===cym);const parts=[];if(c.fee)parts.push('<span style="color:#aaa;font-size:10px">기장</span> '+c.fee.toLocaleString());if(pending.length)parts.push('<span style="font-size:10px;color:#e65100">+'+pending.length+'건 미수</span>');return parts.length?parts.join('<br>'):'-';})():'-')}</td>
         <td data-label="상태" ${em?`onclick="event.stopPropagation();openStatusModal(${c.id})" style="cursor:pointer;` : `style="opacity:.95;`}${hc['c_status']?'display:none':''}${em?`" title="클릭하여 상태 변경"` : `" title="상태 변경은 수정모드에서 가능합니다"`}>${badge(c.status,statusColor(c.status))}</td>
         <td data-label="CMS" ${em?`onclick="event.stopPropagation();toggleCMS(${c.id})" style="cursor:pointer;` : `style="opacity:.95;`}${hc['c_cms']?'display:none':''}${em?`"` : `" title="CMS 변경은 수정모드에서 가능합니다"`}>${badge(c.cms?'가입':'미가입',c.cms?'green':'gray')}</td>
+        <td data-label="등급" style="text-align:center;${hc['c_grade']?'display:none':''}">${gradeBadge(c.grade,c.gradeManual)}</td>
       </tr>
       <tr class="expand-row" id="expand-${c.id}" style="display:none">
-        <td colspan="${9-['c_rep','c_dealType','c_taxType','c_vatType','c_manager','c_fee','c_status','c_cms'].filter(k=>hc[k]).length}">
+        <td colspan="${10-['c_rep','c_dealType','c_taxType','c_vatType','c_manager','c_fee','c_status','c_cms','c_grade'].filter(k=>hc[k]).length}">
           <div class="expand-inner">
+            <div style="flex-basis:100%;display:flex;align-items:center;gap:8px;padding:7px 10px;background:${c.gradeManual?'#fff8e1':'#f8f9ff'};border-radius:8px;border:1px solid ${c.gradeManual?'#ffe082':'#e8eaf6'}">
+              <span style="font-size:11px;color:#888;white-space:nowrap;font-weight:600">등급</span>
+              ${['A','B','C'].map(g=>{const cfg={A:{bg:'#e8f0fe',col:'#1565c0',bd:'#4f8ef7'},B:{bg:'#e8f5e9',col:'#2e7d32',bd:'#43a047'},C:{bg:'#f5f5f5',col:'#666',bd:'#bbb'}};const cv=cfg[g];const on=c.grade===g;return`<button onclick="event.stopPropagation();setClientGradeManual(${c.id},'${g}')" style="padding:3px 14px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:2px solid ${on?cv.bd:'#e0e0e0'};background:${on?cv.bg:'#fff'};color:${on?cv.col:'#ccc'};transition:all .12s">${g}</button>`;}).join('')}
+              ${c.gradeManual?`<button onclick="event.stopPropagation();setClientGradeManual(${c.id},null)" style="padding:3px 10px;border-radius:8px;border:1.5px solid #ffcc80;background:#fff3e0;color:#e65100;font-size:11px;cursor:pointer;font-family:inherit;margin-left:4px">↺ 자동산출</button>`:`<span style="font-size:11px;color:#aaa;margin-left:4px">자동산출 중</span>`}
+            </div>
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">연락처</div>${em?iInput('phone',c.phone,'placeholder="전화번호" style="width:140px"'):`<div style="font-weight:600">${c.phone?`<a href="tel:${esc(c.phone)}" style="color:#4f8ef7;text-decoration:none;font-weight:600">${esc(c.phone)}</a>`:'-'}</div>`}</div>
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">관할세무서</div>${em?iInput('taxOffice',c.taxOffice,'list="taxoffice-list" placeholder="세무서 선택·입력" style="width:150px"'):`<div style="font-weight:600">${esc(c.taxOffice||'-')}</div>`}</div>
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">수임일자</div>${em?iInput('contractDate',c.contractDate,'type="date"'):`<div style="font-weight:600">${esc(c.contractDate||'-')}</div>`}</div>
@@ -7410,10 +7477,10 @@ function toggleField(id, field) {
 function exportClientsToExcel() {
   if (typeof XLSX==='undefined') { toast('XLSX 라이브러리 미로드','error'); return; }
   const list = filteredClients();
-  const headers = ['번호','거래처명','대표자','수임내용','인격','과세유형','담당자','기장수수료','신고수수료','상태','CMS','수임일','관할세무서','연락처','사업자번호','메모'];
+  const headers = ['번호','거래처명','대표자','등급','수임내용','인격','과세유형','담당자','기장수수료','상태','CMS','수임일','관할세무서','연락처','사업자번호','메모'];
   const rows = list.map((c,i)=>[
-    i+1, c.name, c.rep||'', getDealTypes(c).join('/'), c.taxType||'', c.vatType||'',
-    getManagers(c).join('/'), c.fee||0, (c.feeSingo||0)+(c.feeJojung||0)+(c.feeSeongsi||0),
+    i+1, c.name, c.rep||'', c.grade||(c.gradeManual?c.grade:''), getDealTypes(c).join('/'), c.taxType||'', c.vatType||'',
+    getManagers(c).join('/'), c.fee||0,
     c.status||'', c.cms?'가입':'미가입', c.contractDate||'', c.taxOffice||'', c.phone||'', c.bizNo||'', c.memo||''
   ]);
   const wb = XLSX.utils.book_new();
@@ -8103,6 +8170,7 @@ async function loadFromFirebase() {
   try { const _up=JSON.parse(localStorage.getItem('tm_uiPrefs')||'{}'); if(_up.julgaeSort)G.julgaeSort=_up.julgaeSort; if(_up.julgaeSortDir)G.julgaeSortDir=_up.julgaeSortDir; } catch(e){}
   try {
     migrateJulgae();
+    computeGrades();
     if (G.settings?.managers) MANAGERS = ['전체', ...G.settings.managers];
     updateBadge();
   } catch(e) {
