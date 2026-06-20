@@ -636,7 +636,7 @@ function applyReportFilter(clients, period) {
 
 function julgaeVal(pKey, clientId) {
   const v = G.julgae[pKey]?.[clientId];
-  const def = {d:false, b:false, a:false, s:false, revenue:0, income:0, taxBase:0, fee:0, feeSeongsi:0};
+  const def = {d:false, b:false, a:false, c:false, s:false, revenue:0, income:0, taxBase:0, fee:0, feeSeongsi:0};
   if (!v) return def;
   if (typeof v === 'boolean') return {...def, a:v};
   return {...def, ...v};
@@ -2671,8 +2671,40 @@ function doGroupEdit() {
   saveToLS(); closeModal(); renderClients();
 }
 
-function updateClientField(id, field, value) {
+function updateClientField(id, field, value, _skipCheck) {
   const c = G.clients.find(x=>x.id===id); if(!c) return;
+  if (!_skipCheck && ['dealType','taxType','vatType','seongsi','status'].includes(field)) {
+    const sim = {...c, dealTypes:[...(c.dealTypes||[])], managers:[...(c.managers||[])]};
+    if (field==='dealType') { sim.dealType=value; sim.dealTypes=[value]; }
+    else sim[field] = value;
+    const autoPeriods = (G.periods||[]).filter(p=>!p.enrolled||!p.enrolled.length);
+    const adds=[], removes=[];
+    autoPeriods.forEach(p=>{
+      const base = x => x.status!=='해지'&&x.status!=='폐업';
+      const wasIn = base(c) && applyReportFilter([c],p).length>0;
+      const willIn = base(sim) && applyReportFilter([sim],p).length>0;
+      if (wasIn&&!willIn) removes.push(p);
+      if (!wasIn&&willIn) adds.push(p);
+    });
+    if (adds.length||removes.length) {
+      window._ucfCb = ()=>updateClientField(id,field,value,true);
+      const li = p=>`<li>${esc(p.label||p.id)}</li>`;
+      showModal(`<div style="max-width:400px;width:min(400px,95vw)">
+        <div class="modal-header"><h3>📋 신고리스트 변경 확인</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+        <div class="modal-body">
+          <p style="margin-bottom:10px"><b>${esc(c.name)}</b> 수정으로 아래 신고리스트가 변경됩니다.</p>
+          ${adds.length?`<div style="margin-bottom:8px;color:#2e7d32"><b>추가될 리스트 (${adds.length}개):</b><ul style="margin:4px 0 0 16px;font-size:13px">${adds.map(li).join('')}</ul></div>`:''}
+          ${removes.length?`<div style="margin-bottom:8px;color:#c62828"><b>제거될 리스트 (${removes.length}개):</b><ul style="margin:4px 0 0 16px;font-size:13px">${removes.map(li).join('')}</ul></div>`:''}
+          <p style="font-size:12px;color:#888">수동 등록 리스트는 영향을 받지 않습니다.</p>
+        </div>
+        <div style="padding:12px 16px;border-top:1px solid #f0f0f0;display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn-secondary" onclick="closeModal();renderClients()">취소</button>
+          <button class="btn-primary" onclick="closeModal();window._ucfCb&&window._ucfCb()">반영</button>
+        </div>
+      </div>`);
+      return;
+    }
+  }
   if (field==='fee') value = Number(value)||0;
   if (field==='dealType') { c.dealType=value; c.dealTypes=[value]; }
   else if (field==='manager') { c.manager=value; c.managers=value?[value]:[]; }
@@ -3930,6 +3962,8 @@ function renderJulgae() {
   else if (G.julgaeBookFilter==='미완료') clients = clients.filter(c=>!julgaeVal(pKey2,c.id).b);
   if (G.julgaeDoneFilter==='완료') clients = clients.filter(c=>julgaeVal(pKey2,c.id).a);
   else if (G.julgaeDoneFilter==='미완료') clients = clients.filter(c=>!julgaeVal(pKey2,c.id).a);
+  if (G.julgaeConsulFilter==='완료') clients = clients.filter(c=>julgaeVal(pKey2,c.id).c);
+  else if (G.julgaeConsulFilter==='미완료') clients = clients.filter(c=>!julgaeVal(pKey2,c.id).c);
 
   const dataCount     = clients.filter(c => julgaeVal(pKey2, c.id).d).length;
   const bookCount     = clients.filter(c => julgaeVal(pKey2, c.id).b).length;
@@ -3981,7 +4015,7 @@ function renderJulgae() {
   const isSajupType = rt === 'sajup';
   const isSeongsiType = rt === 'seongsi';
   const hc = G.hiddenCols || {};
-  const jHideable = ['j_rep','j_manager','j_data','j_book','j_done','j_fee','j_collect','j_link'];
+  const jHideable = ['j_rep','j_manager','j_data','j_book','j_done','j_consul','j_fee','j_collect','j_link'];
   const jTypeHideable = isIncomeType ? ['j_col_revenue','j_col_income','j_col_margin','j_col_taxbase','j_col_taxamt','j_col_paytax','j_col_resident']
                       : isVatType    ? ['j_col_revenue','j_col_purchase','j_col_vat']
                       : isSajupType  ? ['j_col_revenue','j_col_purchase']
@@ -4335,6 +4369,7 @@ function renderJulgae() {
       <th style="width:56px;text-align:center;padding:3px;${_hcStyle('j_data')}"><div style="display:flex;align-items:center">${julgaeCycleBtn('julgaeDataFilter','자료')}${_hcBtn('j_data')}</div></th>
       <th style="width:56px;text-align:center;padding:3px;${_hcStyle('j_book')}"><div style="display:flex;align-items:center">${julgaeCycleBtn('julgaeBookFilter','기장')}${_hcBtn('j_book')}</div></th>
       <th style="width:56px;text-align:center;padding:3px;${_hcStyle('j_done')}"><div style="display:flex;align-items:center">${julgaeCycleBtn('julgaeDoneFilter','결재')}${_hcBtn('j_done')}</div></th>
+      <th style="width:56px;text-align:center;padding:3px;${_hcStyle('j_consul')}"><div style="display:flex;align-items:center">${julgaeCycleBtn('julgaeConsulFilter','상담')}${_hcBtn('j_consul')}</div></th>
       ${isIncomeType?`
         <th style="width:100px;text-align:right;${_hcStyle('j_col_revenue')}"><div style="display:flex;align-items:center;justify-content:flex-end">수입금액${_hcBtn('j_col_revenue')}</div></th>
         <th style="width:100px;text-align:right;${_hcStyle('j_col_income')}"><div style="display:flex;align-items:center;justify-content:flex-end">소득금액${_hcBtn('j_col_income')}</div></th>
@@ -4408,6 +4443,9 @@ function renderJulgae() {
         </td>
         <td style="text-align:center;${hc['j_done']?'display:none':''}" onclick="toggleJulgaeField('${pKey2}',${c.id},'a')">
           <div class="chk ${v.a?'on':''}" style="margin:0 auto;width:24px;height:24px">${v.a?'✓':''}</div>
+        </td>
+        <td style="text-align:center;${hc['j_consul']?'display:none':''}" onclick="toggleJulgaeField('${pKey2}',${c.id},'c')">
+          <div class="chk ${v.c?'on':''}" style="margin:0 auto;width:24px;height:24px;${v.c?'background:#e3f2fd;border-color:#1565c0;color:#1565c0':''}">${v.c?'💬':''}</div>
         </td>
         ${isIncomeType?`
           <td style="text-align:right;padding:4px 8px;${hc['j_col_revenue']?'display:none':''}">${niInput(c.id,'revenue',v.revenue)}${prevRevTxt}${bosuBadge}</td>
