@@ -4039,7 +4039,14 @@ function renderJulgae() {
         _pushClient(c);
       } else if (!seenGrp.has(k)) {
         seenGrp.add(k);
-        const gc = jMap[k];
+        const gc = [...jMap[k]].sort((a,b) => {
+          if (a.groupMain && !b.groupMain) return -1;
+          if (!a.groupMain && b.groupMain) return 1;
+          const ar = dealSortRankForClient(a), br = dealSortRankForClient(b);
+          if (ar !== br) return ar - br;
+          const csk2 = x => x.contractDate || 'ZZZZ-ZZ-ZZ';
+          return csk2(a).localeCompare(csk2(b)) || a.name.localeCompare(b.name, 'ko');
+        });
         const expanded = !!(G.julgaeExpandedGroups||{})[k];
         if (_needsSep) { const sk=_getSepLabel(gc[0]); if(sk!==_sepPrev){renderItems.push({isSeparator:true,label:sk});_sepPrev=sk;} }
         renderItems.push({c:gc[0], isGroupHeader:true, groupKey:k, groupClients:gc, expanded});
