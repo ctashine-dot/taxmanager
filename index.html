@@ -998,11 +998,12 @@ function filteredClients() {
     return list.sort((a, b) => score(b) - score(a));
   }
 
-  // 정렬 적용
-  const {field, dir} = G.clientSort || {field:'n', dir:'asc'};
-  if (field !== 'n' || dir !== 'asc') {
+  // 정렬 적용 (기본: 수임일자 오름차순)
+  const {field, dir} = G.clientSort || {field:'c', dir:'asc'};
+  if (field !== 'c' || dir !== 'asc') {
     list.sort((a,b) => {
       let av, bv;
+      if (field === 'c') { av = csk(a); bv = csk(b); return dir==='asc' ? av.localeCompare(bv) : bv.localeCompare(av); }
       if (field === 'n') { av = a.name||''; bv = b.name||''; return dir==='asc' ? av.localeCompare(bv,'ko') : bv.localeCompare(av,'ko'); }
       if (field === 'r') { av = a.rep||''; bv = b.rep||''; return dir==='asc' ? av.localeCompare(bv,'ko') : bv.localeCompare(av,'ko'); }
       if (field === 'd') { av = getDealTypes(a)[0]||''; bv = getDealTypes(b)[0]||''; return dir==='asc' ? av.localeCompare(bv,'ko') : bv.localeCompare(av,'ko'); }
@@ -1603,8 +1604,8 @@ function renderClients() {
 
   <div style="display:flex;align-items:center;justify-content:flex-end;gap:5px;flex-wrap:wrap;margin-bottom:8px">
     ${(()=>{
-      const sf = (G.clientSort||{}).field||'n', sd = (G.clientSort||{}).dir||'asc';
-      const opts = [{k:'n',l:'업체명'},{k:'r',l:'대표자'},{k:'d',l:'수임내용'},{k:'f',l:'수수료'},{k:'m',l:'담당자'}];
+      const sf = (G.clientSort||{}).field||'c', sd = (G.clientSort||{}).dir||'asc';
+      const opts = [{k:'c',l:'수임일자'},{k:'n',l:'업체명'},{k:'r',l:'대표자'},{k:'d',l:'수임내용'},{k:'f',l:'수수료'},{k:'m',l:'담당자'}];
       const btns = opts.map(({k,l})=>{
         const active = sf===k;
         const nextDir = active && sd==='asc' ? 'desc' : 'asc';
@@ -1612,7 +1613,7 @@ function renderClients() {
         const st = active ? 'background:#e8f0fe;color:#1565c0;border:1.5px solid #4f8ef7;font-weight:700' : 'background:#f5f5f5;color:#888;border:1.5px solid #e0e0e0';
         return `<button onclick="G.clientSort={field:'${k}',dir:'${nextDir}'};G.clientPage=0;renderClients()" style="padding:4px 9px;border-radius:16px;font-size:11px;cursor:pointer;font-family:inherit;${st}">${l}${icon}</button>`;
       }).join('');
-      const resetBtn = (sf!=='n'||sd!=='asc') ? `<button onclick="G.clientSort={field:'n',dir:'asc'};G.clientPage=0;renderClients()" style="padding:4px 7px;border-radius:16px;font-size:10px;cursor:pointer;font-family:inherit;background:#fdecea;color:#c62828;border:1.5px solid #ef9a9a" title="정렬 초기화">✕</button>` : '';
+      const resetBtn = (sf!=='c'||sd!=='asc') ? `<button onclick="G.clientSort={field:'c',dir:'asc'};G.clientPage=0;renderClients()" style="padding:4px 7px;border-radius:16px;font-size:10px;cursor:pointer;font-family:inherit;background:#fdecea;color:#c62828;border:1.5px solid #ef9a9a" title="정렬 초기화">✕</button>` : '';
       return `<div style="display:contents">${btns}${resetBtn}</div>`;
     })()}
     <div style="font-size:12px;color:#888;white-space:nowrap;margin-left:4px">총 ${list.length}개 (${G.clientPage+1}/${totalPages})</div>
