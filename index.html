@@ -355,7 +355,6 @@ body.dark-mode .overlay { background: rgba(0,0,0,.65); }
   <button class="tab active" onclick="switchTab('dashboard')" id="tab-dashboard">🏠 대시보드</button>
   <button class="tab" onclick="switchTab('clients')" id="tab-clients">👥 거래처 목록</button>
   <button class="tab" onclick="switchTab('schedule')" id="tab-schedule">📅 신고 일정</button>
-  <button class="tab" onclick="switchTab('closure')" id="tab-closure">📁 해지·폐업</button>
   <button class="tab" onclick="switchTab('julgae')" id="tab-julgae">신고 및 결재</button>
   <button class="tab" onclick="switchTab('fees')" id="tab-fees">💰 수수료</button>
   <button class="tab" onclick="switchTab('aitools')" id="tab-aitools">✦ AI 도구</button>
@@ -1201,7 +1200,7 @@ document.addEventListener('keydown', function(e) {
     case '2': switchTab('clients'); break;
     case '3': switchTab('julgae'); break;
     case '4': switchTab('fees'); break;
-    case '5': switchTab('closure'); break;
+    case '5': openTerminatedModal(); break;
     case '6': switchTab('schedule'); break;
     case '?':
       showModal(`<div style="max-width:400px">
@@ -1710,19 +1709,16 @@ function renderClients() {
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
       ${hiddenChips}
       <button class="btn-sm" style="background:${G.editMode?'#e8f5e9':'#f5f5f5'};color:${G.editMode?'#2e7d32':'#888'};border:2px solid ${G.editMode?'#43a047':'#e0e0e0'}" onclick="toggleEditMode()">${G.editMode?'✓ 수정모드 ON':'✏ 수정모드'}</button>
-      <button class="btn-sm" style="background:${G.showTerminated?'#fff3e0':'#f5f5f5'};color:${G.showTerminated?'#e65100':'#888'};border:2px solid ${G.showTerminated?'#ffcc02':'#e0e0e0'}" onclick="toggleTerminated()">${G.showTerminated?'▲ 해지·폐업 숨기기':'해지·폐업 보기 ('+terminated+')'}</button>
-      <button class="btn-sm" style="background:${G.showFavorites?'#fff8e1':'#f5f5f5'};color:${G.showFavorites?'#f57c00':'#888'};border:2px solid ${G.showFavorites?'#ffd54f':'#e0e0e0'}" onclick="G.showFavorites=!G.showFavorites;G.clientPage=0;renderClients()">⭐ 즐겨찾기${G.showFavorites?' ON':''}</button>
-      <button class="btn-sm" style="background:${(G.filterTags||[]).length?'#e8f0fe':'#f5f5f5'};color:${(G.filterTags||[]).length?'#4f8ef7':'#888'};border:1.5px solid ${(G.filterTags||[]).length?'#4f8ef7':'#e0e0e0'}" onclick="openTagFilterDropdown(this)">🏷 태그${(G.filterTags||[]).length?' ('+G.filterTags.length+')':''}</button>
       <button class="btn-sm" style="background:${G.filterRisk==='위험'?'#fdecea':G.filterRisk==='주의'?'#fff3e0':'#f5f5f5'};color:${G.filterRisk==='위험'?'#c62828':G.filterRisk==='주의'?'#e65100':'#888'};border:1.5px solid ${G.filterRisk==='위험'?'#ef9a9a':G.filterRisk==='주의'?'#ffcc80':'#e0e0e0'}" onclick="G.filterRisk=G.filterRisk===''?'위험':G.filterRisk==='위험'?'주의':'';G.clientPage=0;renderClients()">● 위험도${G.filterRisk?' ('+G.filterRisk+')':' (전체)'}</button>
       <button class="btn-sm" style="background:${G.filterGrade==='A'?'#e8f0fe':G.filterGrade==='B'?'#e8f5e9':G.filterGrade==='C'?'#f5f5f5':'#f5f5f5'};color:${G.filterGrade==='A'?'#1565c0':G.filterGrade==='B'?'#2e7d32':G.filterGrade==='C'?'#888':'#888'};border:1.5px solid ${G.filterGrade==='A'?'#4f8ef7':G.filterGrade==='B'?'#43a047':G.filterGrade==='C'?'#bbb':'#e0e0e0'};font-weight:${G.filterGrade?'700':'400'}" onclick="G.filterGrade=G.filterGrade===''?'A':G.filterGrade==='A'?'B':G.filterGrade==='B'?'C':'';G.clientPage=0;renderClients()">등급${G.filterGrade?' ('+G.filterGrade+')':''}</button>
-      <button class="btn-sm" style="background:#f0f8ff;color:#1565c0;border:1.5px solid #90caf9" onclick="openImportModal()">📥 세무사랑 가져오기</button>
+      <button class="btn-sm" style="background:${G.showFavorites?'#fff8e1':'#f5f5f5'};color:${G.showFavorites?'#f57c00':'#888'};border:2px solid ${G.showFavorites?'#ffd54f':'#e0e0e0'}" onclick="G.showFavorites=!G.showFavorites;G.clientPage=0;renderClients()">⭐ 즐겨찾기${G.showFavorites?' ON':''}</button>
+      <button class="btn-sm" style="background:${(G.filterTags||[]).length?'#e8f0fe':'#f5f5f5'};color:${(G.filterTags||[]).length?'#4f8ef7':'#888'};border:1.5px solid ${(G.filterTags||[]).length?'#4f8ef7':'#e0e0e0'}" onclick="openTagFilterDropdown(this)">🏷 태그${(G.filterTags||[]).length?' ('+G.filterTags.length+')':''}</button>
       <button class="btn-sm" style="background:#f3e5f5;color:#6a1b9a;border:1.5px solid #ce93d8" onclick="openFilterPresets(this)">⭐ 프리셋${(G.filterPresets||[]).length?' ('+(G.filterPresets||[]).length+')':''}</button>
-      <button class="btn-sm" style="background:${G.bulkMode?'#e8f5e9':'#f5f5f5'};color:${G.bulkMode?'#2e7d32':'#888'};border:2px solid ${G.bulkMode?'#43a047':'#e0e0e0'}" onclick="G.bulkMode=!G.bulkMode;G.selectedClients=[];renderClients()">☑ 일괄편집${G.bulkMode?' ON':''}</button>
-      <button class="btn-sm" style="background:#e8f5e9;color:#2e7d32;border:1.5px solid #a5d6a7" onclick="openManagerTransferModal()">👤 담당자 이동</button>
       <button class="btn-sm" style="background:#fff3e0;color:#e65100;border:1.5px solid #ffcc80" onclick="openNotesSearch()">🔍 메모검색</button>
-      <button class="btn-sm" style="background:#e8f5e9;color:#1b5e20;border:1.5px solid #81c784" onclick="exportClientsToExcel()">📊 Excel 내보내기</button>
       ${(()=>{const hasFilter=G.searchText||G.clientRepSearch||(G.filterManagers||[]).length||(G.filterTaxTypes||[]).length||(G.filterVatTypes||[]).length||(G.filterFeeStatuses||[]).length||(G.filterDealTypes||[]).length||(G.filterCMS||[]).length||(G.filterTags||[]).length||G.filterRisk||G.filterGrade||G.showFavorites;return hasFilter?`<button class="btn-sm" style="background:#fdecea;color:#c62828;border:1.5px solid #ef9a9a;font-weight:700" onclick="G.searchText='';G.clientRepSearch='';G.filterManagers=[];G.filterTaxTypes=[];G.filterVatTypes=[];G.filterFeeStatuses=[];G.filterDealTypes=[];G.filterCMS=[];G.filterTags=[];G.filterRisk='';G.filterGrade='';G.showFavorites=false;G.clientPage=0;renderClients()">✕ 필터초기화</button>`:'';})()}
       <button class="btn-primary btn-sm" onclick="openForm(null)" style="padding:8px 14px">+ 거래처 추가</button>
+      <button class="btn-sm" style="background:#fff3e0;color:#bf360c;border:1.5px solid #ffab91" onclick="openTerminatedModal()">📁 해지폐업 관리${terminated?' ('+terminated+')':''}</button>
+      <button class="btn-sm" style="background:#f0f8ff;color:#1565c0;border:1.5px solid #90caf9" onclick="openImportExportMenu(this)">⇅ 가져오기/내보내기</button>
     </div>
   </div>
 
@@ -1979,6 +1975,48 @@ function renderClients() {
 
 function clientPageChange(dir) { G.clientPage += dir; renderClients(); window.scrollTo({top:0,behavior:'instant'}); }
 function toggleTerminated() { G.showTerminated=!G.showTerminated; renderClients(); }
+
+function openTerminatedModal() {
+  if (document.getElementById('terminated-modal')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'terminated-modal';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:#f5f7fb;z-index:200;overflow-y:auto;-webkit-overflow-scrolling:touch';
+  overlay.innerHTML = `
+    <div style="max-width:960px;margin:0 auto;padding:12px 12px 60px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;background:#fff;border-radius:12px;padding:10px 14px;position:sticky;top:8px;z-index:1;box-shadow:0 2px 8px rgba(0,0,0,.08)">
+        <button onclick="closeTerminatedModal()" style="padding:6px 14px;border-radius:8px;border:1.5px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:13px;cursor:pointer;font-family:inherit">← 거래처 목록</button>
+        <span style="font-size:15px;font-weight:800;color:#bf360c">📁 해지·폐업 관리</span>
+      </div>
+      <div id="page-closure-modal"></div>
+    </div>`;
+  document.body.appendChild(overlay);
+  G._closureTarget = 'page-closure-modal';
+  renderClosure();
+}
+function closeTerminatedModal() {
+  document.getElementById('terminated-modal')?.remove();
+  G._closureTarget = null;
+}
+
+function openImportExportMenu(btnEl) {
+  const existing = document.getElementById('ie-popup');
+  if (existing) { existing.remove(); return; }
+  const pop = document.createElement('div');
+  pop.id = 'ie-popup'; pop.className = 'fpop';
+  pop.style.cssText += 'min-width:210px;';
+  const rect = btnEl.getBoundingClientRect();
+  const spaceBelow = window.innerHeight - rect.bottom - 12;
+  const top = spaceBelow > 120 ? rect.bottom + 6 : Math.max(8, rect.top - 130);
+  const left = Math.max(8, Math.min(rect.left, window.innerWidth - 226));
+  pop.style.top = top + 'px'; pop.style.left = left + 'px';
+  pop.innerHTML = `
+    <div style="font-size:12px;font-weight:800;color:#333;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #f0f0f0">⇅ 가져오기 / 내보내기</div>
+    <button onclick="document.getElementById('ie-popup')?.remove();openImportModal()" style="width:100%;text-align:left;padding:10px 12px;border-radius:8px;border:none;background:#f0f8ff;color:#1565c0;font-size:13px;cursor:pointer;font-family:inherit;margin-bottom:6px;display:block">📥 세무사랑 가져오기</button>
+    <button onclick="document.getElementById('ie-popup')?.remove();exportClientsToExcel()" style="width:100%;text-align:left;padding:10px 12px;border-radius:8px;border:none;background:#e8f5e9;color:#1b5e20;font-size:13px;cursor:pointer;font-family:inherit;display:block">📊 Excel 내보내기</button>`;
+  document.body.appendChild(pop);
+  const outside = e => { if(!pop.contains(e.target)&&e.target!==btnEl){pop.remove();document.removeEventListener('click',outside);} };
+  setTimeout(()=>document.addEventListener('click',outside),10);
+}
 function openFilterPresets(btn) {
   const existing = document.getElementById('preset-popup');
   if (existing) { existing.remove(); return; }
@@ -2406,7 +2444,12 @@ function toggleInlineManager(clientId, manager) {
   c.manager = c.managers[0]||'';
   saveToLS(); renderClients();
 }
-function toggleEditMode() { G.editMode=!G.editMode; renderClients(); }
+function toggleEditMode() {
+  G.editMode = !G.editMode;
+  G.bulkMode = G.editMode;
+  if (!G.editMode) G.selectedClients = [];
+  renderClients();
+}
 
 function removeFromGroup(id) {
   const c = G.clients.find(x=>x.id===id);
@@ -3899,7 +3942,7 @@ function renderClosure() {
   const hc = G.hiddenCols || {};
   const clChips = _hcChips([['cl_rep','대표자'],['cl_taxType','유형'],['cl_status','상태'],['cl_contractDate','수임일'],['cl_terminationDate','해지일'],['cl_reason','사유'],['cl_closureYear','폐업연도'],['cl_filed','신고접수'],['cl_approved','신고완료'],['cl_manager','담당자']]);
 
-  document.getElementById('page-closure').innerHTML = `
+  document.getElementById(G._closureTarget || 'page-closure').innerHTML = `
   <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
     <h2 style="font-size:20px;font-weight:800;margin:0">해지·폐업 관리</h2>
     ${sectionToggleBtn('closure-list')}
