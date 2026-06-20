@@ -738,27 +738,14 @@ const TAX_OFFICES = [
 ];
 
 const CONTRACT_GROUPS = [
-  { key:'기장', label:'기장', items:[
-    {key:'기장_일반', label:'기장 (일반)', vat:['일반'], tax:['법인','개인']},
-    {key:'기장_간이', label:'기장 (간이)', vat:['간이','간세'], tax:['개인']},
-    {key:'기장_면세', label:'기장 (면세)', vat:['면세'], tax:['개인']},
-  ]},
-  { key:'신고', label:'신고', items:[
+  { key:'항목', label:'', items:[
+    {key:'기장_일반', label:'기장 (일반)', vat:['일반','간이','간세','면세'], tax:['법인','개인']},
     {key:'부가세신고', label:'부가세 신고', vat:['일반','간이','간세'], tax:['법인','개인']},
     {key:'사업장현황신고', label:'사업장현황 신고', vat:['면세'], tax:['개인']},
-    {key:'법인세', label:'법인세 신고', vat:['일반','간이','면세'], tax:['법인']},
+    {key:'법인세', label:'법인세 신고', vat:['일반','간이','간세','면세'], tax:['법인']},
     {key:'소득세', label:'소득세 신고', vat:['일반','간이','간세','면세'], tax:['개인']},
-    {key:'성실신고', label:'성실신고확인', vat:['일반','간이','간세','면세'], tax:['개인']},
     {key:'세무조정', label:'세무조정', vat:['일반','간이','간세','면세'], tax:['법인','개인']},
-  ]},
-  { key:'공통', label:'공통', items:[
     {key:'원천세', label:'원천세 신고', vat:['일반','간이','간세','면세'], tax:['법인','개인']},
-    {key:'연말정산', label:'연말정산', vat:['일반','간이','간세','면세'], tax:['법인','개인']},
-  ]},
-  { key:'신고대리', label:'신고대리', items:[
-    {key:'신고대리_부가세', label:'부가세 신고대리', vat:['일반','간이','간세'], tax:['법인','개인']},
-    {key:'신고대리_면세', label:'사업장현황 신고대리', vat:['면세'], tax:['개인']},
-    {key:'종소세신고대리', label:'소득세 신고대리', vat:['일반','간이','간세','면세'], tax:['개인']},
   ]},
 ];
 
@@ -783,15 +770,12 @@ function getDefaultContracts(dealType, taxType, vatType) {
   const isVat = ['일반','간이','간세'].includes(vatType);
   const isExempt = vatType === '면세';
   if (isBook) {
-    if (vatType==='일반') cs.push('기장_일반');
-    else if (vatType==='간이'||vatType==='간세') cs.push('기장_간이');
-    else if (isExempt) cs.push('기장_면세');
+    cs.push('기장_일반');
     if (isVat) cs.push('부가세신고');
     if (isExempt) cs.push('사업장현황신고');
     if (isCorp) cs.push('법인세');
-    if (!isCorp && dt!=='성실') cs.push('소득세');
-    if (dt==='성실') cs.push('성실신고');
-    cs.push('세무조정','원천세','연말정산');
+    if (!isCorp) cs.push('소득세');
+    cs.push('세무조정','원천세');
   }
   if (dt==='신고대리') {
     if (isVat) cs.push('부가세신고');
@@ -893,7 +877,8 @@ function _onDealTypeChange(value) {
   var a = document.getElementById('contract-area');
   if (!a) return;
   const av = availableContracts(window._formData.vatType, window._formData.taxType);
-  a.innerHTML = av.map(g => '<div class="contract-group"><div class="contract-group-title">'+g.label+'</div><div class="contract-chips">'+g.items.map(item => '<button type="button" class="contract-chip '+((window._formData.contracts||[]).includes(item.key)?'on':'')+'" onclick="toggleContract(\''+item.key+'\')">'+item.label+'</button>').join('')+'</div></div>').join('');
+  const allItems = av.flatMap(g=>g.items);
+  a.innerHTML = '<div class="contract-chips">'+allItems.map(item => '<button type="button" class="contract-chip '+((window._formData.contracts||[]).includes(item.key)?'on':'')+'" onclick="toggleContract(\''+item.key+'\')">'+item.label+'</button>').join('')+'</div>';
 }
 
 function gradeBadge(grade, manual) {
@@ -1197,17 +1182,16 @@ function _renderDashboardInner() {
   const monthlyUnpaid = monthlyClients.filter(c=>!(G.monthlyFees[c.id]?.[thisYM]));
 
   const feeByManager = MANAGERS.slice(1).map(m=>{
-    const mc = monthlyClients.filter(c=>getManagers(c).includes(m));
+    const allMC = G.clients.filter(c=>getManagers(c).includes(m)&&c.status!=='해지'&&c.status!=='폐업');
+    const mc = allMC.filter(c=>getDealTypes(c).some(d=>['기장','고문','성실'].includes(d)));
     const t = mc.reduce((a,c)=>a+(c.fee||0),0);
     const col = mc.filter(c=>G.monthlyFees[c.id]?.[thisYM]).reduce((a,c)=>a+(c.fee||0),0);
     const p = t>0?Math.round(col/t*100):0;
-    const allMC = G.clients.filter(c=>getManagers(c).includes(m)&&c.status!=='해지'&&c.status!=='폐업');
-    const g = allMC.filter(c=>getDealTypes(c).some(d=>d==='기장'||d==='고문')).length;
     const s2 = allMC.filter(c=>getDealTypes(c).some(d=>d.includes('신고')||d==='종소세대리')).length;
     return `<div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #f0f0f0">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
         <div><span style="font-weight:700;font-size:14px">${esc(m)}</span>
-        <span style="font-size:12px;color:#888;margin-left:8px">${allMC.length}개 · 기장 ${g} · 신고 ${s2}</span></div>
+        <span style="font-size:12px;color:#888;margin-left:8px">${allMC.length}개 · 월정 ${mc.length} · 신고 ${s2}</span></div>
         <span style="font-size:13px;color:#555;font-weight:600">${t.toLocaleString()}원</span>
       </div>
       <div class="progress-bar"><div class="progress-fill" style="width:${p}%"></div></div>
@@ -2887,13 +2871,8 @@ function openForm(id) {
   window._formIsNew = (id === null);
   function contractsHTML() {
     const avail = availableContracts(window._formData.vatType, window._formData.taxType);
-    return avail.map(g=>`
-    <div class="contract-group">
-      <div class="contract-group-title">${g.label}</div>
-      <div class="contract-chips">
-        ${g.items.map(item=>`<button type="button" class="contract-chip ${(window._formData.contracts||[]).includes(item.key)?'on':''}" onclick="toggleContract('${item.key}')">${item.label}</button>`).join('')}
-      </div>
-    </div>`).join('');
+    const allItems = avail.flatMap(g=>g.items);
+    return '<div class="contract-chips">' + allItems.map(item=>'<button type="button" class="contract-chip '+((window._formData.contracts||[]).includes(item.key)?'on':'')+'" onclick="toggleContract(\''+item.key+'\')">'+item.label+'</button>').join('') + '</div>';
   }
 
   function terminationHTML() {
@@ -8040,15 +8019,29 @@ function migrateJulgae() {
       }
     }
   }
-  // 수임계약항목 기본값 추가 (새 항목들 - 부가세신고, 사업장현황신고, 소득세, 성실신고)
-  const newContractKeys = ['부가세신고','사업장현황신고','소득세','성실신고'];
+  // 수임계약항목 마이그레이션: 구조 단순화
+  const removedKeys = ['성실신고','연말정산','신고대리_부가세','신고대리_면세','종소세신고대리'];
   let contractsMigrated = false;
   G.clients.forEach(c => {
     if (!c.contracts) c.contracts = [];
+    // 기장_간이 / 기장_면세 → 기장_일반
+    ['기장_간이','기장_면세'].forEach(old => {
+      if (c.contracts.includes(old)) {
+        c.contracts = c.contracts.filter(k=>k!==old);
+        if (!c.contracts.includes('기장_일반')) c.contracts.push('기장_일반');
+        contractsMigrated = true;
+      }
+    });
+    // 제거된 항목 삭제
+    removedKeys.forEach(k => {
+      if (c.contracts.includes(k)) { c.contracts = c.contracts.filter(x=>x!==k); contractsMigrated = true; }
+    });
+    // 새 항목 기본값 추가 (부가세신고, 사업장현황신고, 소득세, 원천세)
+    const newKeys = ['부가세신고','사업장현황신고','소득세','원천세'];
     const dealType = getDealTypes(c)[0] || '기장';
     const defaults = getDefaultContracts(dealType, c.taxType, c.vatType);
     for (const key of defaults) {
-      if (newContractKeys.includes(key) && !c.contracts.includes(key)) {
+      if (newKeys.includes(key) && !c.contracts.includes(key)) {
         c.contracts.push(key);
         contractsMigrated = true;
       }
