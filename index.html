@@ -1227,9 +1227,12 @@ function showMissingClientsModal() {
   if (!list.length) { toast('기재사항 누락 업체가 없습니다.','info'); return; }
   const TAX_TYPES = ['개인','법인'];
   const VAT_TYPES = ['일반','간이','간세','면세','비과세'];
+  const today = new Date().toISOString().slice(0,10);
+  const todayCount = G.clients.filter(c=>c.contractDate===today&&c.status!=='해지'&&c.status!=='폐업').length;
   showModal(`<div style="max-width:580px;width:min(580px,97vw)">
   <div class="modal-header"><h3>📋 기재사항 누락 업체 (${list.length}개)</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
   <div class="modal-body" style="padding:0">
+  ${todayCount>0?`<div style="padding:10px 16px;background:#fff3e0;border-bottom:1px solid #ffe0b2;display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="font-size:12px;color:#e65100">⚠ 수임일자가 오늘(${today})로 잘못 설정된 업체 ${todayCount}개가 있습니다.</span><button onclick="clearTodayContractDates('${today}')" style="padding:4px 10px;border-radius:6px;border:none;background:#e65100;color:#fff;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap">초기화</button></div>`:''}
   <div style="max-height:70vh;overflow-y:auto">
   ${list.map(c=>{
     const mf = getMissingFields(c);
@@ -1237,9 +1240,9 @@ function showMissingClientsModal() {
       <div style="font-weight:700;font-size:14px;margin-bottom:8px;color:#1a1a2e">${esc(c.name)} <span style="font-size:11px;color:#ff7043;font-weight:400">${mf.map(x=>x.label).join(', ')} 누락</span></div>
       <div style="display:flex;flex-wrap:wrap;gap:8px">
       ${mf.map(({field,label})=>{
-        if (field==='taxType') return `<div style="display:flex;align-items:center;gap:4px"><span style="font-size:12px;color:#888;min-width:60px">${label}</span><select onchange="updateClientField(${c.id},'taxType',this.value);this.closest('.modal-body').parentElement.querySelector('.close-btn').click();showMissingClientsModal()" class="inline-edit" style="font-size:12px;padding:3px 6px">${TAX_TYPES.map(v=>`<option${c.taxType===v?' selected':''}>${v}</option>`).join('')}</select></div>`;
-        if (field==='vatType') return `<div style="display:flex;align-items:center;gap:4px"><span style="font-size:12px;color:#888;min-width:60px">${label}</span><select onchange="updateClientField(${c.id},'vatType',this.value);this.closest('.modal-body').parentElement.querySelector('.close-btn').click();showMissingClientsModal()" class="inline-edit" style="font-size:12px;padding:3px 6px">${VAT_TYPES.map(v=>`<option${c.vatType===v?' selected':''}>${v}</option>`).join('')}</select></div>`;
-        if (field==='contractDate') return `<div style="display:flex;align-items:center;gap:4px"><span style="font-size:12px;color:#888;min-width:60px">${label}</span><input type="date" value="${esc(c.contractDate||'')}" onchange="updateClientField(${c.id},'contractDate',this.value);this.closest('.modal-body').parentElement.querySelector('.close-btn').click();showMissingClientsModal()" class="inline-edit" style="font-size:12px;padding:3px 6px"></div>`;
+        if (field==='taxType') return `<div style="display:flex;align-items:center;gap:4px"><span style="font-size:12px;color:#888;min-width:60px">${label}</span><select onchange="updateClientField(${c.id},'taxType',this.value);closeModal();showMissingClientsModal()" class="inline-edit" style="font-size:12px;padding:3px 6px">${TAX_TYPES.map(v=>`<option${c.taxType===v?' selected':''}>${v}</option>`).join('')}</select></div>`;
+        if (field==='vatType') return `<div style="display:flex;align-items:center;gap:4px"><span style="font-size:12px;color:#888;min-width:60px">${label}</span><select onchange="updateClientField(${c.id},'vatType',this.value);closeModal();showMissingClientsModal()" class="inline-edit" style="font-size:12px;padding:3px 6px">${VAT_TYPES.map(v=>`<option${c.vatType===v?' selected':''}>${v}</option>`).join('')}</select></div>`;
+        if (field==='contractDate') return `<div style="display:flex;align-items:center;gap:4px"><span style="font-size:12px;color:#888;min-width:60px">${label}</span><input type="text" value="${esc(c.contractDate||'')}" placeholder="YYYY-MM-DD" maxlength="10" oninput="const v=this.value.replace(/[^0-9]/g,'');if(v.length===8)this.value=v.slice(0,4)+'-'+v.slice(4,6)+'-'+v.slice(6,8)" onblur="const v=this.value.trim();if(/^\\d{4}-\\d{2}-\\d{2}$/.test(v)){updateClientField(${c.id},'contractDate',v);this.style.borderColor='#4caf50'}else if(!v){this.style.borderColor=''}else{this.style.borderColor='#e53935'}" class="inline-edit" style="font-size:12px;padding:3px 6px;width:100px;border:1.5px solid #ddd;border-radius:5px"></div>`;
         return `<div style="display:flex;align-items:center;gap:4px"><span style="font-size:12px;color:#888;min-width:60px">${label}</span><input value="${esc(c[field]||'')}" placeholder="${label} 입력" onchange="updateClientField(${c.id},'${field}',this.value)" onblur="updateClientField(${c.id},'${field}',this.value)" class="inline-edit" style="font-size:12px;padding:3px 6px;min-width:120px"></div>`;
       }).join('')}
       </div>
@@ -1250,6 +1253,15 @@ function showMissingClientsModal() {
     <button class="btn-secondary" onclick="closeModal()">닫기</button>
   </div>
   </div></div>`);
+}
+
+function clearTodayContractDates(today) {
+  const cleared = G.clients.filter(c=>c.contractDate===today&&c.status!=='해지'&&c.status!=='폐업');
+  cleared.forEach(c=>{ c.contractDate = ''; });
+  saveToLS();
+  closeModal();
+  showMissingClientsModal();
+  toast(`수임일자 ${cleared.length}개 초기화 완료`,'info');
 }
 
 function renderDashboard() {
