@@ -4274,30 +4274,15 @@ function renderJulgae() {
   })()}
 
   ${period ? `
-  <div class="stat-grid" style="margin-bottom:14px">
-    <div class="stat-card" style="border-left:4px solid #4f8ef7">
+  <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px">
+    <div class="stat-card" style="border-left:3px solid #4f8ef7">
       <div class="stat-label">대상 업체</div>
-      <div class="stat-value" style="color:#4f8ef7">${total}</div>
+      <div style="font-size:20px;font-weight:800">${total}<span style="font-size:13px;color:#aaa;font-weight:400"> 개</span></div>
       <div class="stat-sub">${(reportLabel[period.reportType]||'전체')} · ${hasEnroll?'수동 선택':'자동 분류'}</div>
     </div>
-    <div class="stat-card" style="border-left:4px solid #1976d2">
-      <div class="stat-label">자료수령</div>
-      <div class="stat-value" style="color:#1976d2">${dataCount}<span style="font-size:13px;color:#aaa;font-weight:400"> / ${total}</span></div>
-      <div class="progress-bar" style="margin-top:6px"><div class="progress-fill" style="width:${total?Math.round(dataCount/total*100):0}%"></div></div>
-    </div>
-    <div class="stat-card" style="border-left:4px solid #f57c00">
-      <div class="stat-label">기장완료</div>
-      <div class="stat-value" style="color:#f57c00">${bookCount}<span style="font-size:13px;color:#aaa;font-weight:400"> / ${total}</span></div>
-      <div class="progress-bar" style="margin-top:6px"><div class="progress-fill" style="width:${total?Math.round(bookCount/total*100):0}%"></div></div>
-    </div>
-    <div class="stat-card" style="border-left:4px solid #2e7d32">
-      <div class="stat-label">결재완료 ${pct}%</div>
-      <div class="stat-value" style="color:#2e7d32">${doneCount}<span style="font-size:13px;color:#aaa;font-weight:400"> / ${total}</span></div>
-      <div class="progress-bar" style="margin-top:6px"><div class="progress-fill" style="width:${pct}%"></div></div>
-    </div>
-    <div class="stat-card" style="border-left:4px solid #7b1fa2">
+    <div class="stat-card" style="border-left:3px solid #7b1fa2">
       <div class="stat-label">수수료 청구</div>
-      <div class="stat-value" style="font-size:16px;color:#7b1fa2">${feeTotal.toLocaleString()}원</div>
+      <div style="font-size:20px;font-weight:800;color:#7b1fa2">${feeTotal.toLocaleString()}원</div>
       <div class="stat-sub">수금 ${feeCollected.toLocaleString()}원 · 미수금 ${(feeTotal-feeCollected).toLocaleString()}원</div>
     </div>
   </div>
@@ -4363,9 +4348,7 @@ function renderJulgae() {
     <button class="btn-sm" style="background:#e3f2fd;color:#1565c0;border:1.5px solid #90caf9" onclick="openEnrollModal('${pKey}')">
       ☑ 업체 선택${hasEnroll?` (${period.enrolled.length})`:' (자동)'}
     </button>
-    <button class="btn-sm" style="background:#e8f5e9;color:#2e7d32;border:1.5px solid #a5d6a7" onclick="bulkJulgae('${pKey}',true)">전체 완료</button>
-    <button class="btn-sm" style="background:#fdecea;color:#c62828;border:1.5px solid #ef9a9a" onclick="bulkJulgae('${pKey}',false)">전체 해제</button>
-    <button class="btn-sm" style="background:#fff3e0;color:#e65100;border:1.5px solid #ffcc80" onclick="window._julgaeAddToPeriod='${pKey}';openForm(null)">+ 업체 추가</button>
+<button class="btn-sm" style="background:#fff3e0;color:#e65100;border:1.5px solid #ffcc80" onclick="window._julgaeAddToPeriod='${pKey}';openForm(null)">+ 업체 추가</button>
     <button class="btn-sm" style="background:#f3e5f5;color:#6a1b9a;border:1.5px solid #ce93d8" onclick="printJulgaeList()">🖨 인쇄</button>
     <button class="btn-sm" style="background:#e0f2f1;color:#00695c;border:1.5px solid #80cbc4" onclick="copyPeriod('${pKey}')">📋 복사</button>
     <button class="btn-sm" style="background:${(G.periodNotes||{})[pKey]?'#fff3e0':'#f5f5f5'};color:${(G.periodNotes||{})[pKey]?'#e65100':'#888'};border:1.5px solid ${(G.periodNotes||{})[pKey]?'#ffcc80':'#e0e0e0'}" onclick="openPeriodNote('${pKey}')">📝 특이사항${(G.periodNotes||{})[pKey]?' ✓':''}</button>
@@ -4498,17 +4481,17 @@ function renderJulgae() {
         }</td>
         <td style="font-size:12px;color:#444;${hc['j_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
         <td style="color:#555;font-size:12px;${hc['j_manager']?'display:none':''}">${getManagers(c).length?getManagers(c).join(', '):'<span style="color:#ff7043;font-size:11px">⚠ 미지정</span>'}</td>
-        <td style="text-align:center;${hc['j_data']?'display:none':''}" onclick="toggleJulgaeField('${pKey2}',${c.id},'d')">
-          <div class="chk ${v.d?'on':''}" style="margin:0 auto;width:24px;height:24px">${v.d?'✓':''}</div>
+        <td style="text-align:center;${hc['j_data']?'display:none':''}">
+          <div class="chk ${v.d?'on':''}" style="margin:0 auto;width:24px;height:24px;touch-action:none;user-select:none;-webkit-user-select:none" onpointerdown="julgaeChkDown(this,'${pKey2}',${c.id},'d',${v.d?1:0})" onpointerup="julgaeChkUp(this,'${pKey2}',${c.id},'d',${v.d?1:0})" onpointercancel="julgaeChkCancel(this)" onpointerleave="julgaeChkCancel(this)">${v.d?'✓':''}</div>
         </td>
-        <td style="text-align:center;${hc['j_book']?'display:none':''}" onclick="toggleJulgaeField('${pKey2}',${c.id},'b')">
-          <div class="chk ${v.b?'on':''}" style="margin:0 auto;width:24px;height:24px">${v.b?'✓':''}</div>
+        <td style="text-align:center;${hc['j_book']?'display:none':''}">
+          <div class="chk ${v.b?'on':''}" style="margin:0 auto;width:24px;height:24px;touch-action:none;user-select:none;-webkit-user-select:none" onpointerdown="julgaeChkDown(this,'${pKey2}',${c.id},'b',${v.b?1:0})" onpointerup="julgaeChkUp(this,'${pKey2}',${c.id},'b',${v.b?1:0})" onpointercancel="julgaeChkCancel(this)" onpointerleave="julgaeChkCancel(this)">${v.b?'✓':''}</div>
         </td>
-        <td style="text-align:center;${hc['j_consul']?'display:none':''}" onclick="toggleJulgaeField('${pKey2}',${c.id},'c')">
-          <div class="chk ${v.c?'on':''}" style="margin:0 auto;width:24px;height:24px;${v.c?'background:#e3f2fd;border-color:#1565c0;color:#1565c0':''}">${v.c?'💬':''}</div>
+        <td style="text-align:center;${hc['j_consul']?'display:none':''}">
+          <div class="chk ${v.c?'on':''}" style="margin:0 auto;width:24px;height:24px;touch-action:none;user-select:none;-webkit-user-select:none;${v.c?'background:#e3f2fd;border-color:#1565c0;color:#1565c0':''}" onpointerdown="julgaeChkDown(this,'${pKey2}',${c.id},'c',${v.c?1:0})" onpointerup="julgaeChkUp(this,'${pKey2}',${c.id},'c',${v.c?1:0})" onpointercancel="julgaeChkCancel(this)" onpointerleave="julgaeChkCancel(this)">${v.c?'💬':''}</div>
         </td>
-        <td style="text-align:center;${hc['j_done']?'display:none':''}" onclick="toggleJulgaeField('${pKey2}',${c.id},'a')">
-          <div class="chk ${v.a?'on':''}" style="margin:0 auto;width:24px;height:24px">${v.a?'✓':''}</div>
+        <td style="text-align:center;${hc['j_done']?'display:none':''}">
+          <div class="chk ${v.a?'on':''}" style="margin:0 auto;width:24px;height:24px;touch-action:none;user-select:none;-webkit-user-select:none" onpointerdown="julgaeChkDown(this,'${pKey2}',${c.id},'a',${v.a?1:0})" onpointerup="julgaeChkUp(this,'${pKey2}',${c.id},'a',${v.a?1:0})" onpointercancel="julgaeChkCancel(this)" onpointerleave="julgaeChkCancel(this)">${v.a?'✓':''}</div>
         </td>
         ${isIncomeType?`
           <td style="text-align:right;padding:4px 8px;${hc['j_col_revenue']?'display:none':''}">${niInput(c.id,'revenue',v.revenue)}${prevRevTxt}${bosuBadge}</td>
@@ -4544,8 +4527,8 @@ function renderJulgae() {
             ${prevFeeTxt}
           </td>
         `}
-        <td style="text-align:center;${hc['j_collect']?'display:none':''}" onclick="toggleJulgaeField('${pKey2}',${c.id},'s')">
-          <div class="chk ${v.s?'on':''}" style="margin:0 auto;width:24px;height:24px;${v.s?'background:#c8e6c9;border-color:#2e7d32;color:#2e7d32':''}">${v.s?'💰':''}</div>
+        <td style="text-align:center;${hc['j_collect']?'display:none':''}">
+          <div class="chk ${v.s?'on':''}" style="margin:0 auto;width:24px;height:24px;touch-action:none;user-select:none;-webkit-user-select:none;${v.s?'background:#c8e6c9;border-color:#2e7d32;color:#2e7d32':''}" onpointerdown="julgaeChkDown(this,'${pKey2}',${c.id},'s',${v.s?1:0})" onpointerup="julgaeChkUp(this,'${pKey2}',${c.id},'s',${v.s?1:0})" onpointercancel="julgaeChkCancel(this)" onpointerleave="julgaeChkCancel(this)">${v.s?'💰':''}</div>
         </td>
         <td style="text-align:center;padding:4px;${hc['j_link']?'display:none':''}">
           ${item.isGroupChild
@@ -4619,17 +4602,47 @@ function togglePeriodLock(periodId) {
   renderJulgae();
 }
 
+function julgaeChkDown(el, pKey, clientId, field, isOn) {
+  window._jcFired = false;
+  if (!isOn) return;
+  window._jcTimer = setTimeout(() => {
+    window._jcFired = true;
+    el.style.transform = 'scale(0.78)';
+    el.style.opacity = '0.45';
+    el.style.transition = 'all 0.12s';
+  }, 850);
+}
+function julgaeChkUp(el, pKey, clientId, field, isOn) {
+  clearTimeout(window._jcTimer);
+  el.style.transform = '';
+  el.style.opacity = '';
+  if (!isOn) {
+    toggleJulgaeField(pKey, clientId, field);
+  } else if (window._jcFired) {
+    window._jcFired = false;
+    toggleJulgaeField(pKey, clientId, field);
+  } else {
+    toast('꾹 누르면 해제됩니다', 'info', 1500);
+  }
+}
+function julgaeChkCancel(el) {
+  clearTimeout(window._jcTimer);
+  window._jcFired = false;
+  el.style.transform = '';
+  el.style.opacity = '';
+}
+
 function openJulgaePeriodPicker(btnEl) {
   const existing = document.getElementById('jpp-popup');
   if (existing) { existing.remove(); return; }
   const periods = G.periods;
   const selSet = new Set(G.julgaeSelectedPeriods||[]);
   const byYear = {}; const yearOrder = [];
-  periods.forEach((p,i)=>{
+  periods.forEach(p=>{
     const m = p.label.match(/^(\d{2})년/);
     const yr = m ? (2000+Number(m[1])) : 'other';
     if (!byYear[yr]) { byYear[yr]=[]; yearOrder.push(yr); }
-    byYear[yr].push({p,i});
+    byYear[yr].push(p);
   });
   const rect = btnEl.getBoundingClientRect();
   const pop = document.createElement('div');
@@ -4639,43 +4652,59 @@ function openJulgaePeriodPicker(btnEl) {
   const top = Math.min(rect.bottom + 6, window.innerHeight - 400);
   const left = Math.max(8, Math.min(rect.right - 260, window.innerWidth - 268));
   pop.style.top = top + 'px'; pop.style.left = left + 'px';
-  const rows = yearOrder.map(yr=>{
-    const label = yr==='other' ? '기타' : yr+'년';
-    return `<div style="margin-bottom:10px">
-      <div style="font-size:11px;font-weight:800;color:#888;margin-bottom:5px;text-transform:uppercase">${label}</div>
-      ${byYear[yr].map(({p})=>{
-        const dd = (() => {
-          const tpl = (typeof PERIOD_TEMPLATES!=='undefined'?PERIOD_TEMPLATES:[]).find(t=>t.tpl===p.reportType||t.reportType===p.reportType);
-          if(!tpl||!tpl.deadline) return null;
-          const mm=tpl.deadline.match(/(\d+)월\s*(\d+)일/); if(!mm) return null;
-          const t0=new Date(); t0.setHours(0,0,0,0);
-          const y0=t0.getFullYear(); let dl=new Date(y0,Number(mm[1])-1,Number(mm[2]));
-          if(dl<t0) dl=new Date(y0+1,Number(mm[1])-1,Number(mm[2]));
-          const diff=Math.ceil((dl-t0)/86400000);
-          if(diff<=0) return {label:'오늘 마감',color:'#c62828'};
-          if(diff<=7) return {label:'D-'+diff,color:'#e53935'};
-          if(diff<=30) return {label:'D-'+diff,color:'#e65100'};
-          return {label:'D-'+diff,color:'#aaa'};
-        })();
-        const ddHtml = dd ? `<span style="font-size:10px;background:${dd.color};color:#fff;border-radius:6px;padding:1px 6px;margin-left:4px">${dd.label}</span>` : '';
-        const lockHtml = p.locked ? '<span style="font-size:10px;margin-left:4px">🔒</span>' : '';
-        return `<label style="display:flex;align-items:center;gap:9px;padding:7px 6px;cursor:pointer;border-radius:8px" onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background=''">
-          <input type="checkbox" class="jpp-chk" data-pid="${p.id}" ${selSet.has(p.id)?'checked':''} style="width:17px;height:17px;cursor:pointer;accent-color:#4f8ef7;flex-shrink:0">
-          <span style="font-size:13px;font-weight:500">${esc(p.label)}${ddHtml}${lockHtml}</span>
-        </label>`;
-      }).join('')}
-    </div>`;
-  }).join('');
-  pop.innerHTML = `
-    <div style="font-size:12px;font-weight:800;color:#333;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #f0f0f0">📅 신고리스트 선택</div>
-    <div>${rows}</div>
-    <div style="display:flex;gap:6px;margin-top:12px;padding-top:10px;border-top:1px solid #f0f0f0">
-      <button onclick="document.querySelectorAll('.jpp-chk').forEach(c=>c.checked=true)" style="flex:1;padding:8px 4px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:13px;cursor:pointer;font-family:inherit">전체</button>
-      <button onclick="document.querySelectorAll('.jpp-chk').forEach(c=>c.checked=false)" style="flex:1;padding:8px 4px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:13px;cursor:pointer;font-family:inherit">해제</button>
-      <button onclick="_jppConfirm()" style="flex:2;padding:8px 10px;border-radius:8px;border:none;background:#4f8ef7;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">확인</button>
-    </div>`;
+
+  function _jppDdHtml(p) {
+    const tpl = (typeof PERIOD_TEMPLATES!=='undefined'?PERIOD_TEMPLATES:[]).find(t=>t.tpl===p.reportType||t.reportType===p.reportType);
+    if(!tpl||!tpl.deadline) return '';
+    const mm=tpl.deadline.match(/(\d+)월\s*(\d+)일/); if(!mm) return '';
+    const t0=new Date(); t0.setHours(0,0,0,0);
+    const y0=t0.getFullYear(); let dl=new Date(y0,Number(mm[1])-1,Number(mm[2]));
+    if(dl<t0) dl=new Date(y0+1,Number(mm[1])-1,Number(mm[2]));
+    const diff=Math.ceil((dl-t0)/86400000);
+    const color=diff<=0?'#c62828':diff<=7?'#e53935':diff<=30?'#e65100':'#aaa';
+    const lbl=diff<=0?'오늘 마감':'D-'+diff;
+    return `<span style="font-size:10px;background:${color};color:#fff;border-radius:6px;padding:1px 6px;margin-left:4px">${lbl}</span>`;
+  }
+
+  function showYears() {
+    pop.innerHTML = `
+      <div style="font-size:12px;font-weight:800;color:#333;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #f0f0f0">📅 신고연도 선택</div>
+      <div style="display:flex;flex-direction:column;gap:7px">
+        ${yearOrder.map(yr=>{
+          const label = yr==='other'?'기타':yr+'년';
+          const cnt = byYear[yr].filter(p=>selSet.has(p.id)).length;
+          const total = byYear[yr].length;
+          return `<button onclick="window._jppShowYear(${JSON.stringify(yr)})" style="padding:11px 14px;border-radius:10px;border:1.5px solid ${cnt>0?'#4f8ef7':'#e0e0e0'};background:${cnt>0?'#e8f0fe':'#f9f9f9'};text-align:left;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:space-between;width:100%">
+            <span style="font-size:15px;font-weight:700;color:${cnt>0?'#1565c0':'#333'}">${label}</span>
+            <span style="font-size:12px;color:#888">${total}개${cnt>0?` · <span style="color:#1565c0;font-weight:700">${cnt}개 선택</span>`:''} ▶</span>
+          </button>`;
+        }).join('')}
+      </div>`;
+  }
+
+  window._jppShowYear = function(yr) {
+    const ps = byYear[yr] || [];
+    const label = yr==='other'?'기타':yr+'년';
+    pop.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #f0f0f0">
+        <button onclick="window._jppShowYears()" style="padding:4px 10px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:12px;cursor:pointer;font-family:inherit">← 뒤로</button>
+        <span style="font-size:12px;font-weight:800;color:#333">📅 ${esc(label)} 신고리스트</span>
+      </div>
+      <div>${ps.map(p=>`<label style="display:flex;align-items:center;gap:9px;padding:7px 6px;cursor:pointer;border-radius:8px" onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background=''">
+        <input type="checkbox" class="jpp-chk" data-pid="${p.id}" ${selSet.has(p.id)?'checked':''} style="width:17px;height:17px;cursor:pointer;accent-color:#4f8ef7;flex-shrink:0">
+        <span style="font-size:13px;font-weight:500">${esc(p.label)}${_jppDdHtml(p)}${p.locked?'<span style="font-size:10px;margin-left:4px">🔒</span>':''}</span>
+      </label>`).join('')}</div>
+      <div style="display:flex;gap:6px;margin-top:12px;padding-top:10px;border-top:1px solid #f0f0f0">
+        <button onclick="document.querySelectorAll('.jpp-chk').forEach(c=>c.checked=true)" style="flex:1;padding:8px 4px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:13px;cursor:pointer;font-family:inherit">전체</button>
+        <button onclick="document.querySelectorAll('.jpp-chk').forEach(c=>c.checked=false)" style="flex:1;padding:8px 4px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:13px;cursor:pointer;font-family:inherit">해제</button>
+        <button onclick="_jppConfirm()" style="flex:2;padding:8px 10px;border-radius:8px;border:none;background:#4f8ef7;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">확인</button>
+      </div>`;
+  };
+
+  window._jppShowYears = showYears;
+  showYears();
   document.body.appendChild(pop);
-  const outside = e => { if(!pop.contains(e.target)&&e.target!==btnEl){pop.remove();document.removeEventListener('click',outside);} };
+  const outside = e => { if(!pop.contains(e.target)&&e.target!==btnEl){pop.remove();document.removeEventListener('click',outside);window._jppShowYear=null;window._jppShowYears=null;} };
   setTimeout(()=>document.addEventListener('click',outside),10);
 }
 function _jppConfirm() {
@@ -5284,12 +5313,6 @@ function renderFees() {
         <div style="font-size:12px;color:#aaa">${agingData.m4p.total.toLocaleString()}원</div>
       </div>
     </div>` : ''}
-  </div>
-
-  <div class="stat-grid" style="margin-bottom:16px">
-    <div class="stat-card" style="border-top:4px solid #4f8ef7"><div class="stat-label">총 청구</div><div class="stat-value" style="font-size:18px;color:#4f8ef7">${grandTotal.toLocaleString()}원</div></div>
-    <div class="stat-card" style="border-top:4px solid #2e7d32"><div class="stat-label">수금 완료</div><div class="stat-value" style="font-size:18px;color:#2e7d32">${grandCollected.toLocaleString()}원</div></div>
-    <div class="stat-card" style="border-top:4px solid #e53935"><div class="stat-label">미수금</div><div class="stat-value" style="font-size:18px;color:#e53935">${grandUnpaid.toLocaleString()}원</div></div>
   </div>
 
   <!-- 월정 수수료 -->
