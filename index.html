@@ -524,7 +524,8 @@ let G = {
     autoCreatePeriods: false,
     dashWidgets: {},
     feeApplied: false,
-    xlsApplied: false
+    xlsApplied: false,
+    contractsApplied: false
   }
 };
 
@@ -948,14 +949,19 @@ function groupColor(key) {
 
 function buildClientGroupMap(allClients) {
   const repCount = {};
+  const juminCount = {};
   allClients.forEach(c => {
     if (c.status === '해지' || c.status === '폐업') return;
     const r = (c.rep || '').trim();
     if (r) repCount[r] = (repCount[r] || 0) + 1;
+    const jn = (c.jumin || '').replace(/[-\s]/g, '');
+    if (jn && jn.length >= 13 && c.taxType !== '법인') juminCount[jn] = (juminCount[jn] || 0) + 1;
   });
   return function getGroupKey(c) {
     if (c.soloGroup) return 'S:' + c.id;
     if (c.relatedGroup && c.relatedGroup.trim()) return 'G:' + c.relatedGroup.trim();
+    const jn = (c.jumin || '').replace(/[-\s]/g, '');
+    if (jn && jn.length >= 13 && c.taxType !== '법인' && juminCount[jn] > 1) return 'J:' + jn;
     const r = (c.rep || '').trim();
     if (r && repCount[r] > 1) return 'R:' + r;
     return 'S:' + c.id;
@@ -1010,6 +1016,19 @@ function setClientGradeManual(clientId, grade) {
   }
   saveToLS();
   renderClients();
+}
+
+function _filterJuminGroups(sortedList, getGroupKey) {
+  const groups = {}, keyToLead = {}, final = [];
+  for (const c of sortedList) {
+    const gk = getGroupKey(c);
+    if (gk.startsWith('J:')) {
+      if (!keyToLead[gk]) { keyToLead[gk] = c.id; groups[c.id] = []; final.push(c); }
+      else groups[keyToLead[gk]].push(c);
+    } else { final.push(c); }
+  }
+  window._juminGroups = groups;
+  return final;
 }
 
 function filteredClients() {
@@ -1070,6 +1089,7 @@ function filteredClients() {
       if (biz.includes(q)) return 40;
       return 30;
     };
+    window._juminGroups = {};
     return list.sort((a, b) => score(b) - score(a));
   }
 
@@ -1091,10 +1111,10 @@ function filteredClients() {
       if (field === 'o') { av = a.taxOffice||''; bv = b.taxOffice||''; return dir==='asc' ? av.localeCompare(bv,'ko') : bv.localeCompare(av,'ko'); }
       return 0;
     });
-    return list;
+    return _filterJuminGroups(list, getGroupKey);
   }
 
-  return list.sort((a, b) => {
+  return _filterJuminGroups(list.sort((a, b) => {
     const ka = getGroupKey(a), kb = getGroupKey(b);
     if (ka !== kb) {
       const ga = groupSortKeys[ka], gb = groupSortKeys[kb];
@@ -1106,7 +1126,7 @@ function filteredClients() {
     if (a.id === mainId) return -1;
     if (b.id === mainId) return 1;
     return csk(a).localeCompare(csk(b)) || a.name.localeCompare(b.name, 'ko');
-  });
+  }), getGroupKey);
 }
 
 // ══════════════════════════════════════════════════════
@@ -1736,9 +1756,11 @@ function renderClients() {
       const groupLabel = inGroup ? (c.relatedGroup && c.relatedGroup.trim() ? c.relatedGroup.trim() : c.rep) : null;
       const groupDot = inGroup ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${gc};margin-right:5px;vertical-align:middle"></span>` : '';
       const groupSub = inGroup ? `<span style="font-size:10px;color:${gc};font-weight:600;margin-left:4px">👥 ${esc(groupLabel)}</span>` : '';
+      const juminMembers = (window._juminGroups || {})[c.id] || [];
+      const isJuminLead = juminMembers.length > 0;
       return `<tr class="client-row" onpointerdown="startLongPress(event,${c.id})" onpointermove="moveLongPress(event)" onpointerup="cancelLongPress()" onpointercancel="cancelLongPress()" oncontextmenu="event.preventDefault()" onclick="if(window._lpFired){window._lpFired=false}else{toggleExpand(${c.id})}" style="${inGroup?`border-left:3px solid ${gc}`:''}" >
         ${G.bulkMode?`<td onclick="event.stopPropagation();toggleClientSelect(${c.id})" style="width:32px;text-align:center;cursor:pointer"><input type="checkbox" ${(G.selectedClients||[]).includes(c.id)?'checked':''} style="width:16px;height:16px;cursor:pointer" onclick="event.stopPropagation();toggleClientSelect(${c.id})"></td>`:''}
-        <td><div class="td-name">${(()=>{const risk=clientRiskLevel(c);return risk==='red'?'<span title="위험" style="color:#e53935;margin-right:4px">●</span>':risk==='yellow'?'<span title="주의" style="color:#f57c00;margin-right:4px">●</span>':''})()}${groupDot}${esc(c.name)}<button onclick="event.stopPropagation();openClientNotes(${c.id})" style="margin-left:4px;padding:1px 5px;border-radius:5px;border:1px solid #e0e0e0;background:#f8f9ff;font-size:11px;cursor:pointer;vertical-align:middle" title="메모/이력">📝${(G.clientNotes||{})[c.id]?.length?` ${G.clientNotes[c.id].length}`:''}</button><button onclick="event.stopPropagation();toggleFavorite(${c.id})" style="margin-left:2px;padding:1px 4px;border-radius:5px;border:1px solid #e0e0e0;background:#fff;font-size:12px;cursor:pointer;vertical-align:middle" title="즐겨찾기">${(G.favorites||[]).includes(c.id)?'⭐':'☆'}</button></div>${(c.bizType||c.bizCode||groupSub)?`<div class="td-sub">${c.bizType?esc(c.bizType):''}${c.bizCode?` <span style="color:#aaa;font-size:10px">[${esc(c.bizCode)}]</span>`:''}${groupSub}</div>`:''}</td>
+        <td><div class="td-name">${(()=>{const risk=clientRiskLevel(c);return risk==='red'?'<span title="위험" style="color:#e53935;margin-right:4px">●</span>':risk==='yellow'?'<span title="주의" style="color:#f57c00;margin-right:4px">●</span>':''})()}${groupDot}${esc(c.name)}<button onclick="event.stopPropagation();openClientNotes(${c.id})" style="margin-left:4px;padding:1px 5px;border-radius:5px;border:1px solid #e0e0e0;background:#f8f9ff;font-size:11px;cursor:pointer;vertical-align:middle" title="메모/이력">📝${(G.clientNotes||{})[c.id]?.length?` ${G.clientNotes[c.id].length}`:''}</button><button onclick="event.stopPropagation();toggleFavorite(${c.id})" style="margin-left:2px;padding:1px 4px;border-radius:5px;border:1px solid #e0e0e0;background:#fff;font-size:12px;cursor:pointer;vertical-align:middle" title="즐겨찾기">${(G.favorites||[]).includes(c.id)?'⭐':'☆'}</button>${isJuminLead ? `<button onclick="event.stopPropagation();toggleJuminGroup(${c.id})" id="jumin-btn-${c.id}" style="margin-left:4px;padding:1px 6px;border-radius:10px;background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;font-size:10px;font-weight:700;cursor:pointer;vertical-align:middle" title="같은 사업주의 다른 사업장">+${juminMembers.length}개 사업장</button>` : ''}</div>${(c.bizType||c.bizCode||groupSub)?`<div class="td-sub">${c.bizType?esc(c.bizType):''}${c.bizCode?` <span style="color:#aaa;font-size:10px">[${esc(c.bizCode)}]</span>`:''}${groupSub}</div>`:''}</td>
         <td data-label="대표자" style="font-size:12px;color:#444;${hc['c_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
         <td data-label="수임내용" style="${hc['c_dealType']?'display:none':''}">${em?iSel('dealType',DEAL_TYPES.slice(1),getDealTypes(c)[0]):getDealTypes(c).map(d=>dealBadge(d)).join('')}</td>
         <td data-label="인격" style="${hc['c_taxType']?'display:none':''}">${em?iSel('taxType',TAX_TYPES.slice(1),c.taxType):badge(c.taxType,c.taxType==='법인'?'blue':'gray')}</td>
@@ -1782,7 +1804,61 @@ function renderClients() {
             </div>
           </div>
         </td>
-      </tr>`;
+      </tr>
+      ${isJuminLead ? juminMembers.map(m => {
+        const mc = (m.contracts||[]).map(k=>contractLabel(k)).join(', ');
+        const miSel = (field,opts,val)=>`<select onclick="event.stopPropagation()" onchange="event.stopPropagation();updateClientField(${m.id},'${field}',this.value)" class="inline-edit">${opts.map(v=>`<option${val===v?' selected':''}>${esc(v)}</option>`).join('')}</select>`;
+        const miInput = (field,val,attrs='')=>`<input ${attrs} onclick="event.stopPropagation()" onchange="event.stopPropagation();updateClientField(${m.id},'${field}',this.value)" value="${esc(val||'')}" class="inline-edit">`;
+        return `<tr class="client-row" data-jumin-lead="${c.id}" id="jumin-sub-${m.id}"
+          onpointerdown="startLongPress(event,${m.id})" onpointermove="moveLongPress(event)" onpointerup="cancelLongPress()" onpointercancel="cancelLongPress()" oncontextmenu="event.preventDefault()"
+          onclick="if(window._lpFired){window._lpFired=false}else{toggleExpand(${m.id})}"
+          style="display:none;background:#f0fff4;border-left:3px solid #4caf50">
+          ${G.bulkMode?`<td onclick="event.stopPropagation();toggleClientSelect(${m.id})" style="width:32px;text-align:center;cursor:pointer"><input type="checkbox" ${(G.selectedClients||[]).includes(m.id)?'checked':''} style="width:16px;height:16px;cursor:pointer" onclick="event.stopPropagation();toggleClientSelect(${m.id})"></td>`:''}
+          <td><div class="td-name"><span style="color:#4caf50;font-size:12px;margin-right:3px;vertical-align:middle">↳</span>${(()=>{const risk=clientRiskLevel(m);return risk==='red'?'<span style="color:#e53935;margin-right:4px">●</span>':risk==='yellow'?'<span style="color:#f57c00;margin-right:4px">●</span>':'';})()}${esc(m.name)}<button onclick="event.stopPropagation();openClientNotes(${m.id})" style="margin-left:4px;padding:1px 5px;border-radius:5px;border:1px solid #e0e0e0;background:#f8f9ff;font-size:11px;cursor:pointer;vertical-align:middle" title="메모/이력">📝${(G.clientNotes||{})[m.id]?.length?` ${G.clientNotes[m.id].length}`:''}</button><button onclick="event.stopPropagation();toggleFavorite(${m.id})" style="margin-left:2px;padding:1px 4px;border-radius:5px;border:1px solid #e0e0e0;background:#fff;font-size:12px;cursor:pointer;vertical-align:middle" title="즐겨찾기">${(G.favorites||[]).includes(m.id)?'⭐':'☆'}</button></div>${m.bizType||m.bizCode?`<div class="td-sub">${m.bizType?esc(m.bizType):''}${m.bizCode?` <span style="color:#aaa;font-size:10px">[${esc(m.bizCode)}]</span>`:''}</div>`:''}</td>
+          <td data-label="대표자" style="font-size:12px;color:#444;${hc['c_rep']?'display:none':''}">${esc(m.rep)||'-'}</td>
+          <td data-label="수임내용" style="${hc['c_dealType']?'display:none':''}">${em?miSel('dealType',DEAL_TYPES.slice(1),getDealTypes(m)[0]):getDealTypes(m).map(d=>dealBadge(d)).join('')}</td>
+          <td data-label="인격" style="${hc['c_taxType']?'display:none':''}">${em?miSel('taxType',TAX_TYPES.slice(1),m.taxType):badge(m.taxType,m.taxType==='법인'?'blue':'gray')}</td>
+          <td data-label="과세유형" style="${hc['c_vatType']?'display:none':''}">${em?miSel('vatType',VAT_TYPES.slice(1),m.vatType):badge(m.vatType,m.vatType==='일반'?'blue':m.vatType==='간이'?'orange':m.vatType==='간세'?'teal':'gray')}</td>
+          <td data-label="담당자" style="color:#555;font-size:12px;${hc['c_manager']?'display:none':''}">${em?miSel('manager',MANAGERS.slice(1),getManagers(m)[0]||''):getManagers(m).join(', ')||'-'}</td>
+          <td data-label="수수료" style="font-weight:600;font-size:11px;${hc['c_fee']?'display:none':''}">${m.fee?m.fee.toLocaleString()+' <span style="color:#aaa;font-size:10px">기장</span>':'-'}</td>
+          <td data-label="상태" style="opacity:.95;${hc['c_status']?'display:none':''}">${badge(m.status,statusColor(m.status))}</td>
+          <td data-label="CMS" style="opacity:.95;${hc['c_cms']?'display:none':''}">${badge(m.cms?'가입':'미가입',m.cms?'green':'gray')}</td>
+          <td data-label="등급" style="text-align:center;${hc['c_grade']?'display:none':''}">${gradeBadge(m.grade,m.gradeManual)}</td>
+          <td></td>
+        </tr>
+        <tr class="expand-row" id="expand-${m.id}" data-jumin-lead="${c.id}" style="display:none">
+          <td colspan="${10-['c_rep','c_dealType','c_taxType','c_vatType','c_manager','c_fee','c_status','c_cms','c_grade'].filter(k=>hc[k]).length}">
+            <div class="expand-inner">
+              <div style="flex-basis:100%;display:flex;align-items:center;gap:8px;padding:7px 10px;background:${m.gradeManual?'#fff8e1':'#f8f9ff'};border-radius:8px;border:1px solid ${m.gradeManual?'#ffe082':'#e8eaf6'}">
+                <span style="font-size:11px;color:#888;white-space:nowrap;font-weight:600">등급</span>
+                ${['A','B','C'].map(g=>{const cfg={A:{bg:'#e8f0fe',col:'#1565c0',bd:'#4f8ef7'},B:{bg:'#e8f5e9',col:'#2e7d32',bd:'#43a047'},C:{bg:'#f5f5f5',col:'#666',bd:'#bbb'}};const cv=cfg[g];const on=m.grade===g;return`<button onclick="event.stopPropagation();setClientGradeManual(${m.id},'${g}')" style="padding:3px 14px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:2px solid ${on?cv.bd:'#e0e0e0'};background:${on?cv.bg:'#fff'};color:${on?cv.col:'#ccc'};transition:all .12s">${g}</button>`;}).join('')}
+                ${m.gradeManual?`<button onclick="event.stopPropagation();setClientGradeManual(${m.id},null)" style="padding:3px 10px;border-radius:8px;border:1.5px solid #ffcc80;background:#fff3e0;color:#e65100;font-size:11px;cursor:pointer;font-family:inherit;margin-left:4px">↺ 자동산출</button>`:`<span style="font-size:11px;color:#aaa;margin-left:4px">자동산출 중</span>`}
+              </div>
+              <div><div style="font-size:11px;color:#888;margin-bottom:3px">연락처</div>${em?miInput('phone',m.phone,'placeholder="전화번호" style="width:140px"'):`<div style="font-weight:600">${m.phone?`<a href="tel:${esc(m.phone)}" style="color:#4f8ef7;text-decoration:none;font-weight:600">${esc(m.phone)}</a>`:'-'}</div>`}</div>
+              <div><div style="font-size:11px;color:#888;margin-bottom:3px">관할세무서</div>${em?miInput('taxOffice',m.taxOffice,'list="taxoffice-list" placeholder="세무서 선택·입력" style="width:150px"'):`<div style="font-weight:600">${esc(m.taxOffice||'-')}</div>`}</div>
+              <div><div style="font-size:11px;color:#888;margin-bottom:3px">수임일자</div>${em?miInput('contractDate',m.contractDate,'type="date"'):`<div style="font-weight:600">${esc(m.contractDate||'-')}</div>`}</div>
+              <div><div style="font-size:11px;color:#888;margin-bottom:3px">사업자번호</div>${em?miInput('bizNo',m.bizNo,'placeholder="000-00-00000" style="width:130px"'):`<div style="font-weight:600;font-family:monospace">${esc(m.bizNo||'-')}</div>`}</div>
+              <div><div style="font-size:11px;color:#888;margin-bottom:3px">${m.taxType==='법인'?'법인등록번호':'주민번호'}</div>${em?miInput('jumin',m.jumin,'placeholder="000000-0000000" style="width:150px"'):`<div style="font-weight:600;font-family:monospace">${m.jumin?esc(m.jumin.slice(0,6)+'-'+m.jumin.slice(6,7)+'••••••'):'-'}</div>`}</div>
+              ${m.openDate?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">개업연월일</div><div style="font-weight:600">${esc(m.openDate)}</div></div>`:''}
+              ${m.jointBiz?`<div>${badge('공동사업자','orange')}</div>`:''}
+              ${m.status==='해지'||m.status==='폐업'?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">수임해지일</div><div style="font-weight:600;color:#c62828">${esc(m.terminationDate||'-')}</div></div>`:''}
+              ${m.status==='폐업'?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">폐업연월일</div><div style="font-weight:600;color:#c62828">${esc(m.closeDate||'-')}</div></div>`:''}
+              ${mc?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">수임항목</div><div style="font-size:12px;color:#555">${esc(mc)}</div></div>`:''}
+              ${m.memo?`<div style="max-width:240px"><div style="font-size:11px;color:#888;margin-bottom:3px">메모</div><div style="font-size:12px;color:#555">${esc(m.memo)}</div></div>`:''}
+              ${((G.clientTags||{})[m.id]||[]).length?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">태그</div><div style="display:flex;flex-wrap:wrap;gap:4px">${((G.clientTags||{})[m.id]||[]).map(t=>`<span style="background:#e8f0fe;color:#4f8ef7;border-radius:10px;padding:2px 10px;font-size:11px">${esc(t)}</span>`).join('')}</div></div>`:''}
+              ${m.bizCode?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">업종코드</div><div style="font-weight:600;font-family:monospace;font-size:13px">${esc(m.bizCode)}</div></div>`:''}
+              ${m.seongsi?`<div>${badge('성실신고','purple')}</div>`:''}
+              ${(()=>{const docs=[{k:'contract',l:'수임계약서'},{k:'proxy',l:'위임장'},{k:'bizReg',l:'사업자등록증'},{k:'bank',l:'통장사본'},{k:'seal',l:'인감증명서'}];const dCheck=((G.docChecklist||{})[m.id]||{});return`<div style="flex-basis:100%"><div style="font-size:11px;color:#888;margin-bottom:5px">📋 서류 체크</div><div style="display:flex;flex-wrap:wrap;gap:5px">${docs.map(d=>`<button onclick="event.stopPropagation();toggleDocCheck(${m.id},'${d.k}')" style="padding:4px 10px;border-radius:12px;border:1.5px solid ${dCheck[d.k]?'#43a047':'#e0e0e0'};background:${dCheck[d.k]?'#e8f5e9':'#f5f5f5'};color:${dCheck[d.k]?'#2e7d32':'#888'};font-size:11px;cursor:pointer;font-family:inherit;font-weight:600">${dCheck[d.k]?'✓ ':''} ${d.l}</button>`).join('')}</div></div>`;})()}
+              ${(()=>{const cJulgae=(G.periods||[]).map(p=>{const pk=p.id+'|'+(p.reportType||p.type);const v=julgaeVal(pk,m.id);if(!v||(!v.d&&!v.b&&!v.a&&!v.fee&&!v.s))return null;return{label:p.label,v};}).filter(Boolean);if(!cJulgae.length)return'';return`<div style="flex-basis:100%"><div style="font-size:11px;color:#888;margin-bottom:4px">신고 현황</div><div style="display:flex;flex-wrap:wrap;gap:4px">${cJulgae.slice(-6).map(x=>`<div style="background:${x.v.a?'#e8f5e9':x.v.s?'#f3e5f5':'#f5f5f5'};border-radius:8px;padding:4px 10px;font-size:11px"><span style="font-weight:600">${esc(x.label)}</span><span style="margin-left:4px">${x.v.d?'📋':''}${x.v.b?'📖':''}${x.v.a?'✅':''}${x.v.s?'💰':''}</span></div>`).join('')}</div></div>`;})()}
+              <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+                <button class="btn-sm" style="background:#f8f9ff;color:#4f8ef7;border:1px solid #c5cae9" onclick="event.stopPropagation();openClientNotes(${m.id})">📝 메모/이력</button>
+                <button class="btn-sm" style="background:#f0f4ff;color:#4f8ef7" onclick="event.stopPropagation();openForm(${m.id})">✏ 수정</button>
+                <button class="btn-sm" style="background:#fdecea;color:#c62828;border:1px solid #ef9a9a" onclick="event.stopPropagation();deleteClient(${m.id})">🗑 삭제</button>
+              </div>
+            </div>
+          </td>
+        </tr>`;
+      }).join('') : ''}`;
       }).join('');
     })()}
     ${pageList.length===0?'<tr><td colspan="9" style="text-align:center;padding:40px;color:#aaa">검색 결과가 없습니다</td></tr>':''}
@@ -2657,6 +2733,17 @@ function toggleExpand(id) {
     row.style.display = '';
     row.previousElementSibling?.classList.add('expanded');
   }
+}
+
+function toggleJuminGroup(leadId) {
+  const mainRows = document.querySelectorAll(`.client-row[data-jumin-lead="${leadId}"]`);
+  const expandRows = document.querySelectorAll(`.expand-row[data-jumin-lead="${leadId}"]`);
+  if (!mainRows.length) return;
+  const isExpanded = mainRows[0].style.display !== 'none';
+  mainRows.forEach(r => r.style.display = isExpanded ? 'none' : '');
+  expandRows.forEach(r => r.style.display = 'none');
+  const btn = document.getElementById(`jumin-btn-${leadId}`);
+  if (btn) btn.innerHTML = isExpanded ? `+${mainRows.length}개 사업장` : `▲ 접기`;
 }
 
 function cycleFeeStatus(id) {
@@ -7353,20 +7440,29 @@ function openSettings() {
         매년 1월 자동 생성 알림
       </label>
     </div>
-    <div style="border:1px solid #ffe082;border-radius:10px;padding:14px;background:#fffde7">
+    ${!s.contractsApplied ? `<div style="border:1px solid #ffe082;border-radius:10px;padding:14px;background:#fffde7">
       <div style="font-weight:700;font-size:13px;margin-bottom:6px">📋 수임계약항목 일괄 재설정</div>
       <div style="font-size:12px;color:#888;margin-bottom:10px;line-height:1.6">모든 거래처의 수임계약항목을 수임내용·인격·과세유형 기준으로 다시 설정합니다.<br>기존 수동 설정은 초기화됩니다.</div>
-      <button type="button" class="btn-sm" style="background:#f57f17;color:#fff;border:none" onclick="if(confirm('모든 거래처의 수임계약항목을 일괄 재설정합니다.\n기존 수동 설정이 초기화됩니다. 계속하시겠습니까?')){rebuildAllContracts();closeModal();}">⟳ 전체 거래처 수임계약항목 재설정</button>
-    </div>
+      <div style="display:flex;gap:8px">
+        <button type="button" class="btn-sm" style="background:#f57f17;color:#fff;border:none" onclick="if(confirm('모든 거래처의 수임계약항목을 일괄 재설정합니다.\n기존 수동 설정이 초기화됩니다. 계속하시겠습니까?')){rebuildAllContracts();G.settings.contractsApplied=true;saveToLS();updateSettingsBadge();closeModal();}">⟳ 반영</button>
+        <button type="button" class="btn-sm" style="background:#f5f5f5;color:#888;border:1px solid #ddd" onclick="G.settings.contractsApplied=true;saveToLS();updateSettingsBadge();closeModal();">✕ 삭제</button>
+      </div>
+    </div>` : ''}
     ${!s.feeApplied ? `<div style="border:1px solid #e3f2fd;border-radius:10px;padding:14px;background:#f0f8ff;margin-top:4px">
       <div style="font-weight:700;font-size:13px;margin-bottom:6px">💴 기장료 일괄 변경 (최수이 담당 거래처)</div>
       <div style="font-size:12px;color:#888;margin-bottom:10px;line-height:1.6">사진 목록의 기장료로 해당 거래처를 일괄 변경합니다.</div>
-      <button type="button" class="btn-sm" style="background:#1565c0;color:#fff;border:none" onclick="applyFeeUpdates()">💴 기장료 일괄 변경 적용</button>
+      <div style="display:flex;gap:8px">
+        <button type="button" class="btn-sm" style="background:#1565c0;color:#fff;border:none" onclick="applyFeeUpdates()">💴 반영</button>
+        <button type="button" class="btn-sm" style="background:#f5f5f5;color:#888;border:1px solid #ddd" onclick="G.settings.feeApplied=true;saveToLS();updateSettingsBadge();closeModal();">✕ 삭제</button>
+      </div>
     </div>` : ''}
     ${!s.xlsApplied ? `<div style="border:1px solid #ffcdd2;border-radius:10px;padding:14px;background:#fff5f5;margin-top:4px">
       <div style="font-weight:700;font-size:13px;margin-bottom:6px">📥 거래처 데이터 교체 (엑셀 일괄 로드)</div>
       <div style="font-size:12px;color:#888;margin-bottom:10px;line-height:1.6">현재 거래처 목록을 모두 삭제하고 엑셀 파일에서 가져온 624개 거래처로 교체합니다.<br>⚠ 기존 데이터(메모·신고현황·수납이력 등)는 모두 사라집니다.</div>
-      <button type="button" class="btn-sm" style="background:#c62828;color:#fff;border:none" onclick="importClientsFromXLS()">🔄 거래처 전체 교체 (엑셀 624개)</button>
+      <div style="display:flex;gap:8px">
+        <button type="button" class="btn-sm" style="background:#c62828;color:#fff;border:none" onclick="importClientsFromXLS()">🔄 반영</button>
+        <button type="button" class="btn-sm" style="background:#f5f5f5;color:#888;border:1px solid #ddd" onclick="G.settings.xlsApplied=true;G.settings.feeApplied=true;saveToLS();updateSettingsBadge();closeModal();">✕ 삭제</button>
+      </div>
     </div>` : ''}
     <div style="border:1px solid #e0e0e0;border-radius:10px;padding:14px;background:#f8f9ff;margin-top:4px">
       <div style="font-weight:700;font-size:13px;margin-bottom:10px">📊 대시보드 위젯 표시 설정</div>
@@ -7390,7 +7486,7 @@ function openSettings() {
 function updateSettingsBadge() {
   const badge = document.getElementById('settings-badge');
   if (!badge) return;
-  const pending = !G.settings.feeApplied || !G.settings.xlsApplied;
+  const pending = !G.settings.feeApplied || !G.settings.xlsApplied || !G.settings.contractsApplied;
   badge.style.display = pending ? 'inline-block' : 'none';
 }
 function getAIKey() { return G.settings?.aiKey || ''; }
@@ -8345,6 +8441,7 @@ async function loadFromFirebase() {
     if (G.settings?.managers) MANAGERS = ['전체', ...G.settings.managers];
     if (G.settings.feeApplied === undefined) G.settings.feeApplied = false;
     if (G.settings.xlsApplied === undefined) G.settings.xlsApplied = false;
+    if (G.settings.contractsApplied === undefined) G.settings.contractsApplied = false;
     updateBadge();
   } catch(e) {
     console.error('초기화 오류:', e);
