@@ -835,9 +835,15 @@ function dealSortRank(dt) {
   return i >= 0 ? i : DEAL_SORT_ORDER.length;
 }
 function getDealTypes(c) {
-  if (Array.isArray(c.dealTypes) && c.dealTypes.length > 0) return c.dealTypes;
-  if (c.dealType) return [c.dealType];
-  return ['기장'];
+  let types;
+  if (Array.isArray(c.dealTypes) && c.dealTypes.length > 0) types = [...c.dealTypes];
+  else if (c.dealType) types = [c.dealType];
+  else types = ['기장'];
+  if (c.seongsi && !types.includes('성실')) {
+    types = types.map(t => t === '기장' ? '성실' : t);
+    if (!types.includes('성실')) types.push('성실');
+  }
+  return types;
 }
 function getManagers(c) {
   if (Array.isArray(c.managers) && c.managers.length > 0) return c.managers;
