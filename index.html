@@ -4216,17 +4216,60 @@ function renderJulgae() {
     신고리스트가 없습니다. <b>+ 신고리스트 추가</b> 버튼을 눌러 시작하세요.</div>` : `
 
   ${(()=>{
-    // Init selected periods: auto-pick D-day≤30 or current-year periods on first load
+    // Build year map
+    const byYear = {}; const yearOrder = [];
+    periods.forEach(p => {
+      const m = p.label.match(/^(\d{2})년/);
+      const yr = m ? (2000+Number(m[1])) : 'other';
+      if (!byYear[yr]) { byYear[yr]=[]; yearOrder.push(yr); }
+      byYear[yr].push(p);
+    });
+
+    // Init selected years: default to current year
+    if (!G.julgaeSelectedYears) {
+      const curYr = new Date().getFullYear();
+      G.julgaeSelectedYears = yearOrder.includes(curYr) ? [curYr] : yearOrder.slice(-1);
+    }
+    G.julgaeSelectedYears = (G.julgaeSelectedYears||[]).filter(y=>byYear[y]);
+    if (!G.julgaeSelectedYears.length && yearOrder.length) G.julgaeSelectedYears = yearOrder.slice(-1);
+
+    // Init selected periods from selected years on first load
     if (!G.julgaeSelectedPeriods) {
       const curYr = new Date().getFullYear();
-      const curYrStr = String(curYr).slice(2) + '년';
       const byDday = periods.filter(p=>{ const d=julgaeDDay(p); return d&&d.label.startsWith('D-')&&parseInt(d.label.slice(2))<=30; });
       G.julgaeSelectedPeriods = byDday.length
         ? byDday.map(p=>p.id)
-        : periods.filter(p=>p.label.startsWith(curYrStr)).map(p=>p.id);
+        : (byYear[curYr]||[]).map(p=>p.id);
       if (!G.julgaeSelectedPeriods.length) G.julgaeSelectedPeriods = periods.slice(-3).map(p=>p.id);
     }
+
+    const selYears = new Set(G.julgaeSelectedYears);
     const selSet = new Set(G.julgaeSelectedPeriods);
+    const _sl = p => p.label.replace(/^\d{2}년 /, '').replace('부가세 ', '부가').replace('법인세 신고', '법인세').replace('종합소득세 신고', '종소세').replace('성실신고사업자 신고', '성실신고').replace('사업장현황신고', '사업장현황').replace(' 신고', '').replace('확정신고', '확정').replace('예정신고', '예정');
+
+    // Year pills
+    const yearPills = yearOrder.map(yr => {
+      const label = yr==='other'?'기타':yr+'년';
+      const isSel = selYears.has(yr);
+      return `<button onclick="_julgaeToggleYear(${JSON.stringify(yr)})" style="padding:5px 12px;border-radius:16px;border:1.5px solid ${isSel?'#4f8ef7':'#e0e0e0'};background:${isSel?'#e8f0fe':'#f9f9f9'};color:${isSel?'#1565c0':'#555'};font-size:12px;font-weight:${isSel?700:500};cursor:pointer;font-family:inherit;white-space:nowrap">${label}</button>`;
+    }).join('');
+
+    // List pills (periods from selected years)
+    const panelPeriods = periods.filter(p => {
+      const m = p.label.match(/^(\d{2})년/);
+      const yr = m ? (2000+Number(m[1])) : 'other';
+      return selYears.has(yr);
+    });
+    const listPills = panelPeriods.length
+      ? panelPeriods.map(p => {
+          const isSel = selSet.has(p.id);
+          const dd = julgaeDDay(p);
+          const ddHtml = dd ? `<span style="font-size:9px;background:${dd.color};color:#fff;border-radius:4px;padding:0 4px;margin-left:3px">${dd.label}</span>` : '';
+          return `<button onclick="_julgaeTogglePeriod(${p.id})" style="padding:5px 10px;border-radius:16px;border:1.5px solid ${isSel?'#4f8ef7':'#e0e0e0'};background:${isSel?'#e8f0fe':'#f9f9f9'};color:${isSel?'#1565c0':'#555'};font-size:12px;font-weight:${isSel?700:500};cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:2px;white-space:nowrap">${p.locked?'🔒':''}${esc(_sl(p))}${ddHtml}</button>`;
+        }).join('')
+      : `<span style="font-size:12px;color:#aaa">연도를 선택해주세요</span>`;
+
+    // Tiles
     const shownPeriods = periods.map((p,i)=>({p,i})).filter(({p})=>selSet.has(p.id));
     const tiles = shownPeriods.map(({p,i}) => {
       const pKey = p.id;
@@ -4244,14 +4287,14 @@ function renderJulgae() {
       const bg = pct===100?'#e8f5e9':pct>=70?'#e8f0fe':pct>=30?'#fff8e1':'#fdecea';
       const border = isActive?'#4f8ef7':(pct===100?'#81c784':pct>=70?'#7c4dff':pct>=30?'#ffca28':'#ef9a9a');
       const col = pct===100?'#2e7d32':pct>=70?'#4527a0':pct>=30?'#e65100':'#c62828';
-      const shortLabel = p.label.replace(/^\d{2}년 /, '').replace('부가세 ', '부가').replace('법인세 신고', '법인세').replace('종합소득세 신고', '종소세').replace('성실신고사업자 신고', '성실신고').replace('사업장현황신고', '사업장현황').replace(' 신고', '').replace('확정신고', '확정').replace('예정신고', '예정');
       return `<div onclick="G.julgaePeriodIdx=${i};renderJulgae()" style="cursor:pointer;padding:7px 10px;border-radius:8px;border:2px solid ${border};background:${isActive?'#e8f0fe':bg};min-width:80px;text-align:center;transition:box-shadow .1s${isActive?';box-shadow:0 2px 8px rgba(79,142,247,.3)':''}" title="${esc(p.label)} — ${done}/${total} 완료">
-        <div style="font-size:10px;color:${isActive?'#1565c0':'#888'};margin-bottom:3px;font-weight:${isActive?700:400}">${isLocked?'🔒 ':''}${esc(shortLabel)}</div>
+        <div style="font-size:10px;color:${isActive?'#1565c0':'#888'};margin-bottom:3px;font-weight:${isActive?700:400}">${isLocked?'🔒 ':''}${esc(_sl(p))}</div>
         <div style="font-size:14px;font-weight:800;color:${isActive?'#1565c0':col}">${pct}%</div>
         <div class="progress-bar" style="height:4px;margin-top:4px"><div class="progress-fill" style="width:${pct}%;background:${border}"></div></div>
         <div style="font-size:9px;color:#aaa;margin-top:2px">${done}/${total}</div>
       </div>`;
     }).join('');
+
     const dd = period ? julgaeDDay(period) : null;
     const ddBadge = dd ? `<span style="font-size:11px;background:${dd.color};color:#fff;border-radius:8px;padding:1px 8px;margin-left:6px">${dd.label}</span>` : '';
     const lockBtn = period ? (period.locked
@@ -4259,17 +4302,24 @@ function renderJulgae() {
       : `<button onclick="togglePeriodLock('${period.id}')" style="padding:4px 10px;border-radius:6px;border:1.5px solid #e53935;background:#fdecea;color:#c62828;font-size:12px;cursor:pointer;font-family:inherit">🔒 마감</button>`)
       : '';
     return `<div class="card" style="padding:12px 14px;margin-bottom:12px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:6px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px">
         <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#888;font-weight:600">
           신고기간 진행 현황${period?` — <b style="color:#333">${esc(period.label)}</b>${ddBadge}`:''}
           ${period?.locked?'<span style="background:#e53935;color:#fff;border-radius:8px;padding:1px 8px;font-size:11px">마감됨</span>':''}
         </div>
-        <div style="display:flex;gap:6px;align-items:center">
-          ${lockBtn}
-          <button onclick="openJulgaePeriodPicker(this)" style="padding:4px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7">📅 기간 선택 ${selSet.size>0?'('+selSet.size+')':''}▾</button>
+        ${lockBtn}
+      </div>
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:12px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #f0f0f0;align-items:start">
+        <div>
+          <div style="font-size:10px;font-weight:700;color:#aaa;letter-spacing:.5px;margin-bottom:6px">신고연도</div>
+          <div style="display:flex;flex-direction:column;gap:5px">${yearPills}</div>
+        </div>
+        <div style="min-width:0">
+          <div style="font-size:10px;font-weight:700;color:#aaa;letter-spacing:.5px;margin-bottom:6px">신고리스트 <span style="font-weight:400;color:#bbb">(${selSet.size}개 선택)</span></div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px">${listPills}</div>
         </div>
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px">${tiles||'<span style="font-size:12px;color:#aaa">기간 선택 버튼으로 리스트를 추가하세요</span>'}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">${tiles||'<span style="font-size:12px;color:#aaa">리스트를 선택하면 여기에 표시됩니다</span>'}</div>
     </div>`;
   })()}
 
@@ -4599,6 +4649,17 @@ function togglePeriodLock(periodId) {
   const p = G.periods.find(x=>x.id===periodId); if(!p) return;
   p.locked = !p.locked;
   saveToLS();
+  renderJulgae();
+}
+
+function _julgaeToggleYear(yr) {
+  const sy = G.julgaeSelectedYears || [];
+  G.julgaeSelectedYears = sy.includes(yr) ? sy.filter(y=>y!==yr) : [...sy, yr];
+  renderJulgae();
+}
+function _julgaeTogglePeriod(pid) {
+  const sp = G.julgaeSelectedPeriods || [];
+  G.julgaeSelectedPeriods = sp.includes(pid) ? sp.filter(x=>x!==pid) : [...sp, pid];
   renderJulgae();
 }
 
