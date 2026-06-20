@@ -1681,7 +1681,10 @@ function renderClients() {
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">수임일자</div>${em?iInput('contractDate',c.contractDate,'type="date"'):`<div style="font-weight:600">${esc(c.contractDate||'-')}</div>`}</div>
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">사업자번호</div>${em?iInput('bizNo',c.bizNo,'placeholder="000-00-00000" style="width:130px"'):`<div style="font-weight:600;font-family:monospace">${esc(c.bizNo||'-')}</div>`}</div>
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">${c.taxType==='법인'?'법인등록번호':'주민번호'}</div>${em?iInput('jumin',c.jumin,'placeholder="000000-0000000" style="width:150px"'):`<div style="font-weight:600;font-family:monospace">${c.jumin?esc(c.jumin.slice(0,6)+'-'+c.jumin.slice(6,7)+'••••••'):'-'}</div>`}</div>
-            ${c.status==='해지'||c.status==='폐업'?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">해지/폐업일</div><div style="font-weight:600;color:#c62828">${esc(c.terminationDate||'-')}</div></div>`:''}
+            ${c.openDate?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">개업연월일</div><div style="font-weight:600">${esc(c.openDate)}</div></div>`:''}
+            ${c.jointBiz?`<div>${badge('공동사업자','orange')}</div>`:''}
+            ${c.status==='해지'||c.status==='폐업'?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">수임해지일</div><div style="font-weight:600;color:#c62828">${esc(c.terminationDate||'-')}</div></div>`:''}
+            ${c.status==='폐업'?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">폐업연월일</div><div style="font-weight:600;color:#c62828">${esc(c.closeDate||'-')}</div></div>`:''}
             ${contracts?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">수임항목</div><div style="font-size:12px;color:#555">${esc(contracts)}</div></div>`:''}
             ${c.memo?`<div style="max-width:240px"><div style="font-size:11px;color:#888;margin-bottom:3px">메모</div><div style="font-size:12px;color:#555">${esc(c.memo)}</div></div>`:''}
             ${((G.clientTags||{})[c.id]||[]).length?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">태그</div><div style="display:flex;flex-wrap:wrap;gap:4px">${((G.clientTags||{})[c.id]||[]).map(t=>`<span style="background:#e8f0fe;color:#4f8ef7;border-radius:10px;padding:2px 10px;font-size:11px">${esc(t)}</span>`).join('')}</div></div>`:''}
@@ -2869,7 +2872,8 @@ function openForm(id) {
     dealTypes:['기장'],managers:['이슬빈'],
     contracts:getDefaultContracts('기장','개인','일반'),status:'정상',dataReceived:false,bookkeeping:false,approved:false,
     memo:'',contractDate:'',terminationDate:'',terminationReason:'',
-    closureYear:'',closureTaxFiled:false,closureTaxApproved:false
+    closureYear:'',closureTaxFiled:false,closureTaxApproved:false,
+    jointBiz:false,openDate:'',closeDate:''
   };
 
   window._formData = {...c, dealTypes: getDealTypes(c), managers: getManagers(c)};
@@ -2892,13 +2896,16 @@ function openForm(id) {
     return `<div style="background:#fafafa;border-radius:10px;padding:14px;border:1.5px solid #e0e0e0;display:flex;flex-direction:column;gap:12px">
       <div style="font-size:12px;font-weight:700;color:#e65100">해지 / 폐업 정보</div>
       <div class="form-grid">
-        <div><label class="flabel">해지일자</label><input type="date" class="finput" id="f-terminationDate" value="${esc(c.terminationDate||'')}" oninput="window._formData.terminationDate=this.value"></div>
+        <div><label class="flabel">수임해지일</label><input type="date" class="finput" id="f-terminationDate" value="${esc(c.terminationDate||'')}" oninput="window._formData.terminationDate=this.value"></div>
         <div><label class="flabel">해지 사유</label><select class="fsel" id="f-terminationReason" onchange="window._formData.terminationReason=this.value">
           <option value="">선택</option>
           ${['폐업','타회계사무소이전','기타'].map(v=>`<option value="${v}"${c.terminationReason===v?' selected':''}>${v==='타회계사무소이전'?'타 회계사무소 이전':v}</option>`).join('')}
         </select></div>
       </div>
-      ${s==='폐업'?`<div><label class="flabel">폐업연도</label><input type="number" class="finput" placeholder="예: 2024" id="f-closureYear" value="${esc(c.closureYear||'')}" oninput="window._formData.closureYear=this.value"></div>`:''}
+      ${s==='폐업'?`<div class="form-grid">
+        <div><label class="flabel">폐업연월일</label><input type="date" class="finput" id="f-closeDate" value="${esc(c.closeDate||'')}" oninput="window._formData.closeDate=this.value"></div>
+        <div><label class="flabel">폐업연도 (신고용)</label><input type="number" class="finput" placeholder="예: 2024" id="f-closureYear" value="${esc(c.closureYear||'')}" oninput="window._formData.closureYear=this.value"></div>
+      </div>`:''}
     </div>`;
   }
 
@@ -2972,6 +2979,17 @@ function openForm(id) {
     <div class="ff">
       <label class="ffl">세무서</label>
       <input class="finput" id="f-taxOffice" value="${esc(c.taxOffice||'')}" oninput="window._formData.taxOffice=this.value">
+    </div>
+
+    <div class="c3" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="ff">
+        <label class="ffl">개업연월일</label>
+        <input type="date" class="finput" id="f-openDate" value="${esc(c.openDate||'')}" oninput="window._formData.openDate=this.value">
+      </div>
+      <label class="ff" style="cursor:pointer">
+        <input type="checkbox" id="f-jointBiz" ${c.jointBiz?'checked':''} onchange="window._formData.jointBiz=this.checked" style="width:15px;height:15px;flex-shrink:0;cursor:pointer;accent-color:#4f8ef7">
+        <span class="ffl">공동사업자</span>
+      </label>
     </div>
 
     <div class="c3" style="display:flex;align-items:center;gap:8px;background:#e8f0fe;border-radius:7px;padding:5px 10px">
