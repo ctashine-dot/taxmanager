@@ -885,6 +885,17 @@ function buildClientGroupMap(allClients) {
   };
 }
 
+function _onDealTypeChange(value) {
+  window._formData.dealType = value;
+  window._formData.dealTypes = value ? [value] : [];
+  if (!window._formIsNew) return;
+  window._formData.contracts = getDefaultContracts(value, window._formData.taxType, window._formData.vatType);
+  var a = document.getElementById('contract-area');
+  if (!a) return;
+  const av = availableContracts(window._formData.vatType, window._formData.taxType);
+  a.innerHTML = av.map(g => '<div class="contract-group"><div class="contract-group-title">'+g.label+'</div><div class="contract-chips">'+g.items.map(item => '<button type="button" class="contract-chip '+((window._formData.contracts||[]).includes(item.key)?'on':'')+'" onclick="toggleContract(\''+item.key+'\')">'+item.label+'</button>').join('')+'</div></div>').join('');
+}
+
 function gradeBadge(grade, manual) {
   if (!grade) return '<span style="color:#ccc;font-size:11px">-</span>';
   const cfg = {A:{bg:'#e8f0fe',col:'#1565c0',bd:'#4f8ef7'},B:{bg:'#e8f5e9',col:'#2e7d32',bd:'#43a047'},C:{bg:'#f5f5f5',col:'#888',bd:'#bbb'}};
@@ -2992,7 +3003,7 @@ function openForm(id) {
     <div class="c3" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
       <div class="ff">
         <label class="ffl">수임내용</label>
-        <select class="fsel" onchange="window._formData.dealType=this.value;window._formData.dealTypes=this.value?[this.value]:[];if(window._formIsNew){window._formData.contracts=getDefaultContracts(this.value,window._formData.taxType,window._formData.vatType);var a=document.getElementById('contract-area');if(a){const av=availableContracts(window._formData.vatType,window._formData.taxType);a.innerHTML=av.map(g=>`<div class='contract-group'><div class='contract-group-title'>${g.label}</div><div class='contract-chips'>${g.items.map(item=>`<button type='button' class='contract-chip ${(window._formData.contracts||[]).includes(item.key)?'on':''}' onclick='toggleContract(&quot;${item.key}&quot;)'>${item.label}</button>`).join('')}</div></div>`).join('');}}">
+        <select class="fsel" onchange="_onDealTypeChange(this.value)">
           ${DEAL_TYPES.slice(1).map(v=>`<option value="${v}"${(window._formData.dealTypes||['기장'])[0]===v?' selected':''}>${v}</option>`).join('')}
         </select>
       </div>
