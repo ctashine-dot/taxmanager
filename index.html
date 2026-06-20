@@ -4050,7 +4050,7 @@ function renderJulgae() {
         const expanded = !!(G.julgaeExpandedGroups||{})[k];
         if (_needsSep) { const sk=_getSepLabel(gc[0]); if(sk!==_sepPrev){renderItems.push({isSeparator:true,label:sk});_sepPrev=sk;} }
         renderItems.push({c:gc[0], isGroupHeader:true, groupKey:k, groupClients:gc, expanded});
-        if (expanded) gc.forEach(m => renderItems.push({c:m, isGroupHeader:false, isGroupChild:true, groupKey:k}));
+        if (expanded) gc.slice(1).forEach(m => renderItems.push({c:m, isGroupHeader:false, isGroupChild:true, groupKey:k}));
       }
     });
   } else {
