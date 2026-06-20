@@ -4242,14 +4242,14 @@ function renderJulgae() {
     }
 
     const selYears = new Set(G.julgaeSelectedYears);
-    const selSet = new Set((G.julgaeSelectedPeriods||[]).map(x=>Number(x)));
+    const selSet = new Set(G.julgaeSelectedPeriods||[]);
     const _sl = p => p.label.replace(/^\d{2}년 /, '').replace('부가세 ', '부가').replace('법인세 신고', '법인세').replace('종합소득세 신고', '종소세').replace('성실신고사업자 신고', '성실신고').replace('사업장현황신고', '사업장현황').replace(' 신고', '').replace('확정신고', '확정').replace('예정신고', '예정');
     const yrLabel = yr => yr==='other'?'기타':yr+'년';
     const yrSelLabel = selYears.size ? [...selYears].map(yrLabel).join(', ') : '연도 선택';
     const lstSelLabel = selSet.size ? selSet.size+'개 선택' : '리스트 선택';
 
-    // Tiles
-    const shownPeriods = periods.map((p,i)=>({p,i})).filter(({p})=>selSet.has(Number(p.id)));
+    // Tiles — only show selected periods
+    const shownPeriods = periods.map((p,i)=>({p,i})).filter(({p})=>selSet.has(p.id));
     const tiles = shownPeriods.map(({p,i}) => {
       const pKey = p.id;
       let targets;
@@ -4674,13 +4674,20 @@ function openJulgaeYearPicker(btnEl) {
     if (!byYear[yr]) { byYear[yr]=[]; yearOrder.push(yr); }
     byYear[yr].push(p);
   });
-  const selYears = new Set((G.julgaeSelectedYears||[]).map(Number));
+  // Add range of years (curYear-3 to curYear+2) even if no periods exist
+  const curYr = new Date().getFullYear();
+  for (let y = curYr - 3; y <= curYr + 2; y++) {
+    if (!byYear[y]) { byYear[y] = []; yearOrder.push(y); }
+  }
+  yearOrder.sort((a,b) => a==='other'?1:b==='other'?-1:a-b);
+  const selYears = new Set((G.julgaeSelectedYears||[]).map(y=>y==='other'?'other':Number(y)));
   const pop = document.createElement('div');
   pop.id = 'jyr-popup'; pop.className = 'fpop';
-  pop.style.cssText += 'min-width:200px;';
+  pop.style.cssText += 'min-width:200px;max-width:calc(100vw - 16px);max-height:70vh;overflow-y:auto;';
   const rect = btnEl.getBoundingClientRect();
-  const top = Math.min(rect.bottom + 6, window.innerHeight - 300);
-  const left = Math.max(8, Math.min(rect.left, window.innerWidth - 220));
+  const spaceBelow = window.innerHeight - rect.bottom - 12;
+  const top = spaceBelow > 180 ? rect.bottom + 6 : Math.max(8, rect.top - 360);
+  const left = Math.max(8, Math.min(rect.left, window.innerWidth - 216));
   pop.style.top = top+'px'; pop.style.left = left+'px';
   pop.innerHTML = `
     <div style="font-size:12px;font-weight:800;color:#333;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #f0f0f0">📅 신고연도 선택</div>
@@ -4720,18 +4727,20 @@ function openJulgaeListPicker(btnEl) {
     const yr = m ? (2000+Number(m[1])) : 'other';
     return selYearNums.has(yr);
   }) : allPeriods;
-  const selSet = new Set((G.julgaeSelectedPeriods||[]).map(x=>Number(x)));
+  const selSet = new Set(G.julgaeSelectedPeriods||[]);
   const pop = document.createElement('div');
   pop.id = 'jpp-popup'; pop.className = 'fpop';
-  pop.style.cssText += 'max-height:70vh;overflow-y:auto;min-width:260px;';
+  pop.style.cssText += 'max-height:60vh;overflow-y:auto;min-width:260px;max-width:calc(100vw - 16px);';
   const rect = btnEl.getBoundingClientRect();
-  const top = Math.min(rect.bottom + 6, window.innerHeight - 400);
-  const left = Math.max(8, Math.min(rect.left, window.innerWidth - 280));
+  const popW = Math.min(280, window.innerWidth - 16);
+  const left = Math.max(8, Math.min(rect.left, window.innerWidth - popW - 8));
+  const spaceBelow = window.innerHeight - rect.bottom - 12;
+  const top = spaceBelow > 200 ? rect.bottom + 6 : Math.max(8, rect.top - 400);
   pop.style.top = top+'px'; pop.style.left = left+'px';
   pop.innerHTML = `
     <div style="font-size:12px;font-weight:800;color:#333;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #f0f0f0">📋 신고리스트 선택</div>
     <div>${periods.length ? periods.map(p=>`<label style="display:flex;align-items:center;gap:9px;padding:7px 6px;cursor:pointer;border-radius:8px" onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background=''">
-      <input type="checkbox" class="jpp-chk" data-pid="${p.id}" ${selSet.has(Number(p.id))?'checked':''} style="width:17px;height:17px;cursor:pointer;accent-color:#7b1fa2;flex-shrink:0">
+      <input type="checkbox" class="jpp-chk" data-pid="${p.id}" ${selSet.has(p.id)?'checked':''} style="width:17px;height:17px;cursor:pointer;accent-color:#7b1fa2;flex-shrink:0">
       <span style="font-size:13px;font-weight:500">${esc(p.label)}${_jDdHtml(p)}${p.locked?'<span style="font-size:10px;margin-left:4px">🔒</span>':''}</span>
     </label>`).join('') : '<div style="font-size:12px;color:#aaa;padding:10px 6px">연도를 먼저 선택해주세요</div>'}</div>
     <div style="display:flex;gap:6px;margin-top:12px;padding-top:10px;border-top:1px solid #f0f0f0">
@@ -4744,7 +4753,7 @@ function openJulgaeListPicker(btnEl) {
   setTimeout(()=>document.addEventListener('click',outside),10);
 }
 function _jppConfirm() {
-  G.julgaeSelectedPeriods = [...document.querySelectorAll('.jpp-chk:checked')].map(c=>Number(c.dataset.pid));
+  G.julgaeSelectedPeriods = [...document.querySelectorAll('.jpp-chk:checked')].map(c=>c.dataset.pid);
   const pop = document.getElementById('jpp-popup'); if(pop) pop.remove();
   renderJulgae();
 }
