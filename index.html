@@ -206,6 +206,7 @@ body.dark-mode .td-sub { color: #888; }
 body.dark-mode .stat-label { color: #aaa; }
 body.dark-mode .stat-sub { color: #888; }
 body.dark-mode .overlay { background: rgba(0,0,0,.65); }
+.client-mobile-filters { display: none; }
 @media (max-width: 768px) {
   #main { padding: 12px 8px; }
   .stat-grid { grid-template-columns: repeat(2, 1fr); }
@@ -213,6 +214,8 @@ body.dark-mode .overlay { background: rgba(0,0,0,.65); }
   .client-table-wrap table { display: block; width: 100%; }
   .client-table-wrap table tbody { display: block; }
   .client-table-wrap table thead { display: none; }
+  .client-mobile-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; padding: 8px 10px; background: #f8f9ff; border-radius: 10px; border: 1px solid #e8eaf6; }
+
 
   /* 카드 행: flex-wrap 그리드 */
   .client-table-wrap table tbody tr:not(.expand-row) {
@@ -1723,6 +1726,18 @@ function renderClients() {
   <datalist id="taxoffice-list">${TAX_OFFICES.map(o=>`<option value="${esc(o)}">`).join('')}</datalist>
 
   ${G.editMode?`<div style="background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#2e7d32">✏ <b>수정모드</b> — 수임내용·인격·과세유형·담당자·수수료를 클릭해 바로 변경하세요. 행을 펼치면 전화번호·관할세무서·수임일자도 수정할 수 있습니다.</div>`:''}
+
+  <div class="client-mobile-filters">
+    ${(()=>{const a=G.searchText;return`<button onclick="openClientNameSearch(this)" style="padding:5px 11px;border-radius:16px;font-size:12px;cursor:pointer;font-family:inherit;border:1.5px solid ${a?'#4f8ef7':'#ddd'};background:${a?'#e8f0fe':'#fff'};color:${a?'#1565c0':'#555'};display:flex;align-items:center;gap:4px"><span>🔍 ${a?esc(a):'업체명'}</span></button>`;})()}
+    ${(()=>{const a=G.clientRepSearch;return`<button onclick="openClientRepSearch(this)" style="padding:5px 11px;border-radius:16px;font-size:12px;cursor:pointer;font-family:inherit;border:1.5px solid ${a?'#4f8ef7':'#ddd'};background:${a?'#e8f0fe':'#fff'};color:${a?'#1565c0':'#555'};display:flex;align-items:center;gap:4px"><span>🔍 ${a?esc(a):'대표자'}</span></button>`;})()}
+    ${filterPopupBtn('filterDealTypes','수임내용')}
+    ${filterPopupBtn('filterTaxTypes','인격')}
+    ${filterPopupBtn('filterVatTypes','과세유형')}
+    ${filterPopupBtn('filterManagers','담당자')}
+    ${filterPopupBtn('filterCMS','CMS')}
+    ${filterPopupBtn('filterFeeStatuses','수수료상태')}
+  </div>
+
   <div class="tbl-wrap client-table-wrap" style="${(G.sectionCollapsed||{})['clients-list']?'display:none':''}">
   <table>
     <thead>
