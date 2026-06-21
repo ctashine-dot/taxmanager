@@ -4777,14 +4777,27 @@ function renderJulgae() {
     </tbody>
   </table></div>
   ${G.julgaeBulkMode&&(G.julgaeBulkSelected||[]).length?`
-  <div style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1a1a2e;color:#fff;border-radius:16px;padding:12px 20px;display:flex;gap:10px;align-items:center;box-shadow:0 4px 20px rgba(0,0,0,.3);z-index:150;flex-wrap:wrap">
-    <span style="font-size:13px">${(G.julgaeBulkSelected||[]).length}개 선택됨</span>
-    <button onclick="bulkSetJulgae('d',true)" style="padding:6px 12px;background:#4f8ef7;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12px">📥 자료</button>
-    <button onclick="bulkSetJulgae('b',true)" style="padding:6px 12px;background:#f57c00;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12px">📖 기장</button>
-    <button onclick="bulkSetJulgae('a',true)" style="padding:6px 12px;background:#2e7d32;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12px">✅ 결재</button>
-    <button onclick="bulkSetJulgae('s',true)" style="padding:6px 12px;background:#7b1fa2;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700;font-size:12px">💰 수금</button>
-    <button onclick="bulkSetJulgae('reset',false)" style="padding:6px 12px;background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-size:12px">초기화</button>
-    <button onclick="G.julgaeBulkSelected=[];renderJulgae()" style="padding:6px 12px;background:rgba(255,255,255,.08);color:#aaa;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-size:12px">선택 해제</button>
+  <div style="position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#1a1a2e;color:#fff;border-radius:16px;padding:10px 16px;display:flex;gap:6px;align-items:center;box-shadow:0 4px 24px rgba(0,0,0,.35);z-index:150;flex-wrap:wrap;max-width:96vw">
+    <span style="font-size:12px;font-weight:700;color:#aaa;white-space:nowrap">${(G.julgaeBulkSelected||[]).length}개 선택</span>
+    <span style="width:1px;height:24px;background:rgba(255,255,255,.15);margin:0 2px"></span>
+    ${[['d','자료','#4f8ef7','#1e3a6e'],['b','기장','#f57c00','#5a2e00'],['c','상담','#1565c0','#0d3060'],['a','결재','#2e7d32','#1b4d20']].map(([f,label,col,dark])=>`
+    <div style="display:flex;flex-direction:column;gap:2px;align-items:center">
+      <span style="font-size:9px;color:#aaa">${label}</span>
+      <div style="display:flex;gap:2px">
+        <button onclick="bulkSetJulgae('${f}',true)" style="padding:5px 9px;background:${col};color:#fff;border:none;border-radius:6px;cursor:pointer;font-family:inherit;font-weight:700;font-size:11px;min-width:32px">ON</button>
+        <button onclick="bulkSetJulgae('${f}',false)" style="padding:5px 9px;background:rgba(255,255,255,.12);color:#ccc;border:1px solid rgba(255,255,255,.2);border-radius:6px;cursor:pointer;font-family:inherit;font-size:11px;min-width:32px">OFF</button>
+      </div>
+    </div>`).join('')}
+    <span style="width:1px;height:24px;background:rgba(255,255,255,.15);margin:0 2px"></span>
+    <div style="display:flex;flex-direction:column;gap:2px;align-items:center">
+      <span style="font-size:9px;color:#aaa">전체</span>
+      <div style="display:flex;gap:2px">
+        <button onclick="bulkSetJulgaeAll(true)" style="padding:5px 9px;background:#43a047;color:#fff;border:none;border-radius:6px;cursor:pointer;font-family:inherit;font-weight:700;font-size:11px">전체 ON</button>
+        <button onclick="bulkSetJulgaeAll(false)" style="padding:5px 9px;background:rgba(229,57,53,.7);color:#fff;border:none;border-radius:6px;cursor:pointer;font-family:inherit;font-weight:700;font-size:11px">전체 OFF</button>
+      </div>
+    </div>
+    <span style="width:1px;height:24px;background:rgba(255,255,255,.15);margin:0 2px"></span>
+    <button onclick="G.julgaeBulkSelected=[];renderJulgae()" style="padding:6px 10px;background:rgba(255,255,255,.08);color:#aaa;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-size:11px">✕ 해제</button>
   </div>`:''}`}
   ` : ''}
   `}`;
@@ -8802,7 +8815,11 @@ function toggleJulgaeSelect(clientId) {
   else G.julgaeBulkSelected.push(clientId);
   renderJulgae();
 }
-function bulkSetJulgae(field, value) {
+function bulkSetJulgaeAll(value) {
+  ['d','b','c','a'].forEach(f => bulkSetJulgae(f, value, true));
+  saveToLS(); renderJulgae();
+}
+function bulkSetJulgae(field, value, skipSave) {
   const period = G.periods[G.julgaePeriodIdx];
   if (!period) return;
   const pKey3 = period.id+'|'+(period.reportType||period.type);
@@ -8810,11 +8827,10 @@ function bulkSetJulgae(field, value) {
   (G.julgaeBulkSelected||[]).forEach(id => {
     if (!G.julgae[pKeySimple]) G.julgae[pKeySimple] = {};
     if (!G.julgae[pKeySimple][id]) G.julgae[pKeySimple][id] = {};
-    if (field==='reset') { G.julgae[pKeySimple][id].d=false; G.julgae[pKeySimple][id].b=false; G.julgae[pKeySimple][id].a=false; G.julgae[pKeySimple][id].s=false; }
+    if (field==='reset') { G.julgae[pKeySimple][id].d=false; G.julgae[pKeySimple][id].b=false; G.julgae[pKeySimple][id].c=false; G.julgae[pKeySimple][id].a=false; G.julgae[pKeySimple][id].s=false; }
     else G.julgae[pKeySimple][id][field] = value;
   });
-  saveToLS();
-  renderJulgae();
+  if (!skipSave) { saveToLS(); renderJulgae(); }
 }
 
 // ══════════════════════════════════════════════════════
@@ -8924,29 +8940,24 @@ function signOutUser() {
 }
 
 function enrollAllIncome26() {
-  if (localStorage.getItem('tm_enrollIncome26V1')) return;
+  if (localStorage.getItem('tm_enrollIncome26V2')) return;
   const incPeriod = G.periods.find(p => p.reportType === 'income' && (p.label.startsWith('26년') || p.id.includes('2026')));
   if (!incPeriod) return;
-  // 종소세 대상: 개인 + 비면세 + 비성실 (해지/폐업 제외)
+  // 종소세 대상: 개인 + 비성실 (면세 포함 — 개인 면세사업자도 종소세+사업장현황신고 대상)
   const qualifying = G.clients.filter(c =>
     c.status !== '해지' && c.status !== '폐업' &&
     c.taxType === '개인' &&
-    c.vatType !== '면세' &&
     !getDealTypes(c).includes('성실')
   );
   const qIds = qualifying.map(c => c.id);
   const prev = new Set(incPeriod.enrolled || []);
-  // 기존 enrolled 에 없는 ID만 추가
   const added = qIds.filter(id => !prev.has(id));
-  if (added.length === 0) {
-    localStorage.setItem('tm_enrollIncome26V1', '1');
-    return;
-  }
   incPeriod.enrolled = [...prev, ...added];
   saveToLS();
-  localStorage.setItem('tm_enrollIncome26V1', '1');
-  console.log(`종소세 26년 등록: ${added.length}개 추가 (총 ${incPeriod.enrolled.length}개)`);
-  toast(`종소세 26년 신고리스트에 ${added.length}개 업체 추가됨 (총 ${incPeriod.enrolled.length}개)`, 'success', 4000);
+  localStorage.removeItem('tm_enrollIncome26V1');
+  localStorage.setItem('tm_enrollIncome26V2', '1');
+  console.log(`종소세 26년 등록 V2: ${added.length}개 추가 (총 ${incPeriod.enrolled.length}개)`);
+  if (added.length > 0) toast(`종소세 26년 신고리스트에 ${added.length}개 업체 추가됨 (총 ${incPeriod.enrolled.length}개)`, 'success', 4000);
 }
 
 function migrate26IncomeTax() {
@@ -9190,7 +9201,7 @@ async function loadFromFirebase() {
   try {
     migrateJulgae();
     migrate26IncomeTax();
-    enrollAllIncome26();
+    enrollAllIncome26(); // V2: 개인 면세 포함
     if (!localStorage.getItem('tm_contractDateFillV1')) {
       let filled = 0;
       G.clients.forEach(c => { if (!c.contractDate) { c.contractDate = '2020-01-01'; filled++; } });
