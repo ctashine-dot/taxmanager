@@ -1526,14 +1526,20 @@ function _renderDashboardInner() {
   </div>`:''}
 
   ${(G.settings?.dashWidgets?.managerStats!==false)?`<div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <div class="card-title" style="margin:0">담당자별 현황 (업체수 · 월정수수료)</div>
-      <div style="display:flex;gap:8px">
-        <button onclick="openManagerTransferModal()" style="padding:5px 12px;border-radius:8px;border:1.5px solid #a5d6a7;background:#e8f5e9;color:#2e7d32;font-size:12px;cursor:pointer;font-family:inherit">👤 담당자 이동</button>
-        <button onclick="openManagerAnalysis()" style="padding:5px 12px;border-radius:8px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;font-size:12px;cursor:pointer;font-family:inherit">📊 상세 분석</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${_dashCollapsed('dash-manager')?0:12}px">
+      <div style="display:flex;align-items:center;gap:8px">
+        ${sectionToggleBtn('dash-manager')}
+        <div class="card-title" style="margin:0">담당자별 현황 (업체수 · 월정수수료)</div>
       </div>
+      ${_dashCollapsed('dash-manager')?'':
+        `<div style="display:flex;gap:8px">
+          <button onclick="openManagerTransferModal()" style="padding:5px 12px;border-radius:8px;border:1.5px solid #a5d6a7;background:#e8f5e9;color:#2e7d32;font-size:12px;cursor:pointer;font-family:inherit">👤 담당자 이동</button>
+          <button onclick="openManagerAnalysis()" style="padding:5px 12px;border-radius:8px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;font-size:12px;cursor:pointer;font-family:inherit">📊 상세 분석</button>
+        </div>`}
     </div>
-    ${feeByManager||'<div style="color:#aaa;font-size:13px">담당자 데이터 없음</div>'}
+    <div style="${_dashCollapsed('dash-manager')?'display:none':''}">
+      ${feeByManager||'<div style="color:#aaa;font-size:13px">담당자 데이터 없음</div>'}
+    </div>
   </div>`:''}
 
   ${(()=>{
@@ -1543,23 +1549,29 @@ function _renderDashboardInner() {
     active.forEach(c=>{byOffice[c.taxOffice]=(byOffice[c.taxOffice]||0)+1;});
     const sorted = Object.entries(byOffice).sort((a,b)=>b[1]-a[1]).slice(0,10);
     const maxV = sorted[0]?.[1]||1;
+    const collapsed = _dashCollapsed('dash-taxoffice');
     return `<div class="card" style="margin-bottom:14px">
-      <div class="card-title">🏛 관할 세무서별 거래처 현황 (상위 10개)</div>
-      <div style="display:flex;flex-direction:column;gap:6px">
-        ${sorted.map(([office,cnt])=>{
-          const pct=Math.round(cnt/maxV*100);
-          return `<div data-office="${esc(office)}" onclick="openTaxOfficeClients(this.dataset.office)" style="cursor:pointer;padding:4px 6px;border-radius:6px;transition:background .12s" onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background=''">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
-              <span style="font-size:13px;font-weight:600">${esc(office)}</span>
-              <span style="font-size:12px;color:#555;font-weight:700">${cnt}개 →</span>
-            </div>
-            <div style="height:6px;background:#e8eaf6;border-radius:3px">
-              <div style="height:6px;width:${pct}%;background:#4f8ef7;border-radius:3px"></div>
-            </div>
-          </div>`;
-        }).join('')}
-        ${Object.keys(byOffice).length>10?`<div style="font-size:12px;color:#aaa;margin-top:4px">외 ${Object.keys(byOffice).length-10}개 세무서...</div>`:''}
-        <div style="font-size:11px;color:#aaa;margin-top:4px">세무서 미입력: ${G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&!c.taxOffice).length}개</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:${collapsed?0:12}px">
+        ${sectionToggleBtn('dash-taxoffice')}
+        <div class="card-title" style="margin:0">🏛 관할 세무서별 거래처 현황 (상위 10개)</div>
+      </div>
+      <div style="${collapsed?'display:none':''}">
+        <div style="display:flex;flex-direction:column;gap:6px">
+          ${sorted.map(([office,cnt])=>{
+            const pct=Math.round(cnt/maxV*100);
+            return `<div data-office="${esc(office)}" onclick="openTaxOfficeClients(this.dataset.office)" style="cursor:pointer;padding:4px 6px;border-radius:6px;transition:background .12s" onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background=''">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+                <span style="font-size:13px;font-weight:600">${esc(office)}</span>
+                <span style="font-size:12px;color:#555;font-weight:700">${cnt}개 →</span>
+              </div>
+              <div style="height:6px;background:#e8eaf6;border-radius:3px">
+                <div style="height:6px;width:${pct}%;background:#4f8ef7;border-radius:3px"></div>
+              </div>
+            </div>`;
+          }).join('')}
+          ${Object.keys(byOffice).length>10?`<div style="font-size:12px;color:#aaa;margin-top:4px">외 ${Object.keys(byOffice).length-10}개 세무서...</div>`:''}
+          <div style="font-size:11px;color:#aaa;margin-top:4px">세무서 미입력: ${G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&!c.taxOffice).length}개</div>
+        </div>
       </div>
     </div>`;
   })()}
@@ -1587,13 +1599,19 @@ function _renderDashboardInner() {
         <div style="font-size:9px;color:#aaa;white-space:nowrap">${ym.slice(5)}월</div>
       </div>`;
     }).join('');
+    const collapsed12 = _dashCollapsed('dash-chart12');
     return `<div class="card">
-      <div class="card-title">📊 월정수수료 12개월 추이</div>
-      <div style="display:flex;align-items:flex-end;gap:3px;height:130px">${bars}</div>
-      <div style="display:flex;gap:12px;margin-top:8px;font-size:11px;color:#888">
-        <span><span style="display:inline-block;width:10px;height:10px;background:#4f8ef7;border-radius:2px;margin-right:3px"></span>수납</span>
-        <span><span style="display:inline-block;width:10px;height:10px;background:#e8eaf6;border-radius:2px;margin-right:3px"></span>청구</span>
-        <span style="margin-left:auto">최대 ${maxV.toLocaleString()}원/월</span>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:${collapsed12?0:12}px">
+        ${sectionToggleBtn('dash-chart12')}
+        <div class="card-title" style="margin:0">📊 월정수수료 12개월 추이</div>
+      </div>
+      <div style="${collapsed12?'display:none':''}">
+        <div style="display:flex;align-items:flex-end;gap:3px;height:130px">${bars}</div>
+        <div style="display:flex;gap:12px;margin-top:8px;font-size:11px;color:#888">
+          <span><span style="display:inline-block;width:10px;height:10px;background:#4f8ef7;border-radius:2px;margin-right:3px"></span>수납</span>
+          <span><span style="display:inline-block;width:10px;height:10px;background:#e8eaf6;border-radius:2px;margin-right:3px"></span>청구</span>
+          <span style="margin-left:auto">최대 ${maxV.toLocaleString()}원/월</span>
+        </div>
       </div>
     </div>`;
   })():''}
@@ -1607,18 +1625,24 @@ function _renderDashboardInner() {
       return months>=11;
     });
     if(!renewal.length)return '';
+    const collapsedRenewal = _dashCollapsed('dash-renewal');
     return `<div class="card" style="border-left:4px solid #ff9800">
-      <div class="card-title" style="color:#e65100">🔔 계약 갱신 검토 대상 (${renewal.length}개)</div>
-      <div style="font-size:12px;color:#888;margin-bottom:10px">수임일로부터 11개월 이상 경과한 거래처입니다</div>
-      ${renewal.slice(0,10).map(c=>{
-        const cd=new Date(c.contractDate);
-        const months=(today3.getFullYear()-cd.getFullYear())*12+(today3.getMonth()-cd.getMonth());
-        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f5f5f5">
-          <div><span style="font-weight:700;font-size:13px">${esc(c.name)}</span><span style="font-size:11px;color:#888;margin-left:8px">${esc(c.rep||'')}</span></div>
-          <span style="font-size:12px;background:${months>=12?'#fdecea':'#fff3e0'};color:${months>=12?'#c62828':'#e65100'};padding:2px 8px;border-radius:8px">${months}개월 경과</span>
-        </div>`;
-      }).join('')}
-      ${renewal.length>10?`<div style="font-size:12px;color:#aaa;margin-top:8px">외 ${renewal.length-10}개...</div>`:''}
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:${collapsedRenewal?0:8}px">
+        ${sectionToggleBtn('dash-renewal')}
+        <div class="card-title" style="margin:0;color:#e65100">🔔 계약 갱신 검토 대상 (${renewal.length}개)</div>
+      </div>
+      <div style="${collapsedRenewal?'display:none':''}">
+        <div style="font-size:12px;color:#888;margin-bottom:10px">수임일로부터 11개월 이상 경과한 거래처입니다</div>
+        ${renewal.slice(0,10).map(c=>{
+          const cd=new Date(c.contractDate);
+          const months=(today3.getFullYear()-cd.getFullYear())*12+(today3.getMonth()-cd.getMonth());
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f5f5f5">
+            <div><span style="font-weight:700;font-size:13px">${esc(c.name)}</span><span style="font-size:11px;color:#888;margin-left:8px">${esc(c.rep||'')}</span></div>
+            <span style="font-size:12px;background:${months>=12?'#fdecea':'#fff3e0'};color:${months>=12?'#c62828':'#e65100'};padding:2px 8px;border-radius:8px">${months}개월 경과</span>
+          </div>`;
+        }).join('')}
+        ${renewal.length>10?`<div style="font-size:12px;color:#aaa;margin-top:8px">외 ${renewal.length-10}개...</div>`:''}
+      </div>
     </div>`;
   })():''}
 
@@ -1638,15 +1662,21 @@ function _renderDashboardInner() {
     const dots = pts.map((p,i)=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" fill="#4f8ef7" stroke="#fff" stroke-width="1.5" title="${months12[i]}: ${collected12[i].toLocaleString()}원"/>`).join('');
     const labels = months12.map((ym,i)=>`<text x="${(PL+i*(w/11)).toFixed(1)}" y="${H-4}" text-anchor="middle" font-size="8" fill="#aaa">${ym.slice(5)}월</text>`).join('');
     const targetLine = feeTarget>0 ? `<line x1="${PL}" y1="${(PT+h-(feeTarget/maxC)*h).toFixed(1)}" x2="${PL+w}" y2="${(PT+h-(feeTarget/maxC)*h).toFixed(1)}" stroke="#e53935" stroke-width="1" stroke-dasharray="4,3"/><text x="${PL+w+2}" y="${(PT+h-(feeTarget/maxC)*h+4).toFixed(1)}" font-size="8" fill="#e53935">목표</text>` : '';
+    const collapsedGrowth = _dashCollapsed('dash-growth');
     return `<div class="card" style="margin-bottom:14px">
-      <div class="card-title">📈 월별 수금 추이 (최근 12개월)</div>
-      <svg width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="display:block;height:120px">
-        <polyline points="${polyline}" fill="none" stroke="#4f8ef7" stroke-width="2" stroke-linejoin="round"/>
-        ${targetLine}
-        ${dots}
-        ${labels}
-      </svg>
-      <div style="font-size:11px;color:#aaa;margin-top:4px">최근 12개월 월정수수료 수금액 합계${feeTarget?` · 빨간선: 목표 ${feeTarget.toLocaleString()}원`:''}
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:${collapsedGrowth?0:10}px">
+        ${sectionToggleBtn('dash-growth')}
+        <div class="card-title" style="margin:0">📈 월별 수금 추이 (최근 12개월)</div>
+      </div>
+      <div style="${collapsedGrowth?'display:none':''}">
+        <svg width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="display:block;height:120px">
+          <polyline points="${polyline}" fill="none" stroke="#4f8ef7" stroke-width="2" stroke-linejoin="round"/>
+          ${targetLine}
+          ${dots}
+          ${labels}
+        </svg>
+        <div style="font-size:11px;color:#aaa;margin-top:4px">최근 12개월 월정수수료 수금액 합계${feeTarget?` · 빨간선: 목표 ${feeTarget.toLocaleString()}원`:''}
+        </div>
       </div>
     </div>`;
   })():''}
@@ -1666,16 +1696,22 @@ function _renderDashboardInner() {
     const newDots = newPts.map((p,i)=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.5" fill="#4f8ef7" stroke="#fff" stroke-width="1"><title>${months13[i]}: 신규 ${newCnts[i]}개</title></circle>`).join('');
     const lostDots = lostPts.map((p,i)=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.5" fill="#e53935" stroke="#fff" stroke-width="1"><title>${months13[i]}: 해지 ${lostCnts[i]}개</title></circle>`).join('');
     const labs2 = months13.map((ym,i)=>`<text x="${(PL2+i*(w2/11)).toFixed(1)}" y="${H2-3}" text-anchor="middle" font-size="7" fill="#bbb">${ym.slice(5)}월</text>`).join('');
+    const collapsedCC = _dashCollapsed('dash-clientchart');
     return `<div class="card" style="margin-bottom:14px">
-      <div class="card-title">📊 거래처 증감 추이 (최근 12개월)</div>
-      <svg width="100%" viewBox="0 0 ${W2} ${H2}" preserveAspectRatio="none" style="display:block;height:90px">
-        <polyline points="${newLine}" fill="none" stroke="#4f8ef7" stroke-width="1.5" stroke-linejoin="round"/>
-        <polyline points="${lostLine}" fill="none" stroke="#e53935" stroke-width="1.5" stroke-linejoin="round"/>
-        ${newDots}${lostDots}${labs2}
-      </svg>
-      <div style="display:flex;gap:14px;margin-top:6px;font-size:11px;color:#888">
-        <span><span style="display:inline-block;width:10px;height:3px;background:#4f8ef7;border-radius:2px;vertical-align:middle;margin-right:3px"></span>신규</span>
-        <span><span style="display:inline-block;width:10px;height:3px;background:#e53935;border-radius:2px;vertical-align:middle;margin-right:3px"></span>해지·폐업</span>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:${collapsedCC?0:10}px">
+        ${sectionToggleBtn('dash-clientchart')}
+        <div class="card-title" style="margin:0">📊 거래처 증감 추이 (최근 12개월)</div>
+      </div>
+      <div style="${collapsedCC?'display:none':''}">
+        <svg width="100%" viewBox="0 0 ${W2} ${H2}" preserveAspectRatio="none" style="display:block;height:90px">
+          <polyline points="${newLine}" fill="none" stroke="#4f8ef7" stroke-width="1.5" stroke-linejoin="round"/>
+          <polyline points="${lostLine}" fill="none" stroke="#e53935" stroke-width="1.5" stroke-linejoin="round"/>
+          ${newDots}${lostDots}${labs2}
+        </svg>
+        <div style="display:flex;gap:14px;margin-top:6px;font-size:11px;color:#888">
+          <span><span style="display:inline-block;width:10px;height:3px;background:#4f8ef7;border-radius:2px;vertical-align:middle;margin-right:3px"></span>신규</span>
+          <span><span style="display:inline-block;width:10px;height:3px;background:#e53935;border-radius:2px;vertical-align:middle;margin-right:3px"></span>해지·폐업</span>
+        </div>
       </div>
     </div>`;
   })():''}
@@ -2830,6 +2866,12 @@ function toggleSection(key) {
   else if (key.startsWith('closure')) renderClosure();
   else if (key.startsWith('julgae')) renderJulgae();
   else if (key.startsWith('clients')) renderClients();
+  else if (key.startsWith('dash')) renderDashboard();
+}
+function _dashCollapsed(key) {
+  if (!G.sectionCollapsed) G.sectionCollapsed = {};
+  if (!(key in G.sectionCollapsed)) G.sectionCollapsed[key] = true; // default collapsed
+  return G.sectionCollapsed[key];
 }
 
 function sectionToggleBtn(key) {
@@ -5436,7 +5478,11 @@ function renderFees() {
       </div>
     </div>
     <div class="progress-bar" style="margin-bottom:6px"><div class="progress-fill" style="width:${mFeePct}%"></div></div>
-    <div style="font-size:12px;color:#888;margin-bottom:12px">수금률 ${mFeePct}% · ${feeClients.length}개 업체</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:${(G.sectionCollapsed||{})['fees-monthly-list']?4:12}px">
+      <div style="font-size:12px;color:#888">수금률 ${mFeePct}% · ${feeClients.length}개 업체</div>
+      ${sectionToggleBtn('fees-monthly-list')}
+    </div>
+    <div style="${(G.sectionCollapsed||{})['fees-monthly-list']?'display:none':''}">
     ${feeClients.length > 0 ? `
     <div class="tbl-wrap">
     <table>
@@ -5460,6 +5506,7 @@ function renderFees() {
     </table></div>
     ${filteredFeeClients.length===0?'<div style="color:#aaa;text-align:center;padding:16px;font-size:13px">필터 조건에 맞는 거래처 없음</div>':''}
     ` : '<div style="color:#aaa;text-align:center;padding:20px">이 달 해당 거래처 없음</div>'}
+    </div>
     </div>
   </div>
 
