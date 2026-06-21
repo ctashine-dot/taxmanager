@@ -5031,7 +5031,10 @@ function toggleJulgaeField(pKey, clientId, field) {
   cur[field] = !cur[field];
   G.julgae[pKey][clientId] = cur;
   saveToLS();
-  renderJulgae();
+  const _ct = G.currentTab;
+  if (_ct === 'fees') renderFees();
+  else if (_ct === 'dashboard') renderDashboard();
+  else renderJulgae();
 }
 
 function togglePeriodLock(periodId) {
@@ -5733,7 +5736,7 @@ function renderFees() {
       <td style="font-size:12px;color:#444;${hc['ff_rep']?'display:none':''}">${esc(x.client.rep)||'-'}</td>
       <td style="color:#555;font-size:12px;${hc['ff_manager']?'display:none':''}">${getManagers(x.client).join(', ')||'-'}</td>
       <td style="text-align:right;font-weight:700;color:#7b1fa2;${hc['ff_fee']?'display:none':''}">${x.fee.toLocaleString()}원</td>
-      <td style="text-align:center" onclick="toggleJulgaeField('${x.pKey}',${x.cid},'s');renderFees()">
+      <td style="text-align:center" onclick="toggleJulgaeField('${x.pKey}',${x.cid},'s')">
         <div class="chk ${x.collected?'on':''}" style="margin:0 auto;width:26px;height:26px;${x.collected?'background:#c8e6c9;border-color:#2e7d32;color:#2e7d32':''}">${x.collected?'💰':''}</div>
       </td>
     </tr>`).join('');
