@@ -4387,8 +4387,6 @@ function renderJulgae() {
   const ff = G.julgaeFeeFilter;
   if (ff === '수금') clients = clients.filter(c => julgaeVal(pKey2, c.id).s);
   else if (ff === '미수금') clients = clients.filter(c => { const v=julgaeVal(pKey2,c.id); return v.fee>0 && !v.s; });
-  if (G.julgaeDataFilter==='완료') clients = clients.filter(c=>julgaeVal(pKey2,c.id).d);
-  else if (G.julgaeDataFilter==='미완료') clients = clients.filter(c=>!julgaeVal(pKey2,c.id).d);
   if (G.julgaeBookFilter==='완료') clients = clients.filter(c=>julgaeVal(pKey2,c.id).b);
   else if (G.julgaeBookFilter==='미완료') clients = clients.filter(c=>!julgaeVal(pKey2,c.id).b);
   if (G.julgaeDoneFilter==='완료') clients = clients.filter(c=>julgaeVal(pKey2,c.id).a);
@@ -4446,13 +4444,13 @@ function renderJulgae() {
   const isSajupType = rt === 'sajup';
   const isSeongsiType = rt === 'seongsi';
   const hc = G.hiddenCols || {};
-  const jHideable = ['j_rep','j_manager','j_data','j_book','j_done','j_consul','j_fee','j_collect','j_link'];
+  const jHideable = ['j_rep','j_manager','j_book','j_done','j_consul','j_fee','j_collect','j_link'];
   const jTypeHideable = isIncomeType ? ['j_col_revenue','j_col_income','j_col_margin','j_col_taxbase','j_col_taxamt','j_col_paytax','j_col_resident','j_col_totalsum','j_col_prevrevenue','j_col_paid','j_col_unpaid','j_col_fee25','j_col_fee24','j_col_fee23']
                       : isVatType    ? ['j_col_revenue','j_col_purchase','j_col_vat']
                       : isSajupType  ? ['j_col_revenue','j_col_purchase']
                       :                ['j_col_revenue','j_col_income','j_col_taxbase'];
   const jSeongsiExtra = isSeongsiType ? ['j_feess'] : [];
-  const totalCols = (isSeongsiType ? 23 : isIncomeType ? 22 : isVatType ? 11 : isSajupType ? 10 : 11)
+  const totalCols = (isSeongsiType ? 22 : isIncomeType ? 21 : isVatType ? 10 : isSajupType ? 9 : 10)
     - jHideable.filter(k=>hc[k]).length
     - jTypeHideable.filter(k=>hc[k]).length
     - jSeongsiExtra.filter(k=>hc[k]).length;
@@ -4526,7 +4524,7 @@ function renderJulgae() {
   };
 
   const jChips = _hcChips([
-    ['j_rep','대표자'],['j_manager','담당자'],['j_data','자료'],['j_book','기장'],['j_done','결재'],
+    ['j_rep','대표자'],['j_manager','담당자'],['j_book','기장'],['j_done','결재'],
     ['j_col_revenue', isVatType?'매출액':'매출액'],
     ['j_col_income','소득금액'],['j_col_margin','소득율'],['j_col_taxbase','과세표준'],
     ['j_col_taxamt','총부담세액'],['j_col_paytax','납부세액'],['j_col_resident','주민세'],
@@ -4823,10 +4821,9 @@ function renderJulgae() {
       <th style="padding:4px 6px">${(()=>{const a=G.julgaeSearch;return`<button onclick="openJulgaeNameSearch(this)" style="width:100%;padding:4px 7px;border-radius:7px;font-size:11px;cursor:pointer;font-family:inherit;border:1.5px solid ${a?'#4f8ef7':'#ddd'};background:${a?'#e8f0fe':'#fff'};color:${a?'#1565c0':'#555'};display:flex;justify-content:space-between;align-items:center;gap:4px;"><span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a?esc(a):'거래처명'}</span><span style="font-size:9px;opacity:.5;flex-shrink:0">🔍</span></button>`;})()}</th>
       <th style="width:80px;padding:3px 4px;${_hcStyle('j_rep')}">${(()=>{const a=G.julgaeRepSearch;return`<div style="display:flex;align-items:center"><button onclick="openJulgaeRepSearch(this)" style="flex:1;padding:4px 6px;border-radius:7px;font-size:11px;cursor:pointer;font-family:inherit;border:1.5px solid ${a?'#4f8ef7':'#ddd'};background:${a?'#e8f0fe':'#fff'};color:${a?'#1565c0':'#555'};display:flex;justify-content:space-between;align-items:center;gap:3px;"><span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a?esc(a):'대표자'}</span><span style="font-size:9px;opacity:.5;flex-shrink:0">🔍</span></button>${_hcBtn('j_rep')}</div>`;})()}</th>
       <th style="padding:4px 6px;${_hcStyle('j_manager')}"><div style="display:flex;align-items:center">${filterPopupBtn('julgaeManagers','담당자')}${_hcBtn('j_manager')}</div></th>
-      <th style="width:56px;text-align:center;padding:3px;${_hcStyle('j_data')}"><div style="display:flex;align-items:center">${julgaeCycleBtn('julgaeDataFilter','자료')}${_hcBtn('j_data')}</div></th>
-      <th style="width:56px;text-align:center;padding:3px;${_hcStyle('j_book')}"><div style="display:flex;align-items:center">${julgaeCycleBtn('julgaeBookFilter','기장')}${_hcBtn('j_book')}</div></th>
-      <th style="width:56px;text-align:center;padding:3px;${_hcStyle('j_consul')}"><div style="display:flex;align-items:center">${julgaeCycleBtn('julgaeConsulFilter','상담')}${_hcBtn('j_consul')}</div></th>
-      <th style="width:56px;text-align:center;padding:3px;${_hcStyle('j_done')}"><div style="display:flex;align-items:center">${julgaeCycleBtn('julgaeDoneFilter','결재')}${_hcBtn('j_done')}</div></th>
+      <th style="width:62px;text-align:center;padding:3px;${_hcStyle('j_book')}"><div style="display:flex;flex-direction:column;align-items:center;gap:2px">${julgaeCycleBtn('julgaeBookFilter','기장')}<button onclick="checkAllJulgaeField('b')" style="font-size:9px;padding:1px 5px;border-radius:4px;border:1px solid #f57c00;background:#fff3e0;color:#e65100;cursor:pointer;white-space:nowrap" title="기장 전체 체크/해제">전체</button>${_hcBtn('j_book')}</div></th>
+      <th style="width:62px;text-align:center;padding:3px;${_hcStyle('j_consul')}"><div style="display:flex;flex-direction:column;align-items:center;gap:2px">${julgaeCycleBtn('julgaeConsulFilter','상담')}<button onclick="checkAllJulgaeField('c')" style="font-size:9px;padding:1px 5px;border-radius:4px;border:1px solid #1565c0;background:#e3f2fd;color:#1565c0;cursor:pointer;white-space:nowrap" title="상담 전체 체크/해제">전체</button>${_hcBtn('j_consul')}</div></th>
+      <th style="width:62px;text-align:center;padding:3px;${_hcStyle('j_done')}"><div style="display:flex;flex-direction:column;align-items:center;gap:2px">${julgaeCycleBtn('julgaeDoneFilter','결재')}<button onclick="checkAllJulgaeField('a')" style="font-size:9px;padding:1px 5px;border-radius:4px;border:1px solid #2e7d32;background:#e8f5e9;color:#2e7d32;cursor:pointer;white-space:nowrap" title="결재 전체 체크/해제">전체</button>${_hcBtn('j_done')}</div></th>
       ${isIncomeType?`
         <th style="width:100px;text-align:right;${_hcStyle('j_col_revenue')}"><div style="display:flex;align-items:center;justify-content:flex-end">매출액${_hcBtn('j_col_revenue')}</div></th>
         <th style="width:100px;text-align:right;${_hcStyle('j_col_income')}"><div style="display:flex;align-items:center;justify-content:flex-end">소득금액${_hcBtn('j_col_income')}</div></th>
@@ -4900,9 +4897,6 @@ function renderJulgae() {
         }</td>
         <td style="font-size:12px;color:#444;${hc['j_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
         <td style="color:#555;font-size:12px;${hc['j_manager']?'display:none':''}">${getManagers(c).length?getManagers(c).join(', '):'<span style="color:#ff7043;font-size:11px">⚠ 미지정</span>'}</td>
-        <td style="text-align:center;${hc['j_data']?'display:none':''}">
-          <div class="chk ${v.d?'on':''}" style="margin:0 auto;width:24px;height:24px;touch-action:none;user-select:none;-webkit-user-select:none" onpointerdown="julgaeChkDown(this,'${pKey2}',${c.id},'d',${v.d?1:0})" onpointerup="julgaeChkUp(this,'${pKey2}',${c.id},'d',${v.d?1:0})" onpointercancel="julgaeChkCancel(this)" onpointerleave="julgaeChkCancel(this)">${v.d?'✓':''}</div>
-        </td>
         <td style="text-align:center;${hc['j_book']?'display:none':''}">
           <div class="chk ${v.b?'on':''}" style="margin:0 auto;width:24px;height:24px;touch-action:none;user-select:none;-webkit-user-select:none" onpointerdown="julgaeChkDown(this,'${pKey2}',${c.id},'b',${v.b?1:0})" onpointerup="julgaeChkUp(this,'${pKey2}',${c.id},'b',${v.b?1:0})" onpointercancel="julgaeChkCancel(this)" onpointerleave="julgaeChkCancel(this)">${v.b?'✓':''}</div>
         </td>
@@ -4977,7 +4971,7 @@ function renderJulgae() {
   <div style="position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#1a1a2e;color:#fff;border-radius:16px;padding:10px 16px;display:flex;gap:6px;align-items:center;box-shadow:0 4px 24px rgba(0,0,0,.35);z-index:150;flex-wrap:wrap;max-width:96vw">
     <span style="font-size:12px;font-weight:700;color:#aaa;white-space:nowrap">${(G.julgaeBulkSelected||[]).length}개 선택</span>
     <span style="width:1px;height:24px;background:rgba(255,255,255,.15);margin:0 2px"></span>
-    ${[['d','자료','#4f8ef7','#1e3a6e'],['b','기장','#f57c00','#5a2e00'],['c','상담','#1565c0','#0d3060'],['a','결재','#2e7d32','#1b4d20']].map(([f,label,col,dark])=>`
+    ${[['b','기장','#f57c00','#5a2e00'],['c','상담','#1565c0','#0d3060'],['a','결재','#2e7d32','#1b4d20']].map(([f,label,col,dark])=>`
     <div style="display:flex;flex-direction:column;gap:2px;align-items:center">
       <span style="font-size:9px;color:#aaa">${label}</span>
       <div style="display:flex;gap:2px">
@@ -9012,8 +9006,23 @@ function toggleJulgaeSelect(clientId) {
   else G.julgaeBulkSelected.push(clientId);
   renderJulgae();
 }
+function checkAllJulgaeField(field) {
+  const period = G.periods[G.julgaePeriodIdx];
+  if (!period) return;
+  const pKey = period.id;
+  const enrolled = period.enrolled || [];
+  const allOn = enrolled.every(id => !!(G.julgae[pKey]?.[id]?.[field]));
+  const newVal = !allOn;
+  if (!G.julgae[pKey]) G.julgae[pKey] = {};
+  enrolled.forEach(id => {
+    if (!G.julgae[pKey][id]) G.julgae[pKey][id] = {};
+    G.julgae[pKey][id][field] = newVal;
+  });
+  saveToLS();
+  renderJulgae();
+}
 function bulkSetJulgaeAll(value) {
-  ['d','b','c','a'].forEach(f => bulkSetJulgae(f, value, true));
+  ['b','c','a'].forEach(f => bulkSetJulgae(f, value, true));
   saveToLS(); renderJulgae();
 }
 function bulkSetJulgae(field, value, skipSave) {
