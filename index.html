@@ -1994,7 +1994,7 @@ function renderClients() {
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">사업자번호</div>${em?iInput('bizNo',c.bizNo,'placeholder="000-00-00000" style="width:130px"'):`<div style="font-weight:600;font-family:monospace">${esc(c.bizNo||'-')}</div>`}</div>
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">${c.taxType==='법인'?'법인등록번호':'주민번호'}</div>${em?iInput('jumin',c.jumin,'placeholder="000000-0000000" style="width:150px"'):`<div style="font-weight:600;font-family:monospace">${c.jumin?esc(c.jumin.slice(0,6)+'-'+c.jumin.slice(6,7)+'••••••'):'-'}</div>`}</div>
             ${c.openDate?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">개업연월일</div><div style="font-weight:600">${esc(c.openDate)}</div></div>`:''}
-            ${c.jointBiz?`<div>${badge('공동사업자','orange')}</div>`:''}
+            ${c.jointBiz?`<div>${badge(c.vatPrimary===false?'공동(부가세제외)':'공동(부가세대표)','orange')}</div>`:''}
             ${c.status==='해지'||c.status==='폐업'?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">수임해지일</div><div style="font-weight:600;color:#c62828">${esc(c.terminationDate||'-')}</div></div>`:''}
             ${c.status==='폐업'?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">폐업연월일</div><div style="font-weight:600;color:#c62828">${esc(c.closeDate||'-')}</div></div>`:''}
             ${contracts?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">수임항목</div><div style="font-size:12px;color:#555">${esc(contracts)}</div></div>`:''}
@@ -5502,6 +5502,7 @@ function openEnrollModal(pKey) {
         <input type="checkbox" class="enroll-chk" data-id="${c.id}" ${enrolled.has(c.id)?'checked':''} style="width:15px;height:15px;cursor:pointer">
         <span style="font-size:13px;font-weight:600">${esc(c.name)}</span>
         <span style="font-size:11px;color:#aaa">${esc(c.rep)}</span>
+        ${c.jointBiz ? `<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:${c.vatPrimary===false?'#fdecea':'#e8f5e9'};color:${c.vatPrimary===false?'#c62828':'#2e7d32'};font-weight:700;border:1px solid ${c.vatPrimary===false?'#ef9a9a':'#a5d6a7'}">${c.vatPrimary===false?'부가세제외':'부가세대표'}</span>` : ''}
         <span style="margin-left:auto;font-size:11px;color:#888">${getDealTypes(c).map(d=>dealBadge(d)).join('')} ${esc(c.vatType)}</span>
       </label>`).join('');
     return `<div data-group="${esc(m)}" style="margin-bottom:12px">
@@ -5634,8 +5635,17 @@ function saveEnrollment(pKey) {
   const isIncome = ['income','seongsi','sajup'].includes(period.reportType) || period.type === '소득세';
 
   if (isVat) {
+    // 공동사업장(jointBiz) 중 부대표(vatPrimary:false)는 부가세에서 자동 제외
+    const jointSecondaries = enrolledClients.filter(c => c.jointBiz && c.vatPrimary === false);
+    if (jointSecondaries.length > 0) {
+      const excIds = new Set(jointSecondaries.map(c => c.id));
+      checked = checked.filter(id => !excIds.has(id));
+      toast(`공동사업장 부대표 ${jointSecondaries.length}개 자동 제외: ${jointSecondaries.map(c=>c.name).join(', ')}`, 'info', 4000);
+    }
+    // 나머지 bizNo 중복은 confirm으로 처리
+    const remainClients = checked.map(cid => G.clients.find(c => c.id === cid)).filter(Boolean);
     const bizGroups = {};
-    enrolledClients.forEach(c => {
+    remainClients.forEach(c => {
       const key = (c.bizNo||'').replace(/[-\s]/g,'');
       if (!key) return;
       if (!bizGroups[key]) bizGroups[key] = [];
@@ -5647,7 +5657,7 @@ function saveEnrollment(pKey) {
       if (confirm(`부가세는 사업장별로 신고합니다. 동일 사업자번호 중복이 있습니다:\n${dupMsg}\n\n[확인] 각 사업자번호 중 첫 번째만 남기고 제거  [취소] 그대로 유지`)) {
         const seen = new Set();
         const toKeep = new Set();
-        enrolledClients.forEach(c => {
+        remainClients.forEach(c => {
           const key = (c.bizNo||'').replace(/[-\s]/g,'');
           if (!key || !seen.has(key)) { toKeep.add(c.id); if (key) seen.add(key); }
         });
@@ -9698,6 +9708,24 @@ function importCorp26DataV2() {
   localStorage.setItem('tm_importCorp26V2','1');
 }
 
+function markJointBizV1() {
+  if (localStorage.getItem('tm_jointBizV1')) return;
+  // 공동사업장 3쌍: 부가세는 vatPrimary만 리스팅, 소득세는 둘 다 리스팅
+  const pairs = [
+    { primaryId: 227, secondaryId: 228 }, // 심바이크 (606-30-72371)
+    { primaryId: 196, secondaryId: 200 }, // 서은정부동산/서해원 (617-31-69723)
+    { primaryId: 64,  secondaryId: 65  }, // 꼬들대패 정관점 (747-21-01699)
+  ];
+  let count = 0;
+  for (const { primaryId, secondaryId } of pairs) {
+    const p = G.clients.find(c => c.id === primaryId);
+    const s = G.clients.find(c => c.id === secondaryId);
+    if (p) { p.jointBiz = true; p.vatPrimary = true; count++; }
+    if (s) { s.jointBiz = true; s.vatPrimary = false; count++; }
+  }
+  if (count > 0) saveToLS();
+  localStorage.setItem('tm_jointBizV1', '1');
+}
 function removeDuplicateClientsV1() {
   if (localStorage.getItem('tm_removeDuplicatesV1')) return;
   // name+rep 기준 중복 탐지: 낮은 ID(원본) 유지, 높은 ID(마이그레이션 추가분) 제거
@@ -10060,6 +10088,7 @@ async function loadFromFirebase() {
     enrollAllIncome26(); // V2: 개인 면세 포함
     createUnmatchedV1();
     removeDuplicateClientsV1();
+    markJointBizV1();
     importCorp26DataV1();
     importCorp26DataV2();
     if (!localStorage.getItem('tm_contractDateFillV1')) {
