@@ -1047,7 +1047,7 @@ function _filterJuminGroups(sortedList, getGroupKey) {
 
 function filteredClients() {
   const getGroupKey = buildClientGroupMap(G.clients);
-  const list = G.clients.filter(c => {
+  let list = G.clients.filter(c => {
     if (!G.showTerminated && (c.status==='해지'||c.status==='폐업')) return false;
     if (G.searchText && !c.name.includes(G.searchText)) return false;
     if (G.clientRepSearch && !(c.rep||'').includes(G.clientRepSearch)) return false;
