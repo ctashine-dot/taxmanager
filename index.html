@@ -110,7 +110,7 @@ input.finput:focus,select.fsel:focus,textarea.ftarea:focus{border-color:#4f8ef7}
 .btn-primary{background:linear-gradient(135deg,#4f8ef7,#a259ff);color:#fff;border:none;border-radius:10px;padding:10px 18px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit}
 .btn-secondary{background:#f5f5f5;color:#555;border:1.5px solid #e0e0e0;border-radius:10px;padding:10px 18px;font-weight:600;font-size:14px;cursor:pointer;font-family:inherit}
 .btn-green{background:linear-gradient(135deg,#2e7d32,#43a047);color:#fff;border:none;border-radius:10px;padding:10px 18px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit}
-.btn-sm{padding:5px 12px;border-radius:8px;border:none;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+.btn-sm{padding:0 12px;height:30px;border-radius:8px;border:none;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;box-sizing:border-box;line-height:1;white-space:nowrap}
 .btn-row{display:flex;gap:10px;margin-top:4px}
 .btn-row .btn-primary{flex:2}.btn-row .btn-secondary{flex:1}
 
@@ -1716,7 +1716,7 @@ function renderClients() {
       <button class="btn-sm" style="background:#f3e5f5;color:#6a1b9a;border:1.5px solid #ce93d8" onclick="openFilterPresets(this)">⭐ 프리셋${(G.filterPresets||[]).length?' ('+(G.filterPresets||[]).length+')':''}</button>
       <button class="btn-sm" style="background:#fff3e0;color:#e65100;border:1.5px solid #ffcc80" onclick="openNotesSearch()">🔍 메모검색</button>
       ${(()=>{const hasFilter=G.searchText||G.clientRepSearch||(G.filterManagers||[]).length||(G.filterTaxTypes||[]).length||(G.filterVatTypes||[]).length||(G.filterFeeStatuses||[]).length||(G.filterDealTypes||[]).length||(G.filterCMS||[]).length||(G.filterTags||[]).length||G.filterRisk||G.filterGrade||G.showFavorites;return hasFilter?`<button class="btn-sm" style="background:#fdecea;color:#c62828;border:1.5px solid #ef9a9a;font-weight:700" onclick="G.searchText='';G.clientRepSearch='';G.filterManagers=[];G.filterTaxTypes=[];G.filterVatTypes=[];G.filterFeeStatuses=[];G.filterDealTypes=[];G.filterCMS=[];G.filterTags=[];G.filterRisk='';G.filterGrade='';G.showFavorites=false;G.clientPage=0;renderClients()">✕ 필터초기화</button>`:'';})()}
-      <button class="btn-primary btn-sm" onclick="openForm(null)" style="padding:8px 14px">+ 거래처 추가</button>
+      <button class="btn-primary btn-sm" onclick="openForm(null)">+ 거래처 추가</button>
       <button class="btn-sm" style="background:#fff3e0;color:#bf360c;border:1.5px solid #ffab91" onclick="openTerminatedModal()">📁 해지폐업 관리${terminated?' ('+terminated+')':''}</button>
       <button class="btn-sm" style="background:#f0f8ff;color:#1565c0;border:1.5px solid #90caf9" onclick="openImportExportMenu(this)">⇅ 가져오기/내보내기</button>
     </div>
@@ -1841,7 +1841,6 @@ function renderClients() {
             <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
               <button class="btn-sm" style="background:#f8f9ff;color:#4f8ef7;border:1px solid #c5cae9" onclick="event.stopPropagation();openClientNotes(${c.id})">📝 메모/이력</button>
               <button class="btn-sm" style="background:#f0f4ff;color:#4f8ef7" onclick="event.stopPropagation();openForm(${c.id})">✏ 수정</button>
-              <button class="btn-sm" style="background:#fdecea;color:#c62828;border:1px solid #ef9a9a" onclick="event.stopPropagation();deleteClient(${c.id})">🗑 삭제</button>
             </div>
           </div>
         </td>
@@ -1894,7 +1893,6 @@ function renderClients() {
               <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
                 <button class="btn-sm" style="background:#f8f9ff;color:#4f8ef7;border:1px solid #c5cae9" onclick="event.stopPropagation();openClientNotes(${m.id})">📝 메모/이력</button>
                 <button class="btn-sm" style="background:#f0f4ff;color:#4f8ef7" onclick="event.stopPropagation();openForm(${m.id})">✏ 수정</button>
-                <button class="btn-sm" style="background:#fdecea;color:#c62828;border:1px solid #ef9a9a" onclick="event.stopPropagation();deleteClient(${m.id})">🗑 삭제</button>
               </div>
             </div>
           </td>
@@ -1948,7 +1946,6 @@ function renderClients() {
               <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
                 <button class="btn-sm" style="background:#f8f9ff;color:#4f8ef7;border:1px solid #c5cae9" onclick="event.stopPropagation();openClientNotes(${m.id})">📝 메모/이력</button>
                 <button class="btn-sm" style="background:#f0f4ff;color:#4f8ef7" onclick="event.stopPropagation();openForm(${m.id})">✏ 수정</button>
-                <button class="btn-sm" style="background:#fdecea;color:#c62828;border:1px solid #ef9a9a" onclick="event.stopPropagation();deleteClient(${m.id})">🗑 삭제</button>
               </div>
             </div>
           </td>
@@ -3432,7 +3429,8 @@ function openForm(id) {
   </div>
   <div class="btn-row">
     <button class="btn-secondary" onclick="closeModal()">취소</button>
-    <button class="btn-primary" onclick="saveForm(${isEdit?id:'null'})">  ${isEdit?'저장':'추가'}</button>
+    ${isEdit ? `<button class="btn-secondary" style="color:#c62828;border-color:#ef9a9a;background:#fdecea" onclick="closeModal();deleteClient(${id})">🗑 삭제</button>` : ''}
+    <button class="btn-primary" onclick="saveForm(${isEdit?id:'null'})">${isEdit?'저장':'추가'}</button>
   </div>
   </div>
   </div>`);
