@@ -2358,8 +2358,10 @@ function openJulgaeNumFilter(field, btnEl) {
   pop.style.top = Math.min(rect.bottom + 6, window.innerHeight - 320) + 'px';
   pop.style.left = Math.max(8, Math.min(rect.right - 250, window.innerWidth - 268)) + 'px';
   pop.style.width = '252px';
-  const curMin = (cur?.min != null) ? cur.min : '';
-  const curMax = (cur?.max != null) ? cur.max : '';
+  const curMin = (cur?.type === 'gte' || cur?.type === 'range') && cur?.min != null ? cur.min : '';
+  const curMax = (cur?.type === 'lte' || cur?.type === 'range') && cur?.max != null ? cur.max : '';
+  const curRMin = cur?.type === 'range' && cur?.min != null ? cur.min : '';
+  const curRMax = cur?.type === 'range' && cur?.max != null ? cur.max : '';
   const _act = t => cur?.type === t ? '#e8f0fe' : '#fff';
   const _bor = t => cur?.type === t ? '#4f8ef7' : '#e0e0e0';
   const _col = t => cur?.type === t ? '#1565c0' : '#555';
@@ -2383,9 +2385,9 @@ function openJulgaeNumFilter(field, btnEl) {
     </div>
     <div style="display:flex;align-items:center;gap:4px;margin-bottom:10px">
       <span style="font-size:11px;color:#666;width:22px;flex-shrink:0">범위</span>
-      ${_inp('jnf-rmin', curMin, '최솟값')}
+      ${_inp('jnf-rmin', curRMin, '최솟값')}
       <span style="font-size:11px;flex-shrink:0">~</span>
-      ${_inp('jnf-rmax', curMax, '최댓값')}
+      ${_inp('jnf-rmax', curRMax, '최댓값')}
       ${_apbtn("_applyJNFRange('"+field+"')")}
     </div>
     <div style="display:flex;gap:6px">
