@@ -2315,6 +2315,9 @@ function openJulgaeRepSearch(btnEl) {
 function _setJNF(field, type, min, max) {
   if (!G.julgaeNumFilters) G.julgaeNumFilters = {};
   G.julgaeNumFilters[field] = {type, min, max};
+  document.getElementById('filter-popup')?.remove();
+  document.removeEventListener('click', _fpOutside);
+  _fpField = null;
   renderJulgae();
 }
 function _clearJNF(field) {
