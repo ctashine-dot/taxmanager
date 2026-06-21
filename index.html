@@ -13,6 +13,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="TaxManager">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
@@ -6468,17 +6469,23 @@ function renderAITools() {
       <div style="font-size:13px;color:#777;line-height:1.6">세금 질문에 판례·예규를 포함한 전문 상담을 제공합니다</div>
       <div style="margin-top:14px;color:#1565c0;font-weight:700;font-size:13px">시작하기 →</div>
     </button>
-    <button class="tool-card" onclick="openVatReviewer()">
+    <button class="tool-card" onclick="openTaxReturnReviewer('vat')">
       <div class="tool-icon" style="background:#fff3e0;color:#e65100">🔍</div>
       <div style="font-weight:800;font-size:16px;margin-bottom:6px">부가세 신고서 검토</div>
-      <div style="font-size:13px;color:#777;line-height:1.6">부가세 신고서 합계·공제항목 누락을 AI가 검토합니다</div>
-      <div style="margin-top:14px;color:#e65100;font-weight:700;font-size:13px">시작하기 →</div>
+      <div style="font-size:13px;color:#777;line-height:1.6">PDF 업로드 → 수치 자동 추출 → AI 검토 → 신고리스트 자동 기록</div>
+      <div style="margin-top:14px;color:#e65100;font-weight:700;font-size:13px">PDF 업로드 →</div>
     </button>
-    <button class="tool-card" onclick="openCorpTaxReviewer()">
+    <button class="tool-card" onclick="openTaxReturnReviewer('corp')">
       <div class="tool-icon" style="background:#e8f5e9;color:#2e7d32">🏢</div>
-      <div style="font-weight:800;font-size:16px;margin-bottom:6px">법인세·종소세 신고서 검토</div>
-      <div style="font-size:13px;color:#777;line-height:1.6">세무조정·세액감면 누락 및 추천 공제를 AI가 분석합니다</div>
-      <div style="margin-top:14px;color:#2e7d32;font-weight:700;font-size:13px">시작하기 →</div>
+      <div style="font-weight:800;font-size:16px;margin-bottom:6px">법인세 신고서 검토</div>
+      <div style="font-size:13px;color:#777;line-height:1.6">PDF 업로드 → 세무조정·세액감면 누락 → 신고리스트 자동 기록</div>
+      <div style="margin-top:14px;color:#2e7d32;font-weight:700;font-size:13px">PDF 업로드 →</div>
+    </button>
+    <button class="tool-card" onclick="openTaxReturnReviewer('income')">
+      <div class="tool-icon" style="background:#e8eaf6;color:#3949ab">👤</div>
+      <div style="font-weight:800;font-size:16px;margin-bottom:6px">종합소득세 신고서 검토</div>
+      <div style="font-size:13px;color:#777;line-height:1.6">PDF 업로드 → 공제·감면 누락 → 신고리스트 자동 기록</div>
+      <div style="margin-top:14px;color:#3949ab;font-weight:700;font-size:13px">PDF 업로드 →</div>
     </button>
     <button class="tool-card" onclick="openChecklistAI()">
       <div class="tool-icon" style="background:#e0f2f1;color:#00695c">✅</div>
@@ -7529,7 +7536,312 @@ async function tcSearchPrec() {
 }
 
 // ══════════════════════════════════════════════════════
-// AI - 부가가치세 신고서 검토 (vat-return-reviewer skill)
+// 신고서 PDF 검토 (통합 - 부가세/법인세/종소세)
+// ══════════════════════════════════════════════════════
+async function parsePDFToText(file) {
+  if (typeof pdfjsLib === 'undefined') throw new Error('PDF.js 라이브러리가 로드되지 않았습니다');
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let text = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const pageText = content.items.map(item => item.str).join(' ');
+    text += `\n[${i}페이지]\n${pageText}`;
+  }
+  return text.trim();
+}
+
+function openTaxReturnReviewer(type) {
+  const typeInfo = {
+    vat:    { label: '부가가치세', icon: '🔍', color: '#e65100', bg: '#fff3e0' },
+    corp:   { label: '법인세',     icon: '🏢', color: '#2e7d32', bg: '#e8f5e9' },
+    income: { label: '종합소득세', icon: '👤', color: '#3949ab', bg: '#e8eaf6' },
+  };
+  const t = typeInfo[type] || typeInfo.vat;
+  showModal(`<div style="max-width:640px;width:100%">
+  <div class="modal-header">
+    <h3>${t.icon} ${t.label} 신고서 AI 검토</h3>
+    <button class="close-btn" onclick="closeModal()">✕</button>
+  </div>
+  <div class="modal-body">
+    <div style="background:${t.bg};border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:${t.color};line-height:1.7">
+      <b>📂 지원 파일</b>: 홈택스 PDF 내보내기, 세무사랑 PDF 출력<br>
+      <b>📋 처리 순서</b>: PDF 업로드 → 텍스트 자동 추출 → AI 검토 → 신고리스트 기록
+    </div>
+
+    <div id="trr-upload-area" style="border:2px dashed #e0e0e0;border-radius:12px;padding:30px;text-align:center;cursor:pointer;transition:border-color .2s"
+      onclick="document.getElementById('trr-file-input').click()"
+      ondragover="event.preventDefault();this.style.borderColor='${t.color}'"
+      ondragleave="this.style.borderColor='#e0e0e0'"
+      ondrop="event.preventDefault();this.style.borderColor='#e0e0e0';handleTRRDrop(event,'${type}')">
+      <div style="font-size:32px;margin-bottom:8px">📄</div>
+      <div style="font-size:14px;font-weight:700;color:#555">PDF 파일을 여기에 드래그하거나 클릭하여 선택</div>
+      <div style="font-size:12px;color:#aaa;margin-top:4px">홈택스 / 세무사랑 신고서 PDF</div>
+    </div>
+    <input type="file" id="trr-file-input" accept=".pdf" style="display:none" onchange="handleTRRFile(this.files[0],'${type}')">
+
+    <div style="margin-top:10px">
+      <label class="flabel">또는 직접 붙여넣기</label>
+      <textarea id="trr-text-input" placeholder="신고서 내용을 직접 붙여넣으세요 (복사 후 붙여넣기)..." rows="5"
+        style="width:100%;border:1px solid #e0e0e0;border-radius:8px;padding:10px;font-size:13px;font-family:inherit;resize:vertical;box-sizing:border-box"></textarea>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <div style="flex:1">
+        <label class="flabel">거래처 연결 (선택)</label>
+        <select id="trr-client-sel" class="fsel">
+          <option value="">-- 거래처 선택 (PDF에서 자동 감지) --</option>
+          ${G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업').map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div style="flex:1">
+        <label class="flabel">신고기간 연결 (선택)</label>
+        <select id="trr-period-sel" class="fsel">
+          <option value="">-- 신고기간 선택 --</option>
+          ${(G.periods||[]).filter(p=>!p.locked).slice(-20).reverse().map(p=>`<option value="${p.id}">${esc(p.label||p.id)}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+
+    <button id="trr-run-btn" class="btn-primary" style="width:100%;margin-top:14px" onclick="runTaxReturnReview('${type}')">
+      ✦ AI 검토 시작
+    </button>
+    <div id="trr-status" style="margin-top:8px;font-size:12px;color:#888;text-align:center"></div>
+    <div id="trr-result" style="margin-top:14px"></div>
+  </div></div>`);
+}
+
+function handleTRRDrop(event, type) {
+  const file = event.dataTransfer.files[0];
+  if (file) handleTRRFile(file, type);
+}
+
+async function handleTRRFile(file, type) {
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith('.pdf')) { toast('PDF 파일만 지원됩니다', 'warning'); return; }
+  const statusEl = document.getElementById('trr-status');
+  const uploadArea = document.getElementById('trr-upload-area');
+  if (statusEl) statusEl.textContent = `📄 ${file.name} — 텍스트 추출 중...`;
+  if (uploadArea) uploadArea.innerHTML = `<div style="font-size:24px;margin-bottom:8px">⏳</div><div style="font-size:13px;color:#555;font-weight:600">${esc(file.name)}</div><div style="font-size:12px;color:#aaa;margin-top:4px">텍스트 추출 중...</div>`;
+  try {
+    const text = await parsePDFToText(file);
+    const ta = document.getElementById('trr-text-input');
+    if (ta) ta.value = text;
+    if (uploadArea) uploadArea.innerHTML = `<div style="font-size:24px;margin-bottom:8px">✅</div><div style="font-size:13px;color:#2e7d32;font-weight:700">${esc(file.name)}</div><div style="font-size:12px;color:#2e7d32;margin-top:4px">${text.length.toLocaleString()}자 추출 완료</div>`;
+    if (statusEl) statusEl.textContent = `텍스트 추출 완료 — AI 검토 시작 버튼을 누르세요`;
+    // 거래처 자동 감지
+    autoMatchTRRClient(text);
+  } catch(e) {
+    if (uploadArea) uploadArea.innerHTML = `<div style="color:#c62828;font-size:13px">❌ PDF 추출 실패: ${esc(e.message)}</div><div style="font-size:12px;color:#aaa;margin-top:8px">아래 텍스트 입력란에 직접 붙여넣으세요</div>`;
+    if (statusEl) statusEl.textContent = '';
+  }
+}
+
+function autoMatchTRRClient(text) {
+  // 사업자번호 패턴으로 자동 매칭
+  const bizMatch = text.match(/(\d{3}[-–]\d{2}[-–]\d{5})/);
+  if (!bizMatch) return;
+  const bn = bizMatch[1].replace(/[-–]/g, '');
+  const matched = G.clients.find(c => (c.bizNo||'').replace(/\D/g,'') === bn);
+  if (matched) {
+    const sel = document.getElementById('trr-client-sel');
+    if (sel) { sel.value = matched.id; toast(`거래처 자동 감지: ${matched.name}`, 'success', 2500); }
+  }
+}
+
+async function runTaxReturnReview(type) {
+  const text = (document.getElementById('trr-text-input')||{}).value?.trim();
+  if (!text) { toast('신고서 내용을 입력하거나 PDF를 업로드해주세요', 'warning'); return; }
+  const resultDiv = document.getElementById('trr-result');
+  const btn = document.getElementById('trr-run-btn');
+  if (btn) btn.disabled = true;
+  resultDiv.innerHTML = `<div style="text-align:center;padding:24px;color:#888">${spinnerHTML} AI 분석 중... (30초 이내)</div>`;
+
+  const typeLabel = { vat:'부가가치세', corp:'법인세', income:'종합소득세' }[type] || type;
+  const extractPrompt = `아래는 ${typeLabel} 신고서 PDF에서 추출한 텍스트입니다. 다음 두 가지를 수행해주세요.
+
+[신고서 텍스트]
+${text.slice(0, 6000)}
+
+---
+【1단계】 핵심 데이터 추출 — 아래 JSON을 반드시 \`\`\`json ... \`\`\` 블록으로 출력:
+{
+  "companyName": "상호명",
+  "bizNo": "사업자번호 (000-00-00000 형식)",
+  "period": "신고기간 (예: 25년 1기 확정)",
+  "revenue": 수입금액(숫자, 없으면 0),
+  "income": 소득금액(숫자, 없으면 0),
+  "taxBase": 과세표준(숫자, 없으면 0),
+  "totalTax": 산출세액(숫자, 없으면 0),
+  "payTax": 납부세액(숫자, 없으면 0),
+  "feeRecommendation": 추천수수료(숫자, 수입금액 기준 한국 세무사 보수표 적용),
+  "feeReason": "수수료 추천 근거 (한 줄)"
+}
+
+【2단계】 검토 의견 — JSON 블록 출력 후 아래 형식으로 작성:
+## 검토 결과
+**[${typeLabel} 신고서 검토]**
+
+✅ **정상 확인 항목**
+- (정상으로 확인된 항목)
+
+⚠️ **확인 필요 항목**
+- (이상하거나 주의가 필요한 항목)
+
+📌 **누락 가능 공제·감면**
+- (적용 가능한데 누락된 것으로 보이는 항목)
+
+💰 **수수료 추천**: {feeRecommendation}원
+- {feeReason}
+
+---
+⚠️ 최종 제출 전 원본 증빙과 재대조를 권장합니다.`;
+
+  try {
+    const result = await aiCall(null, extractPrompt, 2000);
+    if (!result) { resultDiv.innerHTML = ''; if(btn) btn.disabled=false; return; }
+
+    // JSON 추출
+    let reviewData = null;
+    const jsonMatch = result.match(/```json\s*([\s\S]*?)\s*```/);
+    if (jsonMatch) {
+      try { reviewData = JSON.parse(jsonMatch[1]); } catch(e) {}
+    }
+
+    // 결과 UI 구성
+    const clientId = Number(document.getElementById('trr-client-sel')?.value) || 0;
+    const pKey = document.getElementById('trr-period-sel')?.value || '';
+    const clientName = reviewData?.companyName || '';
+    const matchedClient = clientId ? G.clients.find(c=>c.id===clientId) :
+      (clientName ? G.clients.find(c=>c.name.includes(clientName)||clientName.includes(c.name)) : null);
+
+    let dataCard = '';
+    if (reviewData) {
+      const fmtN = n => (n||0).toLocaleString()+'원';
+      dataCard = `<div style="background:#f8f9ff;border-radius:12px;padding:14px 16px;margin-bottom:14px;border:1.5px solid #e8eaf6">
+        <div style="font-size:13px;font-weight:800;color:#3949ab;margin-bottom:10px">📊 추출된 신고 데이터</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">
+          ${reviewData.companyName?`<div><span style="color:#888">상호:</span> <b>${esc(reviewData.companyName)}</b></div>`:''}
+          ${reviewData.bizNo?`<div><span style="color:#888">사업자번호:</span> <b>${esc(reviewData.bizNo)}</b></div>`:''}
+          ${reviewData.period?`<div><span style="color:#888">신고기간:</span> <b>${esc(reviewData.period)}</b></div>`:''}
+          ${reviewData.revenue?`<div><span style="color:#888">수입금액:</span> <b style="color:#1565c0">${fmtN(reviewData.revenue)}</b></div>`:''}
+          ${reviewData.income?`<div><span style="color:#888">소득금액:</span> <b>${fmtN(reviewData.income)}</b></div>`:''}
+          ${reviewData.taxBase?`<div><span style="color:#888">과세표준:</span> <b>${fmtN(reviewData.taxBase)}</b></div>`:''}
+          ${reviewData.totalTax?`<div><span style="color:#888">산출세액:</span> <b>${fmtN(reviewData.totalTax)}</b></div>`:''}
+          ${reviewData.payTax?`<div><span style="color:#888">납부세액:</span> <b style="color:#c62828">${fmtN(reviewData.payTax)}</b></div>`:''}
+        </div>
+        ${reviewData.feeRecommendation?`<div style="margin-top:10px;padding:8px 12px;background:#e8f5e9;border-radius:8px;font-size:13px">
+          <span style="color:#2e7d32;font-weight:700">💰 추천 수수료: ${fmtN(reviewData.feeRecommendation)}</span>
+          <span style="color:#555;margin-left:6px;font-size:12px">${esc(reviewData.feeReason||'')}</span>
+        </div>`:''}
+        ${matchedClient?`<div style="margin-top:8px;font-size:12px;color:#2e7d32">✓ 거래처 감지: <b>${esc(matchedClient.name)}</b></div>`:''}
+      </div>`;
+    }
+
+    const reviewText = result.replace(/```json[\s\S]*?```/g,'').trim();
+    const formatted = reviewText
+      .replace(/^## (.+)$/gm,'<h3 style="font-size:14px;font-weight:800;color:#333;margin:14px 0 6px">$1</h3>')
+      .replace(/^\*\*(.+?)\*\*$/gm,'<div style="font-weight:700;color:#555;margin:8px 0 4px">$1</div>')
+      .replace(/^(✅|⚠️|📌|💰) \*\*(.+?)\*\*/gm,'<div style="font-weight:700;margin:10px 0 4px">$1 $2</div>')
+      .replace(/^- (.+)$/gm,'<div style="padding:3px 0 3px 14px;border-left:3px solid #e0e0e0;margin:2px 0;font-size:13px">$1</div>')
+      .replace(/\n\n/g,'<br>')
+      .replace(/\n/g,'');
+
+    window._trrReviewData = reviewData;
+    window._trrMatchedClientId = matchedClient?.id || clientId || null;
+    window._trrPKey = pKey;
+
+    resultDiv.innerHTML = `
+      ${dataCard}
+      <div class="ai-result" style="font-size:13px;line-height:1.7">${formatted}</div>
+      ${reviewData ? `<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+        <button onclick="recordTRRToJulgae()" style="flex:1;padding:10px;background:#4f8ef7;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">📋 신고리스트에 기록</button>
+        <button onclick="copyText(document.getElementById('trr-result').innerText)" style="padding:10px 16px;background:#f5f5f5;color:#555;border:1px solid #e0e0e0;border-radius:10px;font-size:13px;cursor:pointer;font-family:inherit">📋 복사</button>
+      </div>` : ''}`;
+  } catch(e) {
+    resultDiv.innerHTML = `<div style="color:#e53935;padding:12px">AI 검토 오류: ${esc(String(e.message||e))}</div>`;
+  }
+  if (btn) btn.disabled = false;
+}
+
+function recordTRRToJulgae() {
+  const data = window._trrReviewData;
+  if (!data) { toast('검토 데이터가 없습니다', 'warning'); return; }
+
+  // 거래처·기간 선택
+  const clientId = window._trrMatchedClientId || Number(document.getElementById('trr-client-sel')?.value) || 0;
+  const pKey = window._trrPKey || document.getElementById('trr-period-sel')?.value || '';
+
+  if (!clientId || !pKey) {
+    // 선택 모달
+    const clients = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업');
+    showModal(`<div style="max-width:440px">
+      <div class="modal-header"><h3>📋 신고리스트에 기록</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+      <div class="modal-body">
+        <div style="font-size:12px;color:#888;margin-bottom:12px">기록할 거래처와 신고기간을 선택해주세요.</div>
+        <label class="flabel">거래처</label>
+        <select id="trr-sel-client" class="fsel" style="margin-bottom:10px">
+          <option value="">-- 선택 --</option>
+          ${clients.map(c=>`<option value="${c.id}" ${c.id===clientId?'selected':''}>${esc(c.name)}</option>`).join('')}
+        </select>
+        <label class="flabel">신고기간</label>
+        <select id="trr-sel-period" class="fsel" style="margin-bottom:14px">
+          <option value="">-- 선택 --</option>
+          ${(G.periods||[]).filter(p=>!p.locked).slice(-20).reverse().map(p=>`<option value="${p.id}" ${p.id===pKey?'selected':''}>${esc(p.label||p.id)}</option>`).join('')}
+        </select>
+        <button class="btn-primary" style="width:100%" onclick="doRecordTRR()">기록하기</button>
+      </div>
+    </div>`);
+    return;
+  }
+  doRecordTRRWith(clientId, pKey);
+}
+
+function doRecordTRR() {
+  const cid = Number(document.getElementById('trr-sel-client')?.value);
+  const pk = document.getElementById('trr-sel-period')?.value;
+  if (!cid || !pk) { toast('거래처와 신고기간을 모두 선택해주세요', 'warning'); return; }
+  closeModal();
+  doRecordTRRWith(cid, pk);
+}
+
+function doRecordTRRWith(clientId, pKey) {
+  const data = window._trrReviewData;
+  if (!data) return;
+  if (!G.julgae[pKey]) G.julgae[pKey] = {};
+  const cur = julgaeVal(pKey, clientId);
+  const updated = {
+    ...cur,
+    ...(data.revenue  ? { revenue: data.revenue }   : {}),
+    ...(data.income   ? { income: data.income }      : {}),
+    ...(data.taxBase  ? { taxBase: data.taxBase }    : {}),
+    ...(data.totalTax ? { totalTax: data.totalTax }  : {}),
+    ...(data.payTax   ? { payTax: data.payTax }      : {}),
+    ...(data.feeRecommendation ? { fee: data.feeRecommendation } : {}),
+  };
+  G.julgae[pKey][clientId] = updated;
+  // 기간 enrolled에 추가
+  const period = G.periods.find(p=>p.id===pKey);
+  if (period && !period.enrolled?.includes(clientId)) {
+    if (!period.enrolled) period.enrolled = [];
+    period.enrolled.push(clientId);
+  }
+  // AI 검토 메모 저장
+  if (!G.julgaeNotes) G.julgaeNotes = {};
+  const noteKey = `${pKey}_${clientId}`;
+  const existingNote = G.julgaeNotes[noteKey] || '';
+  const reviewMemo = `[AI 신고서 검토 ${new Date().toLocaleDateString('ko-KR')}]\n추천수수료: ${(data.feeRecommendation||0).toLocaleString()}원\n${data.feeReason||''}`;
+  G.julgaeNotes[noteKey] = existingNote ? existingNote+'\n\n'+reviewMemo : reviewMemo;
+  saveToLS();
+  const c = G.clients.find(x=>x.id===clientId);
+  const p = G.periods.find(x=>x.id===pKey);
+  toast(`✅ ${c?.name||clientId} / ${p?.label||pKey} 신고리스트에 기록 완료`, 'success', 3500);
+}
+
+// ══════════════════════════════════════════════════════
+// AI - 부가가치세 신고서 검토 (레거시 - 호환성 유지)
 // ══════════════════════════════════════════════════════
 function openVatReviewer() {
   showModal(`<div style="max-width:600px;width:100%">
