@@ -334,9 +334,8 @@ body.dark-mode .overlay { background: rgba(0,0,0,.65); }
   </div>
   <div id="header-btns">
     <button class="hbtn pwa-only" onclick="window.location.reload()" title="새로고침">🔄</button>
-    <span id="badge-no-data" class="badge-alert" style="display:none"></span>
+    <span id="badge-no-data" class="badge-alert" onclick="showNoDataModal()" style="display:none;cursor:pointer" title="자료 미수령 거래처 목록"></span>
     <button class="hbtn" onclick="openGlobalSearch()" title="전체 검색">🔍</button>
-    <button class="hbtn" id="notif-btn" onclick="openNotificationCenter(this)" title="알림 센터" style="position:relative">🔔<span id="notif-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:#e53935;color:#fff;border-radius:10px;padding:1px 5px;font-size:10px;font-weight:700;line-height:1.4"></span></button>
     <button class="hbtn" onclick="openBosuTable()">📋 보수표</button>
     <button class="hbtn" id="settings-btn" onclick="openSettings()" style="position:relative">⚙ 설정<span id="settings-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:#e53935;color:#fff;border-radius:50%;width:14px;height:14px;font-size:9px;font-weight:700;line-height:14px;text-align:center">!</span></button>
     <button class="hbtn" onclick="toggleDarkMode()" title="다크모드">🌙</button>
@@ -1265,10 +1264,32 @@ function showIncome26Unmatched() {
     <span style="font-size:12px;color:#888">생성 후 종소세 신고 리스트에 자동 반영됩니다</span>
     <div style="display:flex;gap:8px">
       <button class="btn-secondary" onclick="closeModal()">닫기</button>
+      <button style="padding:8px 18px;border-radius:8px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#1565c0;font-size:13px;cursor:pointer;font-family:inherit;font-weight:600" onclick="exportIncome26Unmatched()">↓ 엑셀 다운로드</button>
       <button style="padding:8px 18px;border-radius:8px;border:none;background:#e53935;color:#fff;font-size:13px;cursor:pointer;font-family:inherit;font-weight:600" onclick="createIncome26UnmatchedClients()">일괄 생성 (${list.length}개)</button>
     </div>
   </div>
   </div>`);
+}
+
+function exportIncome26Unmatched() {
+  const list = G.income26Unmatched || [];
+  if (!list.length) { toast('미매칭 데이터가 없습니다','info'); return; }
+  const headers = ['업체명','대표자','업종','담당자','매출액','소득금액','총부담세액','납부세액','주민세','합계','직전매출','수수료(26년)','입금','미수','25년수수료','24년수수료','23년수수료','성실신고'];
+  const rows = list.map(r => [
+    r.name||'', r.rep||'', r.bizType||'', r.manager||'',
+    r.revenue||0, r.income||0, r.totalTax||0, r.payTax||0,
+    r.payTax ? Math.round((r.payTax||0)*0.1) : 0,
+    (r.payTax||0) + (r.payTax ? Math.round((r.payTax||0)*0.1) : 0),
+    r.prevRevenue||0, r.fee||0, r.paid||0,
+    (r.fee||0)-(r.paid||0),
+    r.fee25||0, r.fee24||0, r.fee23||0,
+    r.seongsi?'Y':''
+  ]);
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  ws['!cols'] = [18,10,14,10,14,14,14,14,12,12,14,14,12,12,12,12,12,8].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, ws, '미매칭목록');
+  XLSX.writeFile(wb, '26년소득세_미매칭업체.xlsx');
 }
 
 function createIncome26UnmatchedClients() {
@@ -8499,15 +8520,7 @@ function updateBadge() {
   const el = document.getElementById('badge-no-data');
   el.style.display = noData>0?'inline':'none';
   el.textContent = '미수령 '+noData;
-  // Update notification badge
-  try {
-    const alerts = computeAlerts();
-    const nb = document.getElementById('notif-badge');
-    if (nb) {
-      if (alerts.length > 0) { nb.style.display='inline'; nb.textContent=alerts.length; }
-      else { nb.style.display='none'; }
-    }
-  } catch(e) {}
+
 }
 
 // ══════════════════════════════════════════════════════
@@ -8542,6 +8555,41 @@ function doGlobalSearch(q) {
 }
 function closeGlobalSearch() {
   document.getElementById('global-search-popup')?.remove();
+}
+
+function showNoDataModal() {
+  const list = G.clients.filter(c=>!c.dataReceived&&c.status!=='해지'&&c.status!=='폐업');
+  if (!list.length) { toast('자료 미수령 거래처가 없습니다','info'); return; }
+  const byManager = {};
+  list.forEach(c => {
+    const mgr = getManagers(c)[0] || '(없음)';
+    if (!byManager[mgr]) byManager[mgr] = [];
+    byManager[mgr].push(c);
+  });
+  const rows = Object.entries(byManager).sort(([a],[b])=>a.localeCompare(b,'ko')).map(([mgr,cs])=>`
+    <tr style="background:#f5f5f5"><td colspan="3" style="padding:5px 10px;font-size:12px;font-weight:700;color:#555">담당: ${esc(mgr)} (${cs.length}개)</td></tr>
+    ${cs.map(c=>`<tr onclick="closeModal();switchTab('clients');G.searchText='${esc(c.name).replace(/'/g,"\'")}';renderClients()" style="cursor:pointer;border-bottom:1px solid #f5f5f5" onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background=''">
+      <td style="padding:5px 10px;font-size:13px;font-weight:600">${esc(c.name)}</td>
+      <td style="padding:5px 10px;font-size:12px;color:#666">${esc(c.rep||'-')}</td>
+      <td style="padding:5px 10px;font-size:12px;color:#888">${esc(c.contractDate||'-')}</td>
+    </tr>`).join('')}
+  `).join('');
+  showModal(`<div style="max-width:520px;width:min(520px,97vw)">
+    <div class="modal-header"><h3>📋 자료 미수령 거래처 (${list.length}개)</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div style="max-height:65vh;overflow-y:auto">
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="background:#e8f0fe;position:sticky;top:0">
+          <th style="padding:6px 10px;text-align:left;font-size:12px">업체명</th>
+          <th style="padding:6px 10px;text-align:left;font-size:12px">대표자</th>
+          <th style="padding:6px 10px;text-align:left;font-size:12px">수임일자</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div style="padding:10px 16px;border-top:1px solid #f0f0f0;display:flex;justify-content:flex-end">
+      <button class="btn-secondary" onclick="closeModal()">닫기</button>
+    </div>
+  </div>`);
 }
 
 // ══════════════════════════════════════════════════════
