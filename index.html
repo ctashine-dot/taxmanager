@@ -4394,7 +4394,7 @@ function renderJulgae() {
   if (G.julgaeConsulFilter==='완료') clients = clients.filter(c=>julgaeVal(pKey2,c.id).c);
   else if (G.julgaeConsulFilter==='미완료') clients = clients.filter(c=>!julgaeVal(pKey2,c.id).c);
 
-  const dataCount     = clients.filter(c => julgaeVal(pKey2, c.id).d).length;
+  const consulCount    = clients.filter(c => julgaeVal(pKey2, c.id).c).length;
   const bookCount     = clients.filter(c => julgaeVal(pKey2, c.id).b).length;
   const doneCount     = clients.filter(c => julgaeVal(pKey2, c.id).a).length;
   const collectCount  = clients.filter(c => julgaeVal(pKey2, c.id).s).length;
@@ -4696,7 +4696,7 @@ function renderJulgae() {
   ${period && total > 0 ? `
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
     ${[
-      {label:'자료수령',count:dataCount,color:'#4f8ef7'},
+      {label:'상담완료',count:consulCount,color:'#1565c0'},
       {label:'기장완료',count:bookCount,color:'#43a047'},
       {label:'결재완료',count:doneCount,color:'#9c27b0'},
       {label:'수금완료',count:collectCount,color:'#e65100'},
