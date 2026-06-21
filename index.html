@@ -4307,7 +4307,7 @@ function renderJulgae() {
 
   const niInput = (cid, field, val, extraStyle='') => {
     const disp = (val||val===0) && val!=='' ? Number(val).toLocaleString() : '';
-    return `<input type="text" inputmode="numeric" class="julgae-num-input" value="${disp}" placeholder="0"
+    return `<input type="text" inputmode="numeric" class="julgae-num-input" data-jni="${pKey2}_${cid}_${field}" value="${disp}" placeholder="0"
       onfocus="this.value=this.value.replace(/,/g,'')"
       onblur="const n=Number(this.value.replace(/,/g,''));if(!isNaN(n)&&this.value!=='')this.value=n.toLocaleString();"
       onchange="updateJulgaeNum('${pKey2}',${cid},'${field}',this.value.replace(/,/g,''))"
@@ -4705,8 +4705,8 @@ function renderJulgae() {
           <td style="text-align:center;padding:4px;font-size:12px;font-weight:700;${hc['j_col_margin']?'display:none':''}${margin!==null?(Number(margin)<0?';color:#e53935':';color:#2e7d32'):';color:#ccc'}">${margin!==null?margin+'%':'-'}</td>
           <td style="text-align:right;padding:4px 8px;${hc['j_col_taxamt']?'display:none':''}">${niInput(c.id,'totalTax',v.totalTax)}</td>
           <td style="text-align:right;padding:4px 8px;${hc['j_col_paytax']?'display:none':''}">${niInput(c.id,'payTax',v.payTax)}</td>
-          <td style="text-align:right;padding:4px 8px;${hc['j_col_resident']?'display:none':''}">${niInput(c.id,'residentTax',v.residentTax)}</td>
-          ${(()=>{const ts=(v.payTax||0)+(v.residentTax||0);return`<td style="text-align:right;padding:4px 8px;font-size:12px;font-weight:600;color:#333;${hc['j_col_totalsum']?'display:none':''}">${ts?ts.toLocaleString():'-'}</td>`})()}
+          ${(()=>{const _effRT=v.residentTax||Math.round((v.totalTax||0)*0.1);const _isAuto=!v.residentTax&&v.totalTax>0;return`<td style="text-align:right;padding:4px 8px;${hc['j_col_resident']?'display:none':''}">${niInput(c.id,'residentTax',_effRT,_isAuto?'color:#9e9e9e;':'')}</td>`;})()}
+          ${(()=>{const _rt=v.residentTax||Math.round((v.totalTax||0)*0.1);const ts=(v.payTax||0)+_rt;return`<td data-jsum="${pKey2}_${c.id}" style="text-align:right;padding:4px 8px;font-size:12px;font-weight:600;color:#333;${hc['j_col_totalsum']?'display:none':''}">${ts?ts.toLocaleString():'-'}</td>`})()}
           <td style="text-align:right;padding:4px 8px;${hc['j_col_prevrevenue']?'display:none':''}">${niInput(c.id,'prevRevenue',v.prevRevenue)}</td>
         `:isVatType?`
           <td style="text-align:right;padding:4px 8px;${hc['j_col_revenue']?'display:none':''}">${niInput(c.id,'salesAmount',v.salesAmount)}${prevRevTxt}${bosuBadge}</td>
@@ -4969,6 +4969,17 @@ function updateJulgaeNum(pKey, clientId, field, rawVal) {
   if (!G.julgae[pKey]) G.julgae[pKey] = {};
   const cur = julgaeVal(pKey, clientId);
   cur[field] = Number(rawVal) || 0;
+  if (field === 'totalTax' && !cur.residentTax) {
+    cur.residentTax = Math.round(cur.totalTax * 0.1);
+    const rtEl = document.querySelector(`[data-jni="${pKey}_${clientId}_residentTax"]`);
+    if (rtEl) { rtEl.value = cur.residentTax ? cur.residentTax.toLocaleString() : ''; rtEl.style.color='#9e9e9e'; }
+  }
+  if ((field === 'totalTax' || field === 'residentTax' || field === 'payTax')) {
+    const _effRT = cur.residentTax || Math.round((cur.totalTax||0)*0.1);
+    const ts = (cur.payTax||0) + _effRT;
+    const sumEl = document.querySelector(`[data-jsum="${pKey}_${clientId}"]`);
+    if (sumEl) sumEl.textContent = ts ? ts.toLocaleString() : '-';
+  }
   G.julgae[pKey][clientId] = cur;
   if (field === 'fee' || field === 'feeSeongsi') {
     const period = G.periods.find(p => p.id === pKey);
