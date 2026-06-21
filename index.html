@@ -678,6 +678,7 @@ function saveToLS() {
     localStorage.setItem('tm_adHocFees', JSON.stringify(G.adHocFees||{}));
     if (G.julgaeSelectedPeriods) localStorage.setItem('tm_julgaeSelectedPeriods', JSON.stringify(G.julgaeSelectedPeriods));
     if (G.julgaeSelectedYears) localStorage.setItem('tm_julgaeSelectedYears', JSON.stringify(G.julgaeSelectedYears));
+    if (G.pinnedPeriods) localStorage.setItem('tm_pinnedPeriods', JSON.stringify(G.pinnedPeriods));
   } catch(e) {
     console.error('로컬 저장 실패:', e);
     showSaveError('로컬 저장 공간이 부족합니다');
@@ -1204,6 +1205,15 @@ document.addEventListener('keydown', function(e) {
       const sb = document.querySelector('.search-box input, #clients-search');
       if (sb) sb.focus();
       break;
+    case 'j': case 'J':
+      if (G.currentTab==='julgae') { e.preventDefault(); _julgaeRowNav(1); }
+      break;
+    case 'k': case 'K':
+      if (G.currentTab==='julgae') { e.preventDefault(); _julgaeRowNav(-1); }
+      break;
+    case 'p': case 'P':
+      if (G.currentTab==='julgae') { e.preventDefault(); openPeriodSummaryPDF(); }
+      break;
     case '1': switchTab('dashboard'); break;
     case '2': switchTab('clients'); break;
     case '3': switchTab('julgae'); break;
@@ -1211,13 +1221,15 @@ document.addEventListener('keydown', function(e) {
     case '5': openTerminatedModal(); break;
     case '6': switchTab('schedule'); break;
     case '?':
-      showModal(`<div style="max-width:400px">
+      showModal(`<div style="max-width:420px">
       <div class="modal-header"><h3>⌨ 단축키 안내</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
       <div class="modal-body" style="font-size:13px;line-height:2">
         <div><kbd style="background:#f5f5f5;padding:2px 8px;border-radius:4px;border:1px solid #ddd">Esc</kbd> 모달 닫기</div>
         <div><kbd style="background:#f5f5f5;padding:2px 8px;border-radius:4px;border:1px solid #ddd">N</kbd> 새 거래처 추가 (거래처 탭)</div>
         <div><kbd style="background:#f5f5f5;padding:2px 8px;border-radius:4px;border:1px solid #ddd">/</kbd> 검색창 포커스</div>
         <div><kbd style="background:#f5f5f5;padding:2px 8px;border-radius:4px;border:1px solid #ddd">1~6</kbd> 탭 전환</div>
+        <div><kbd style="background:#f5f5f5;padding:2px 8px;border-radius:4px;border:1px solid #ddd">J / K</kbd> 신고결재 행 이동 ↓ / ↑</div>
+        <div><kbd style="background:#f5f5f5;padding:2px 8px;border-radius:4px;border:1px solid #ddd">P</kbd> 신고결재 결과 PDF 출력</div>
         <div><kbd style="background:#f5f5f5;padding:2px 8px;border-radius:4px;border:1px solid #ddd">?</kbd> 단축키 도움말</div>
       </div></div>`);
       break;
@@ -2119,9 +2131,10 @@ function renderClients() {
     <button class="btn-sm" style="background:#f5f5f5;color:#555" onclick="clientPageChange(1)" ${G.clientPage===totalPages-1?'disabled':''}>다음</button>
   </div>` : ''}
   ${G.bulkMode && (G.selectedClients||[]).length ? `
-  <div style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1a1a2e;color:#fff;border-radius:16px;padding:12px 20px;display:flex;gap:12px;align-items:center;box-shadow:0 4px 20px rgba(0,0,0,.3);z-index:150">
+  <div style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1a1a2e;color:#fff;border-radius:16px;padding:12px 20px;display:flex;gap:12px;align-items:center;box-shadow:0 4px 20px rgba(0,0,0,.3);z-index:150;flex-wrap:wrap">
     <span style="font-size:13px">${G.selectedClients.length}개 선택됨</span>
     <button onclick="openBulkManagerChange()" style="padding:6px 14px;background:#4f8ef7;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700">👤 담당자 변경</button>
+    <button onclick="openBulkFeeIncrease()" style="padding:6px 14px;background:#ab47bc;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700">📈 수수료 인상</button>
     <button onclick="G.selectedClients=[];renderClients()" style="padding:6px 14px;background:rgba(255,255,255,.1);color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit">선택 해제</button>
   </div>` : ''}`;
 }
@@ -3075,7 +3088,8 @@ function toggleSection(key) {
 }
 function _dashCollapsed(key) {
   if (!G.sectionCollapsed) G.sectionCollapsed = {};
-  if (!(key in G.sectionCollapsed)) G.sectionCollapsed[key] = true; // default collapsed
+  const _defaultOpen = new Set(['dash-chart12','fees-monthly']);
+  if (!(key in G.sectionCollapsed)) G.sectionCollapsed[key] = !_defaultOpen.has(key);
   return G.sectionCollapsed[key];
 }
 
@@ -4577,8 +4591,8 @@ function renderJulgae() {
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
     <h2 style="font-size:20px;font-weight:800">신고 및 결재</h2>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn-sm" style="background:#fff3e0;color:#e65100;border:1.5px solid #ffcc80" onclick="openDataRequestSMS()">📱 자료요청 SMS</button>
       <button class="btn-sm" style="background:#e8f5e9;color:#1b5e20;border:1.5px solid #81c784" onclick="exportJulgaeToExcel()">📊 Excel 내보내기</button>
+      <button class="btn-sm" style="background:#fff8e1;color:#e65100;border:1.5px solid #ffcc02" onclick="openPeriodSummaryPDF()">🖨 결과 요약 PDF</button>
       <button class="btn-primary btn-sm" onclick="openAddPeriod()" style="padding:8px 14px">+ 신고리스트 추가</button>
     </div>
   </div>
@@ -4619,8 +4633,10 @@ function renderJulgae() {
     const yrSelLabel = selYears.size ? [...selYears].map(yrLabel).join(', ') : '연도 선택';
     const lstSelLabel = selSet.size ? selSet.size+'개 선택' : '리스트 선택';
 
-    // Tiles — only show selected periods
-    const shownPeriods = periods.map((p,i)=>({p,i})).filter(({p})=>selSet.has(p.id));
+    // Tiles — only show selected periods, pinned first
+    const _pinned = new Set(G.pinnedPeriods||[]);
+    const shownPeriods = periods.map((p,i)=>({p,i})).filter(({p})=>selSet.has(p.id))
+      .sort((a,b)=>(_pinned.has(b.p.id)?1:0)-(_pinned.has(a.p.id)?1:0));
     const tiles = shownPeriods.map(({p,i}) => {
       const pKey = p.id;
       let targets;
@@ -4648,6 +4664,7 @@ function renderJulgae() {
           ? `<div title="마감된 리스트는 삭제할 수 없습니다" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:#ccc;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:not-allowed">🔒</div>`
           : `<button onpointerdown="event.stopPropagation();_pDelDown(this,'${p.id}')" onpointerup="event.stopPropagation();_pDelUp(this,'${p.id}')" onpointercancel="_pDelCancel(this)" onpointerleave="_pDelCancel(this)" title="꾹 누르면 삭제" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:#e53935;color:#fff;font-size:11px;font-weight:700;border:none;cursor:pointer;padding:0;line-height:1;display:flex;align-items:center;justify-content:center;touch-action:none;user-select:none">✕</button>`
         }
+        <button onclick="event.stopPropagation();togglePeriodPin('${p.id}')" title="즐겨찾기 고정" style="position:absolute;top:-6px;left:-6px;width:18px;height:18px;border-radius:50%;background:${(G.pinnedPeriods||[]).includes(p.id)?'#ffd600':'#e0e0e0'};color:${(G.pinnedPeriods||[]).includes(p.id)?'#333':'#aaa'};font-size:10px;font-weight:700;border:none;cursor:pointer;padding:0;line-height:1;display:flex;align-items:center;justify-content:center">${(G.pinnedPeriods||[]).includes(p.id)?'★':'☆'}</button>
       </div>`;
     }).join('');
 
@@ -4692,6 +4709,25 @@ function renderJulgae() {
   </div>
 
   ${period && total > 0 ? `
+  <div style="background:#f8f9ff;border-radius:12px;padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:0;overflow-x:auto">
+    ${[
+      {label:'전체',count:total,color:'#607d8b',icon:'👥'},
+      {label:'상담',count:consulCount,color:'#1565c0',icon:'💬'},
+      {label:'기장',count:bookCount,color:'#43a047',icon:'📒'},
+      {label:'결재',count:doneCount,color:'#9c27b0',icon:'✅'},
+      {label:'수금',count:collectCount,color:'#e65100',icon:'💰'},
+    ].map((s,i)=>{
+      const pct2=total?Math.round(s.count/total*100):0;
+      const arrow=i<4?`<div style="color:#ccc;font-size:18px;margin:0 4px;flex-shrink:0">›</div>`:'';
+      return `<div style="display:flex;align-items:center">`+
+        `<div style="text-align:center;min-width:64px;padding:4px 6px;border-radius:10px;background:#fff;border:1.5px solid ${s.color}20">`+
+          `<div style="font-size:13px">${s.icon}</div>`+
+          `<div style="font-size:16px;font-weight:800;color:${s.color}">${s.count}</div>`+
+          `<div style="font-size:9px;color:#888">${s.label} ${pct2}%</div>`+
+          `<div style="height:3px;border-radius:2px;background:#eee;margin-top:3px"><div style="height:3px;border-radius:2px;background:${s.color};width:${pct2}%"></div></div>`+
+        `</div>${arrow}</div>`;
+    }).join('')}
+  </div>
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
     ${[
       {label:'상담완료',count:consulCount,color:'#1565c0'},
@@ -4884,14 +4920,18 @@ function renderJulgae() {
       const bosuBadge = (_bosuRec && _bosuRec.fee > 0)
         ? `<div onclick="applyBosuFee('${pKey2}',${c.id},'${_bosuRec.field}',${_bosuRec.fee})" style="font-size:9px;color:#7b1fa2;background:#f3e5f5;border-radius:4px;padding:2px 5px;cursor:pointer;margin-top:2px;text-align:right;white-space:nowrap" title="클릭하여 수수료 자동입력">💡 추천 ${_bosuRec.fee.toLocaleString()}원</div>`
         : '';
+      const _lastMemo = (G.clientNotes?.[c.id]||[]).slice(-1)[0]?.text||c.memo||'';
+      const _memoTitle = _lastMemo ? esc(_lastMemo.slice(0,120)) : '';
+      const _revChg = (v.revenue&&v.prevRevenue) ? Math.round((v.revenue-v.prevRevenue)/v.prevRevenue*100) : null;
+      const _revBadge = _revChg!==null ? `<span style="font-size:9px;padding:1px 4px;border-radius:4px;background:${_revChg>0?'#e8f5e9':'#fdecea'};color:${_revChg>0?'#2e7d32':'#c62828'};margin-left:3px;flex-shrink:0">${_revChg>0?'↑':'↓'}${Math.abs(_revChg)}%</span>` : '';
       return `<tr id="jr-${pKey2}-${c.id}" style="background:${rowBg}">
         ${G.julgaeBulkMode?`<td style="text-align:center;width:32px" onclick="event.stopPropagation();toggleJulgaeSelect(${c.id})"><input type="checkbox" ${(G.julgaeBulkSelected||[]).includes(c.id)?'checked':''} style="width:16px;height:16px;cursor:pointer" onclick="event.stopPropagation();toggleJulgaeSelect(${c.id})"></td>`:''}
         <td style="color:#aaa;font-size:11px">${++_rowN}</td>
-        <td onclick="${item.isGroupHeader?`toggleJulgaeGroup('${item.groupKey}')`:`openClientNotes(${c.id})`}" style="cursor:pointer">${item.isGroupHeader
+        <td onclick="${item.isGroupHeader?`toggleJulgaeGroup('${item.groupKey}')`:`openClientNotes(${c.id})`}" style="cursor:pointer"${_memoTitle?` title="${_memoTitle}"`:''} >${item.isGroupHeader
           ?`<div class="td-name" style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span><span style="background:#7b1fa2;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;white-space:nowrap;flex-shrink:0">+${item.groupClients.length-1} ${item.expanded?'▲':'▼'}</span>${_noteIcon}</div>`
           :item.isGroupChild
-            ?`<div style="display:flex;align-items:center;gap:4px;padding-left:22px"><span style="color:#ccc;font-size:11px">└</span><div class="td-name" style="font-size:12px">${esc(c.name)}</div>${_noteIcon}</div>`
-            :`<div class="td-name" style="display:flex;align-items:center">${esc(c.name)}${_noteIcon}</div>`
+            ?`<div style="display:flex;align-items:center;gap:4px;padding-left:22px"><span style="color:#ccc;font-size:11px">└</span><div class="td-name" style="font-size:12px">${esc(c.name)}</div>${_revBadge}${_noteIcon}</div>`
+            :`<div class="td-name" style="display:flex;align-items:center">${esc(c.name)}${_revBadge}${_noteIcon}</div>`
         }</td>
         <td style="font-size:12px;color:#444;${hc['j_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
         <td style="color:#555;font-size:12px;${hc['j_manager']?'display:none':''}">${getManagers(c).length?getManagers(c).join(', '):'<span style="color:#ff7043;font-size:11px">⚠ 미지정</span>'}</td>
@@ -5040,6 +5080,176 @@ function togglePeriodLock(periodId) {
   p.locked = !p.locked;
   saveToLS();
   renderJulgae();
+}
+
+function togglePeriodPin(periodId) {
+  if (!G.pinnedPeriods) G.pinnedPeriods = [];
+  const idx = G.pinnedPeriods.indexOf(periodId);
+  if (idx >= 0) G.pinnedPeriods.splice(idx, 1);
+  else G.pinnedPeriods.unshift(periodId);
+  saveToLS();
+  renderJulgae();
+}
+
+// 신고결재 행 키보드 이동 (J/K)
+let _julgaeFocusIdx = -1;
+function _julgaeRowNav(dir) {
+  const rows = Array.from(document.querySelectorAll('#page-julgae tr[id^="jr-"]'));
+  if (!rows.length) return;
+  _julgaeFocusIdx = Math.max(0, Math.min(rows.length - 1, _julgaeFocusIdx + dir));
+  rows.forEach((r,i) => r.style.outline = i === _julgaeFocusIdx ? '2px solid #4f8ef7' : '');
+  rows[_julgaeFocusIdx]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+// 미수금 문자 빌더
+function openUnpaidSMSBuilder() {
+  const unpaid = [];
+  for (const p of G.periods) {
+    const pData = G.julgae[p.id] || {};
+    for (const c of G.clients) {
+      const v = pData[c.id] || {};
+      if (v.fee && !v.s) unpaid.push({ client: c, fee: v.fee, paid: v.paid||0, period: p });
+    }
+  }
+  if (!unpaid.length) { toast('미수금 내역이 없습니다', 'info'); return; }
+  const msgs = unpaid.map(r => {
+    const unpaidAmt = r.fee - r.paid;
+    return `[${r.period.label}] ${r.client.name} 귀중\n안녕하세요. 세무사 사무소입니다.\n${r.period.label} 세무수수료 ${r.fee.toLocaleString()}원 중 미수금 ${unpaidAmt.toLocaleString()}원이 남아있습니다.\n빠른 시일 내 납부 부탁드립니다.\n감사합니다.`;
+  });
+  const combined = msgs.join('\n\n─────────────────\n\n');
+  showModal(`<div style="max-width:600px;width:90vw">
+    <div class="modal-header"><h3>💬 미수금 문자 생성 (${unpaid.length}건)</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div style="margin-bottom:10px;font-size:12px;color:#888">업체별 미수금 문자입니다. 복사하여 사용하세요.</div>
+      <textarea id="unpaid-sms-area" readonly style="width:100%;height:300px;border:1px solid #e0e0e0;border-radius:8px;padding:10px;font-size:12px;font-family:inherit;resize:vertical;line-height:1.6">${combined.replace(/</g,'&lt;')}</textarea>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button onclick="(()=>{const el=document.getElementById('unpaid-sms-area');el.select();document.execCommand('copy');toast('복사됨','success')})()" style="flex:1;padding:8px;border-radius:8px;border:none;background:#4f8ef7;color:#fff;font-weight:700;cursor:pointer;font-family:inherit">📋 전체 복사</button>
+        <button onclick="closeModal()" style="padding:8px 16px;border-radius:8px;border:1.5px solid #e0e0e0;background:#f5f5f5;cursor:pointer;font-family:inherit">닫기</button>
+      </div>
+    </div>
+  </div>`);
+}
+
+// 기간 신고결과 요약 PDF
+function openPeriodSummaryPDF() {
+  const period = G.periods[Math.min(G.julgaePeriodIdx||0, G.periods.length-1)];
+  if (!period) { toast('신고기간을 선택하세요', 'warning'); return; }
+  const pKey = period.id;
+  const enrolled = period.enrolled || [];
+  const clients = enrolled.map(id => G.clients.find(c=>c.id===id)).filter(Boolean);
+  const total = clients.length;
+  const rows = clients.map(c => {
+    const v = G.julgae[pKey]?.[c.id] || {};
+    const fee = v.fee || 0;
+    const paid = v.paid || 0;
+    const unpaid = fee - paid;
+    return { c, v, fee, paid, unpaid };
+  });
+  const totalFee = rows.reduce((a,r)=>a+r.fee,0);
+  const totalPaid = rows.reduce((a,r)=>a+r.paid,0);
+  const totalUnpaid = rows.reduce((a,r)=>a+r.unpaid,0);
+  const doneCount = rows.filter(r=>r.v.a).length;
+  const collectCount = rows.filter(r=>r.v.s).length;
+
+  const tableRows = rows.map((r,i) => `
+    <tr style="border-bottom:1px solid #e0e0e0">
+      <td style="padding:5px 8px;text-align:center;color:#999">${i+1}</td>
+      <td style="padding:5px 8px">${r.c.name}</td>
+      <td style="padding:5px 8px">${r.c.rep||'-'}</td>
+      <td style="padding:5px 8px;text-align:center">${r.v.b?'✓':''}</td>
+      <td style="padding:5px 8px;text-align:center">${r.v.a?'✓':''}</td>
+      <td style="padding:5px 8px;text-align:right">${r.fee?r.fee.toLocaleString():'-'}</td>
+      <td style="padding:5px 8px;text-align:right">${r.paid?r.paid.toLocaleString():'-'}</td>
+      <td style="padding:5px 8px;text-align:right;color:${r.unpaid>0?'#e53935':'#2e7d32'}">${r.unpaid?r.unpaid.toLocaleString():'-'}</td>
+      <td style="padding:5px 8px;text-align:center">${r.v.s?'💰 수금':'<span style="color:#e53935">미수금</span>'}</td>
+      <td style="padding:5px 8px;font-size:11px;color:#666;max-width:150px;word-break:break-all">${(r.v.note||'').slice(0,40)}</td>
+    </tr>`).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+  <title>${period.label} 신고결과 요약</title>
+  <style>
+    body{font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;font-size:12px;padding:20px;color:#333}
+    h1{font-size:16px;margin-bottom:4px} h2{font-size:12px;color:#888;margin-bottom:16px;font-weight:400}
+    table{width:100%;border-collapse:collapse;margin-bottom:20px}
+    th{background:#1a1a2e;color:#fff;padding:6px 8px;text-align:center;font-size:11px}
+    .summary{display:flex;gap:20px;margin-bottom:16px;flex-wrap:wrap}
+    .sum-box{background:#f5f7fb;border-radius:8px;padding:10px 16px;min-width:120px}
+    .sum-label{font-size:10px;color:#888;margin-bottom:3px}
+    .sum-val{font-size:16px;font-weight:700}
+    @media print{button{display:none}}
+  </style></head><body>
+  <button onclick="window.print()" style="float:right;padding:6px 16px;background:#1a1a2e;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px">🖨 인쇄</button>
+  <h1>📋 ${period.label} — 신고결과 요약</h1>
+  <h2>출력일: ${new Date().toLocaleDateString('ko-KR')} · 총 ${total}개 업체</h2>
+  <div class="summary">
+    <div class="sum-box"><div class="sum-label">전체 업체</div><div class="sum-val">${total}개</div></div>
+    <div class="sum-box"><div class="sum-label">결재완료</div><div class="sum-val" style="color:#9c27b0">${doneCount}개</div></div>
+    <div class="sum-box"><div class="sum-label">수금완료</div><div class="sum-val" style="color:#2e7d32">${collectCount}개</div></div>
+    <div class="sum-box"><div class="sum-label">총 수수료</div><div class="sum-val">${totalFee.toLocaleString()}원</div></div>
+    <div class="sum-box"><div class="sum-label">수금액</div><div class="sum-val" style="color:#2e7d32">${totalPaid.toLocaleString()}원</div></div>
+    <div class="sum-box"><div class="sum-label">미수금</div><div class="sum-val" style="color:#e53935">${totalUnpaid.toLocaleString()}원</div></div>
+  </div>
+  <table>
+    <thead><tr>
+      <th>#</th><th>거래처명</th><th>대표자</th><th>기장</th><th>결재</th>
+      <th>수수료</th><th>수금액</th><th>미수금</th><th>수금여부</th><th>특이사항</th>
+    </tr></thead>
+    <tbody>${tableRows}</tbody>
+    <tfoot><tr style="background:#f5f5f5;font-weight:700">
+      <td colspan="5" style="padding:6px 8px;text-align:right">합계</td>
+      <td style="padding:6px 8px;text-align:right">${totalFee.toLocaleString()}원</td>
+      <td style="padding:6px 8px;text-align:right">${totalPaid.toLocaleString()}원</td>
+      <td style="padding:6px 8px;text-align:right;color:#e53935">${totalUnpaid.toLocaleString()}원</td>
+      <td colspan="2"></td>
+    </tr></tfoot>
+  </table>
+  </body></html>`;
+
+  const win = window.open('', '_blank', 'width=1000,height=700');
+  if (win) { win.document.write(html); win.document.close(); }
+}
+
+// 거래처 선택 후 수수료 인상
+function openBulkFeeIncrease() {
+  const ids = G.selectedClients || [];
+  if (!ids.length) return;
+  showModal(`<div style="max-width:420px">
+    <div class="modal-header"><h3>📈 선택 거래처 수수료 인상 (${ids.length}개)</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div style="margin-bottom:12px;font-size:13px;color:#555">기장/고문 월정 수수료를 일괄 인상합니다.</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+        <label style="font-size:13px;font-weight:600">인상률</label>
+        <input type="number" id="bulk-fee-rate" value="5" min="1" max="100" style="width:80px;padding:6px 10px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:14px;text-align:center;font-family:inherit">
+        <span style="font-size:13px">%</span>
+      </div>
+      <div style="font-size:12px;color:#888;margin-bottom:14px">※ fee 필드(기장·고문·성실 월정수수료)에 적용됩니다.</div>
+      <div style="display:flex;gap:8px">
+        <button onclick="applyBulkFeeIncrease()" style="flex:1;padding:10px;border-radius:8px;border:none;background:#9c27b0;color:#fff;font-weight:700;cursor:pointer;font-family:inherit">인상 적용</button>
+        <button onclick="closeModal()" style="padding:10px 16px;border-radius:8px;border:1.5px solid #e0e0e0;background:#f5f5f5;cursor:pointer;font-family:inherit">취소</button>
+      </div>
+    </div>
+  </div>`);
+}
+
+function applyBulkFeeIncrease() {
+  const rate = Number(document.getElementById('bulk-fee-rate')?.value)||0;
+  if (!rate || rate <= 0) { toast('인상률을 입력하세요', 'warning'); return; }
+  const ids = G.selectedClients || [];
+  let cnt = 0;
+  for (const id of ids) {
+    const c = G.clients.find(x=>x.id===id);
+    if (!c) continue;
+    const oldFee = c.fee || 0;
+    if (!oldFee) continue;
+    c.fee = Math.round(oldFee * (1 + rate/100));
+    cnt++;
+  }
+  saveToLS();
+  G.selectedClients = [];
+  G.bulkMode = false;
+  closeModal();
+  renderClients();
+  toast(`${cnt}개 거래처 수수료 ${rate}% 인상 완료`, 'success');
 }
 
 
@@ -5958,6 +6168,7 @@ function renderFees() {
   <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
     <button onclick="openBulkInvoice()" style="padding:8px 16px;border-radius:10px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">🖨 일괄 청구서 발행</button>
     <button onclick="openBulkReminder()" style="padding:8px 16px;border-radius:10px;border:1.5px solid #ff9800;background:#fff3e0;color:#e65100;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">📨 미수금 일괄 안내문</button>
+    <button onclick="openUnpaidSMSBuilder()" style="padding:8px 16px;border-radius:10px;border:1.5px solid #ab47bc;background:#f3e5f5;color:#6a1b9a;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">💬 미수금 문자 생성</button>
   </div>
   `;
 }
@@ -9218,7 +9429,7 @@ function importCorp26DataV1() {
   saveToLS();
   const msg = `26년 법인세 데이터 입력 완료: ${matched}개 매칭` +
     (unmatched.length ? ` / 미매칭 ${unmatched.length}개: ${unmatched.slice(0,5).join(', ')}${unmatched.length>5?'…':''}` : '');
-  toast(msg, unmatched.length ? 'warning' : 'success', 8000);
+  toast(msg, unmatched.length ? 'warning' : 'success', 3000);
   localStorage.setItem('tm_importCorp26V1','1');
 }
 
@@ -9320,7 +9531,7 @@ function importCorp26DataV2() {
   saveToLS();
   const msg2 = `26년 법인세 추가 완료: 기존 ${matched}개 매핑, 신규 ${created}개 등록` +
     (failed.length ? ` / 실패: ${failed.join(', ')}` : '');
-  toast(msg2, failed.length ? 'warning' : 'success', 8000);
+  toast(msg2, failed.length ? 'warning' : 'success', 3000);
   localStorage.setItem('tm_importCorp26V2','1');
 }
 
@@ -9633,6 +9844,7 @@ async function loadFromFirebase() {
         G.income26Unmatched = JSON.parse(localStorage.getItem('tm_income26Unmatched')||'[]');
         const sjsp = localStorage.getItem('tm_julgaeSelectedPeriods'); if(sjsp) G.julgaeSelectedPeriods = JSON.parse(sjsp);
         const sjsy = localStorage.getItem('tm_julgaeSelectedYears'); if(sjsy) G.julgaeSelectedYears = JSON.parse(sjsy);
+        const _pp = localStorage.getItem('tm_pinnedPeriods'); if(_pp) G.pinnedPeriods = JSON.parse(_pp);
         saveToLS(); // Firebase에 업로드
       } else {
         const json = await decompressB64(CLIENTS_B64);
@@ -9674,6 +9886,7 @@ async function loadFromFirebase() {
     G.income26Unmatched = JSON.parse(localStorage.getItem('tm_income26Unmatched')||'[]');
     const _sjsp = localStorage.getItem('tm_julgaeSelectedPeriods'); if(_sjsp) G.julgaeSelectedPeriods = JSON.parse(_sjsp);
     const _sjsy = localStorage.getItem('tm_julgaeSelectedYears'); if(_sjsy) G.julgaeSelectedYears = JSON.parse(_sjsy);
+    const _pp2 = localStorage.getItem('tm_pinnedPeriods'); if(_pp2) G.pinnedPeriods = JSON.parse(_pp2);
   }
   // Apply dark mode if saved
   if (localStorage.getItem('tm_darkMode')) { G.darkMode=true; document.body.classList.add('dark-mode'); }
