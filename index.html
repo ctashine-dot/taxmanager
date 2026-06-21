@@ -4202,6 +4202,72 @@ function toggleJulgaeYear(yr) {
   renderJulgae();
 }
 
+
+function openIncomeGroupLink(clientId) {
+  const client = G.clients.find(c => c.id === clientId);
+  if (!client) return;
+  const curKey = client.incomeGroupKey || '';
+  const ns2 = s => (s||'').replace(/\s+/g,'').toLowerCase();
+  const modal = document.getElementById('modal-container');
+  const renderResults = (q) => {
+    const results = q
+      ? G.clients.filter(c => c.id !== clientId && c.status !== '해지' && c.status !== '폐업' &&
+          (ns2(c.name).includes(ns2(q)) || ns2(c.rep||'').includes(ns2(q)))).slice(0,12)
+      : [];
+    const el = document.getElementById('iglink-results');
+    if (!el) return;
+    el.innerHTML = (!results.length&&q)?'<div style="color:#aaa;text-align:center;padding:12px">검색 결과 없음</div>':
+      results.map(tc => {
+        const already = tc.incomeGroupKey && tc.incomeGroupKey===curKey;
+        return `<div onclick="linkIncomeGroup(${clientId},${tc.id});closeModal()" style="padding:9px 12px;border-radius:8px;cursor:pointer;border:1px solid ${already?'#e1bee7':'#f0f0f0'};margin-bottom:4px;background:${already?'#f3e5f5':'#fafbff'}" onmouseover="this.style.background='#e8f0fe'" onmouseout="this.style.background='${already?'#f3e5f5':'#fafbff'}'">
+          <div style="font-weight:700;font-size:13px">${esc(tc.name)}${already?'<span style="font-size:10px;color:#7b1fa2;margin-left:6px">✓ 이미 같은 그룹</span>':''}</div>
+          <div style="font-size:11px;color:#888">${esc(tc.rep||'-')} · ${getManagers(tc).join(', ')||'-'}${tc.incomeGroupKey&&!already?' <span style="color:#7b1fa2">[그룹:'+esc(tc.incomeGroupKey)+']</span>':''}</div>
+        </div>`;
+      }).join('');
+  };
+  modal.innerHTML = `
+  <div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)closeModal()">
+    <div style="background:#fff;border-radius:16px;padding:24px;width:min(480px,95vw);max-height:85vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.25)">
+      <div style="font-size:16px;font-weight:800;margin-bottom:4px">👤 개인 그룹 연결</div>
+      <div style="font-size:12px;color:#888;margin-bottom:14px">${esc(client.name)} (${esc(client.rep||'')}) — 동일인의 다른 사업체와 연결합니다</div>
+      ${curKey?`<div style="margin-bottom:12px;padding:8px 12px;background:#f3e5f5;border-radius:8px;font-size:12px;color:#6a1b9a;display:flex;justify-content:space-between;align-items:center">
+        <span>현재 그룹 키: <b>${esc(curKey)}</b></span>
+        <button onclick="unlinkIncomeGroup(${clientId});closeModal()" style="padding:3px 10px;border-radius:6px;border:1px solid #e53935;background:#ffebee;color:#e53935;cursor:pointer;font-family:inherit;font-size:11px">그룹 해제</button>
+      </div>`:''}
+      <input id="iglink-q" type="text" placeholder="거래처명 또는 대표자 검색..."
+        oninput="(function(){const v=document.getElementById('iglink-q').value;window._iglinkRender&&window._iglinkRender(v);})()"
+        style="width:100%;padding:9px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:10px">
+      <div id="iglink-results" style="max-height:240px;overflow-y:auto"></div>
+      <button onclick="closeModal()" style="margin-top:12px;width:100%;padding:10px;border-radius:10px;border:1px solid #e0e0e0;background:#f5f5f5;cursor:pointer;font-family:inherit;font-size:13px">닫기</button>
+    </div>
+  </div>`;
+  window._iglinkRender = renderResults;
+  renderResults('');
+  setTimeout(()=>document.getElementById('iglink-q')?.focus(), 80);
+}
+function linkIncomeGroup(clientAId, clientBId) {
+  const a = G.clients.find(c => c.id === clientAId);
+  const b = G.clients.find(c => c.id === clientBId);
+  if (!a || !b) return;
+  const key = a.incomeGroupKey || b.incomeGroupKey || ('pgk_' + clientAId);
+  const oldKey = (a.incomeGroupKey && a.incomeGroupKey !== key) ? a.incomeGroupKey
+               : (b.incomeGroupKey && b.incomeGroupKey !== key) ? b.incomeGroupKey : null;
+  if (oldKey) G.clients.forEach(c => { if (c.incomeGroupKey === oldKey) c.incomeGroupKey = key; });
+  a.incomeGroupKey = key;
+  b.incomeGroupKey = key;
+  saveToLS();
+  renderJulgae();
+  toast(`${esc(a.name)}과 ${esc(b.name)} 개인 그룹 연결 완료`, 'success', 3000);
+}
+function unlinkIncomeGroup(clientId) {
+  const c = G.clients.find(x => x.id === clientId);
+  if (!c) return;
+  c.incomeGroupKey = '';
+  saveToLS();
+  renderJulgae();
+  toast('개인 그룹 해제됨', 'info', 2000);
+}
+
 function renderJulgae() {
   const periods = G.periods;
   const idx = Math.min(G.julgaePeriodIdx, Math.max(0, periods.length - 1));
@@ -4353,7 +4419,7 @@ function renderJulgae() {
   ]);
 
   // 주민번호/법인등록번호 기준 그룹화 (소득세·법인세·성실·사업장 유형)
-  const _jGrpNorm = c => (c.jumin||'').replace(/[-\s]/g,'');
+  const _jGrpNorm = c => c.incomeGroupKey || (c.jumin||'').replace(/[-\s]/g,'');
   const renderItems = [];
   const _pushClient = (c, opts={}) => {
     if (_needsSep) {
@@ -4771,8 +4837,13 @@ function renderJulgae() {
         </td>
         <td style="text-align:center;padding:4px;${hc['j_link']?'display:none':''}">
           ${item.isGroupChild
-            ?`<button onclick="event.stopPropagation();removeFromJulgaeGroup('${pKey2}',${c.id})" style="font-size:11px;padding:2px 7px;border-radius:6px;border:1.5px solid #e53935;background:#ffebee;color:#e53935;cursor:pointer;font-family:inherit" title="이 거래처를 목록에서 제거">✕</button>`
-            :(()=>{const lk=(G.julgaeLinks||{})[pKey2+'_'+c.id];return lk?`<a href="${esc(lk)}" target="_blank" title="${esc(lk)}" style="font-size:14px;text-decoration:none">🔗</a><button onclick="event.stopPropagation();openJulgaeLink('${pKey2}',${c.id})" style="font-size:10px;padding:1px 4px;border:none;background:none;cursor:pointer;color:#888" title="링크 수정">✎</button>`:`<button onclick="event.stopPropagation();openJulgaeLink('${pKey2}',${c.id})" style="font-size:11px;padding:2px 6px;border-radius:5px;border:1px solid #e0e0e0;background:#f9f9f9;cursor:pointer;font-family:inherit;color:#aaa">+</button>`;})()
+            ?`<div style="display:flex;gap:2px;justify-content:center">${c.incomeGroupKey?`<button onclick="event.stopPropagation();unlinkIncomeGroup(${c.id})" style="font-size:11px;padding:2px 7px;border-radius:6px;border:1.5px solid #e53935;background:#ffebee;color:#e53935;cursor:pointer;font-family:inherit" title="개인 그룹 해제">✕</button>`:`<button onclick="event.stopPropagation();removeFromJulgaeGroup('${pKey2}',${c.id})" style="font-size:11px;padding:2px 7px;border-radius:6px;border:1.5px solid #e53935;background:#ffebee;color:#e53935;cursor:pointer;font-family:inherit" title="리스트에서 제거">✕</button>`}</div>`
+            :(()=>{
+              const lk=(G.julgaeLinks||{})[pKey2+'_'+c.id];
+              const linkBtn=lk?`<a href="${esc(lk)}" target="_blank" title="${esc(lk)}" style="font-size:14px;text-decoration:none">🔗</a><button onclick="event.stopPropagation();openJulgaeLink('${pKey2}',${c.id})" style="font-size:10px;padding:1px 4px;border:none;background:none;cursor:pointer;color:#888" title="링크 수정">✎</button>`:`<button onclick="event.stopPropagation();openJulgaeLink('${pKey2}',${c.id})" style="font-size:11px;padding:2px 6px;border-radius:5px;border:1px solid #e0e0e0;background:#f9f9f9;cursor:pointer;font-family:inherit;color:#aaa">+</button>`;
+              const grpBtn=(isIncomeType||isSajupType)?`<button onclick="event.stopPropagation();openIncomeGroupLink(${c.id})" style="font-size:11px;padding:2px 5px;border-radius:5px;border:1px solid ${c.incomeGroupKey?'#7b1fa2':'#e0e0e0'};background:${c.incomeGroupKey?'#f3e5f5':'#f9f9f9'};cursor:pointer;font-family:inherit;color:${c.incomeGroupKey?'#6a1b9a':'#aaa'}" title="개인 그룹으로 묶기">👤</button>`:'';
+              return `<div style="display:flex;gap:2px;justify-content:center">${linkBtn}${grpBtn}</div>`;
+            })()
           }
         </td>
       </tr>`;
