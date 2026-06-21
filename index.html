@@ -4475,6 +4475,7 @@ function renderJulgae() {
     else if (_jSort === 'status')   d = _statusScore(a) - _statusScore(b);
     else if (_jSort === 'fee')      d = _jFeeSum(b) - _jFeeSum(a);
     else if (_jSort === 'contractDate') d = (a.contractDate||'').localeCompare(b.contractDate||'');
+    else if (_jSort === 'rep') d = (a.rep||'').localeCompare(b.rep||'', 'ko');
     else d = a.name.localeCompare(b.name, 'ko');
     return d !== 0 ? _jDir * d : a.name.localeCompare(b.name, 'ko');
   });
@@ -4802,6 +4803,7 @@ function renderJulgae() {
     <span style="font-size:12px;color:#888;font-weight:600">정렬:</span>
     <select onchange="G.julgaeSort=this.value;try{localStorage.setItem('tm_uiPrefs',JSON.stringify({julgaeSort:G.julgaeSort,julgaeSortDir:G.julgaeSortDir}))}catch(e){}renderJulgae()" style="font-size:12px;padding:3px 8px;border-radius:6px;border:1px solid #e0e0e0;font-family:inherit;cursor:pointer">
       <option value="name" ${(G.julgaeSort||'name')==='name'?'selected':''}>거래처명</option>
+      <option value="rep" ${G.julgaeSort==='rep'?'selected':''}>대표자</option>
       <option value="taxType" ${G.julgaeSort==='taxType'?'selected':''}>법인/개인</option>
       <option value="manager" ${G.julgaeSort==='manager'?'selected':''}>담당자별</option>
       <option value="contract" ${G.julgaeSort==='contract'?'selected':''}>수임내용별</option>
