@@ -1409,21 +1409,23 @@ function _renderDashboardInner() {
   const monthlyTotal     = monthlyClients.reduce((a,c)=>a+(c.fee||0),0);
   const monthlyCollected = monthlyClients.filter(c=>G.monthlyFees[c.id]?.[thisYM]).reduce((a,c)=>a+(c.fee||0),0);
 
-  // 신고 수수료 (전체 누계) — v.fee 없으면 거래처 기본 수수료(feeJojung/feeSingo) 폴백
+  // 신고 수수료 (전체 누계) — 수임된 모든 거래처 기준(수임목록 기준, julgae 엔트리 없어도 기본수수료 포함)
   let filingTotal=0, filingCollected=0;
   const filingUnpaidClients = [];
-  for (const pKey of Object.keys(G.julgae)) {
-    const period2 = G.periods.find(p=>p.id===pKey);
+  for (const period2 of G.periods) {
+    const pKey = period2.id;
     const fKey2 = REPORT_FEE_FIELD[(period2?.reportType||'')] || 'fee';
-    const pData = G.julgae[pKey];
-    for (const [cidStr,v] of Object.entries(pData)) {
-      if (!v) continue;
-      const cl = G.clients.find(c=>c.id===Number(cidStr));
-      const fee2 = v.fee || (cl?.[fKey2]||0);
+    const pData = G.julgae[pKey] || {};
+    const enrolled = period2.enrolled || [];
+    for (const clientId of enrolled) {
+      const cl = G.clients.find(c=>c.id===clientId);
+      if (!cl) continue;
+      const v = pData[clientId] || {};
+      const fee2 = v.fee || (cl[fKey2]||0);
       if (!fee2) continue;
       filingTotal += fee2;
       if (v.s) filingCollected += fee2;
-      else if (cl) filingUnpaidClients.push({client:cl, fee:fee2, period:period2});
+      else filingUnpaidClients.push({client:cl, fee:fee2, period:period2});
     }
   }
 
@@ -9153,6 +9155,48 @@ function enrollAllIncome26() {
   if (added.length > 0) toast(`종소세 26년 신고리스트에 ${added.length}개 업체 추가됨 (총 ${incPeriod.enrolled.length}개)`, 'success', 4000);
 }
 
+function removeDuplicateClientsV1() {
+  if (localStorage.getItem('tm_removeDuplicatesV1')) return;
+  // name+rep 기준 중복 탐지: 낮은 ID(원본) 유지, 높은 ID(마이그레이션 추가분) 제거
+  const seen = new Map(); // "name|||rep" → 원본 id
+  const sorted = [...G.clients].sort((a,b)=>(a.id||0)-(b.id||0));
+  const toRemove = [];
+  for (const c of sorted) {
+    const key = (c.name||'').trim()+'|||'+(c.rep||'').trim();
+    if (seen.has(key)) {
+      toRemove.push(c.id);
+    } else {
+      seen.set(key, c.id);
+    }
+  }
+  if (toRemove.length === 0) { localStorage.setItem('tm_removeDuplicatesV1','1'); return; }
+  for (const dupId of toRemove) {
+    const dup = G.clients.find(c=>c.id===dupId);
+    if (!dup) continue;
+    const origId = seen.get((dup.name||'').trim()+'|||'+(dup.rep||'').trim());
+    // 중복 거래처의 julgae 데이터를 원본으로 이전 (원본에 없을 때만)
+    for (const pKey of Object.keys(G.julgae)) {
+      if (G.julgae[pKey][dupId]) {
+        if (!G.julgae[pKey][origId]) G.julgae[pKey][origId] = G.julgae[pKey][dupId];
+        delete G.julgae[pKey][dupId];
+      }
+    }
+    // 신고리스트 enrolled에서 제거 / 원본 ID로 교체
+    G.periods.forEach(p => {
+      if (!p.enrolled) return;
+      const idx2 = p.enrolled.indexOf(dupId);
+      if (idx2 >= 0) {
+        p.enrolled.splice(idx2, 1);
+        if (!p.enrolled.includes(origId)) p.enrolled.push(origId);
+      }
+    });
+  }
+  const before = G.clients.length;
+  G.clients = G.clients.filter(c => !toRemove.includes(c.id));
+  const removed = before - G.clients.length;
+  if (removed > 0) { saveToLS(); toast(`중복 거래처 ${removed}개 제거 완료`, 'success', 5000); }
+  localStorage.setItem('tm_removeDuplicatesV1','1');
+}
 
 function createUnmatchedV1() {
   if (localStorage.getItem('tm_createUnmatchedV1')) return;
@@ -9470,6 +9514,7 @@ async function loadFromFirebase() {
     migrate26IncomeTax();
     enrollAllIncome26(); // V2: 개인 면세 포함
     createUnmatchedV1();
+    removeDuplicateClientsV1();
     if (!localStorage.getItem('tm_contractDateFillV1')) {
       let filled = 0;
       G.clients.forEach(c => { if (!c.contractDate) { c.contractDate = '2020-01-01'; filled++; } });
