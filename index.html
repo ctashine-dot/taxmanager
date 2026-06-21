@@ -1727,6 +1727,10 @@ const CLIENT_PAGE_SIZE = 50;
 function renderClients() {
   const list = filteredClients();
   const terminated = G.clients.filter(c=>c.status==='해지'||c.status==='폐업').length;
+  // _filterJuminGroups hides group sub-members from the list; count them to show real total
+  const hiddenInGroups = Object.values(window._juminGroups||{}).reduce((a,v)=>a+v.length,0)
+                       + Object.values(window._relatedGroups||{}).reduce((a,v)=>a+v.length,0);
+  const totalCount = list.length + hiddenInGroups;
   const totalPages = Math.max(1, Math.ceil(list.length / CLIENT_PAGE_SIZE));
   if (G.clientPage >= totalPages) G.clientPage = totalPages - 1;
   const pageList = list.slice(G.clientPage * CLIENT_PAGE_SIZE, (G.clientPage + 1) * CLIENT_PAGE_SIZE);
@@ -1772,7 +1776,7 @@ function renderClients() {
       const resetBtn = (sf!=='d'||sd!=='asc') ? `<button onclick="G.clientSort={field:'d',dir:'asc'};G.clientPage=0;renderClients()" style="padding:4px 7px;border-radius:16px;font-size:10px;cursor:pointer;font-family:inherit;background:#fdecea;color:#c62828;border:1.5px solid #ef9a9a" title="정렬 초기화">✕</button>` : '';
       return `<div style="display:contents">${btns}${resetBtn}</div>`;
     })()}
-    <div style="font-size:12px;color:#888;white-space:nowrap;margin-left:4px">총 ${list.length}개 (${G.clientPage+1}/${totalPages})</div>
+    <div style="font-size:12px;color:#888;white-space:nowrap;margin-left:4px">총 ${totalCount}개 (${G.clientPage+1}/${totalPages})</div>
     ${sectionToggleBtn('clients-list')}
   </div>
 
