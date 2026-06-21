@@ -866,7 +866,7 @@ function getManagers(c) {
 }
 function getUnpaidStreak(c, currentYM) {
   if (!c.fee) return 0;
-  const UNPAID_START = '2026-06';
+  const UNPAID_START = '2026-01';
   const adjYM = (ym, delta) => {
     const [y,m] = ym.split('-').map(Number);
     const d = new Date(y, m-1+delta, 1);
@@ -884,7 +884,7 @@ function getUnpaidStreak(c, currentYM) {
   return count;
 }
 function isMonthCollected(clientId, ym) {
-  return ym < '2026-06' || !!(G.monthlyFees[clientId]?.[ym]);
+  return ym < '2026-01' || !!(G.monthlyFees[clientId]?.[ym]);
 }
 function handleActualAmount(clientId, ym, input) {
   const actualAmt = parseInt(String(input.value).replace(/[^0-9]/g,'')) || 0;
@@ -1969,7 +1969,7 @@ function renderClients() {
       const groupSub = inGroup ? `<span style="font-size:10px;color:${gc};font-weight:600;margin-left:4px">👥 ${esc(groupLabel)}</span>` : '';
       return `<tr class="client-row" onpointerdown="startLongPress(event,${c.id})" onpointermove="moveLongPress(event)" onpointerup="cancelLongPress()" onpointercancel="cancelLongPress()" oncontextmenu="event.preventDefault()" onclick="if(window._lpFired){window._lpFired=false}else{toggleExpand(${c.id})}" style="${inGroup?`border-left:3px solid ${gc}`:''}" >
         ${G.bulkMode?`<td onclick="event.stopPropagation();toggleClientSelect(${c.id})" style="width:32px;text-align:center;cursor:pointer"><input type="checkbox" ${(G.selectedClients||[]).includes(c.id)?'checked':''} style="width:16px;height:16px;cursor:pointer" onclick="event.stopPropagation();toggleClientSelect(${c.id})"></td>`:''}
-        <td><div class="td-name">${(()=>{const risk=clientRiskLevel(c);return risk==='red'?'<span title="위험" style="color:#e53935;margin-right:4px">●</span>':risk==='yellow'?'<span title="주의" style="color:#f57c00;margin-right:4px">●</span>':''})()}${groupDot}${esc(c.name)}<button onclick="event.stopPropagation();openClientNotes(${c.id})" style="margin-left:4px;padding:1px 5px;border-radius:5px;border:1px solid #e0e0e0;background:#f8f9ff;font-size:11px;cursor:pointer;vertical-align:middle" title="메모/이력">📝${(G.clientNotes||{})[c.id]?.length?` ${G.clientNotes[c.id].length}`:''}</button><button onclick="event.stopPropagation();toggleFavorite(${c.id})" style="margin-left:2px;padding:1px 4px;border-radius:5px;border:1px solid #e0e0e0;background:#fff;font-size:12px;cursor:pointer;vertical-align:middle" title="즐겨찾기">${(G.favorites||[]).includes(c.id)?'⭐':'☆'}</button>${isJuminLead ? `<button onclick="event.stopPropagation();toggleJuminGroup(${c.id})" id="jumin-btn-${c.id}" style="margin-left:4px;padding:1px 6px;border-radius:10px;background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;font-size:10px;font-weight:700;cursor:pointer;vertical-align:middle" title="같은 사업주의 다른 사업장">▲ 접기</button>` : ''}${isRelatedLead ? `<button onclick="event.stopPropagation();toggleRelatedGroup(${c.id})" id="related-btn-${c.id}" style="margin-left:4px;padding:1px 6px;border-radius:10px;background:#ede7f6;color:#6a1b9a;border:1px solid #ce93d8;font-size:10px;font-weight:700;cursor:pointer;vertical-align:middle" title="관계사 그룹">▲ 접기</button>` : ''}</div>${(c.bizType||c.bizCode||groupSub)?`<div class="td-sub">${c.bizType?esc(c.bizType):''}${c.bizCode?` <span style="color:#aaa;font-size:10px">[${esc(c.bizCode)}]</span>`:''}${groupSub}</div>`:''}</td>
+        <td><div class="td-name">${(()=>{const risk=clientRiskLevel(c);return risk==='red'?'<span title="위험" style="color:#e53935;margin-right:4px">●</span>':risk==='yellow'?'<span title="주의" style="color:#f57c00;margin-right:4px">●</span>':''})()}${groupDot}${esc(c.name)}<button onclick="event.stopPropagation();openQuickMemo(${c.id}, this)" style="margin-left:4px;padding:1px 5px;border-radius:5px;border:1px solid #e0e0e0;background:#f8f9ff;font-size:11px;cursor:pointer;vertical-align:middle" title="메모/이력">📝${(G.clientNotes||{})[c.id]?.length?` ${G.clientNotes[c.id].length}`:''}</button><button onclick="event.stopPropagation();toggleFavorite(${c.id})" style="margin-left:2px;padding:1px 4px;border-radius:5px;border:1px solid #e0e0e0;background:#fff;font-size:12px;cursor:pointer;vertical-align:middle" title="즐겨찾기">${(G.favorites||[]).includes(c.id)?'⭐':'☆'}</button>${isJuminLead ? `<button onclick="event.stopPropagation();toggleJuminGroup(${c.id})" id="jumin-btn-${c.id}" style="margin-left:4px;padding:1px 6px;border-radius:10px;background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;font-size:10px;font-weight:700;cursor:pointer;vertical-align:middle" title="같은 사업주의 다른 사업장">▲ 접기</button>` : ''}${isRelatedLead ? `<button onclick="event.stopPropagation();toggleRelatedGroup(${c.id})" id="related-btn-${c.id}" style="margin-left:4px;padding:1px 6px;border-radius:10px;background:#ede7f6;color:#6a1b9a;border:1px solid #ce93d8;font-size:10px;font-weight:700;cursor:pointer;vertical-align:middle" title="관계사 그룹">▲ 접기</button>` : ''}</div>${(c.bizType||c.bizCode||groupSub)?`<div class="td-sub">${c.bizType?esc(c.bizType):''}${c.bizCode?` <span style="color:#aaa;font-size:10px">[${esc(c.bizCode)}]</span>`:''}${groupSub}</div>`:''}</td>
         <td data-label="대표자" style="font-size:12px;color:#444;${hc['c_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
         <td data-label="수임내용" style="${hc['c_dealType']?'display:none':''}">${em?iSel('dealType',DEAL_TYPES.slice(1),getDealTypes(c)[0]):getDealTypes(c).map(d=>dealBadge(d)).join('')}</td>
         <td data-label="인격" style="${hc['c_taxType']?'display:none':''}">${em?iSel('taxType',TAX_TYPES.slice(1),c.taxType):badge(c.taxType,c.taxType==='법인'?'blue':'gray')}</td>
@@ -3763,6 +3763,14 @@ window.validateBizNo = function(val, input) {
   msg.innerHTML = valid
     ? '<span style="color:#2e7d32">✓ 유효한 번호</span>'
     : '<span style="color:#c62828">✗ 유효하지 않은 번호</span>';
+  // Real-time duplicate check against existing clients
+  if (digits.length === 10) {
+    const editingId = window._formData?.id;
+    const dup = G.clients.find(cl => cl.id !== editingId && (cl.bizNo||'').replace(/\D/g,'') === digits);
+    if (dup && msg) {
+      msg.innerHTML += `<span style="color:#e65100;font-size:11px;display:block;margin-top:2px">⚠ 이미 등록된 업체: ${esc(dup.name)}</span>`;
+    }
+  }
 };
 
 window.addFormTag = function(e) {
@@ -4793,6 +4801,7 @@ function renderJulgae() {
     <button class="btn-sm" style="background:#e0f2f1;color:#00695c;border:1.5px solid #80cbc4" onclick="copyPeriod('${pKey}')">📋 복사</button>
     <button class="btn-sm" style="background:${(G.periodNotes||{})[pKey]?'#fff3e0':'#f5f5f5'};color:${(G.periodNotes||{})[pKey]?'#e65100':'#888'};border:1.5px solid ${(G.periodNotes||{})[pKey]?'#ffcc80':'#e0e0e0'}" onclick="openPeriodNote('${pKey}')">📝 특이사항${(G.periodNotes||{})[pKey]?' ✓':''}</button>
     <button class="btn-sm" style="background:${G.julgaeKanban?'#e8f0fe':'#f5f5f5'};color:${G.julgaeKanban?'#4f8ef7':'#555'};border:1.5px solid ${G.julgaeKanban?'#4f8ef7':'#e0e0e0'}" onclick="G.julgaeKanban=!G.julgaeKanban;renderJulgae()">📋 칸반뷰</button>
+    <button class="btn-sm" style="background:#f5f5f5;color:#555;border:1.5px solid #e0e0e0" onclick="openPeriodComparison()">📊 기간 비교</button>
     <button class="btn-sm" style="background:${G.julgaeBulkMode?'#e8f5e9':'#f5f5f5'};color:${G.julgaeBulkMode?'#2e7d32':'#888'};border:1.5px solid ${G.julgaeBulkMode?'#43a047':'#e0e0e0'}" onclick="G.julgaeBulkMode=!G.julgaeBulkMode;G.julgaeBulkSelected=[];renderJulgae()">☑ 일괄처리${G.julgaeBulkMode?' ON':''}</button>
     <button class="btn-sm" style="background:#e8f0fe;color:#1565c0;border:1.5px solid #90caf9" onclick="openWithholdingModal()">📋 원천세</button>
     <button class="btn-sm" style="background:${G.julgaeKeepFilters?'#fff8e1':'#f5f5f5'};color:${G.julgaeKeepFilters?'#e65100':'#888'};border:1.5px solid ${G.julgaeKeepFilters?'#ffcc80':'#e0e0e0'}" onclick="G.julgaeKeepFilters=!G.julgaeKeepFilters;renderJulgae()" title="기간 전환 시 현재 필터를 유지합니다">🔒 필터 유지${G.julgaeKeepFilters?' ON':''}</button>
@@ -4806,20 +4815,33 @@ function renderJulgae() {
   ${jChips?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">${jChips}</div>`:''}
 
   ${G.julgaeKanban && period ? `
-  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px">
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:14px">
     ${(()=>{
       const cols = [
-        {label:'자료수령 대기', color:'#e53935', filter: c => !julgaeVal(pKey2,c.id).d},
-        {label:'기장 진행중',   color:'#f57c00', filter: c => { const v=julgaeVal(pKey2,c.id); return v.d && !v.b; }},
-        {label:'결재 대기',     color:'#7b1fa2', filter: c => { const v=julgaeVal(pKey2,c.id); return v.b && !v.a; }},
-        {label:'완료',          color:'#2e7d32', filter: c => julgaeVal(pKey2,c.id).a},
+        {label:'자료수령 대기', color:'#e53935', advField:'d', advLabel:'자료수령 완료', filter: c => !julgaeVal(pKey2,c.id).d},
+        {label:'기장 진행중',   color:'#f57c00', advField:'b', advLabel:'기장 완료',   filter: c => { const v=julgaeVal(pKey2,c.id); return v.d && !v.b; }},
+        {label:'결재 대기',     color:'#7b1fa2', advField:'a', advLabel:'결재 완료',   filter: c => { const v=julgaeVal(pKey2,c.id); return v.b && !v.a; }},
+        {label:'수금 대기',     color:'#1565c0', advField:'s', advLabel:'수금 완료',   filter: c => { const v=julgaeVal(pKey2,c.id); return v.a && !v.s; }},
+        {label:'완료',          color:'#2e7d32', advField:null, advLabel:null,         filter: c => julgaeVal(pKey2,c.id).s},
       ];
       return cols.map(col=>{
         const colClients = clients.filter(col.filter);
         return `<div style="background:#f8f9ff;border-radius:14px;padding:12px">
           <div style="font-weight:700;font-size:13px;color:${col.color};margin-bottom:8px;border-bottom:2px solid ${col.color};padding-bottom:6px">${col.label} (${colClients.length})</div>
           <div style="display:flex;flex-direction:column;gap:6px">
-            ${colClients.map(c=>`<div onclick="openClientNotes(${c.id})" style="background:#fff;border-radius:10px;padding:10px 12px;box-shadow:0 1px 3px rgba(0,0,0,.07);font-size:13px;font-weight:600;cursor:pointer;border-left:3px solid ${col.color}">${esc(c.name)}<div style="font-size:11px;font-weight:400;color:#888;margin-top:2px">${esc(c.rep||'')}</div></div>`).join('')}
+            ${colClients.map(c => {
+  const v = julgaeVal(pKey2, c.id);
+  const advField = col.advField;
+  const feeAmt = v.fee ? v.fee.toLocaleString()+'원' : '';
+  return `<div style="background:#fff;border-radius:10px;padding:10px 12px;box-shadow:0 1px 3px rgba(0,0,0,.07);border-left:3px solid ${col.color}">
+    <div style="font-size:13px;font-weight:600;cursor:pointer" onclick="openClientNotes(${c.id})">${esc(c.name)}</div>
+    <div style="font-size:11px;color:#888;margin-top:1px">${esc(c.rep||'')}${feeAmt?` · ${feeAmt}`:''}</div>
+    <div style="display:flex;gap:4px;margin-top:7px;flex-wrap:wrap">
+      ${[['d','자료'],['b','기장'],['a','결재'],['s','수금']].map(([f,lbl])=>`<span onclick="event.stopPropagation();toggleJulgaeField('${pKey2}',${c.id},'${f}');renderJulgae()" style="font-size:10px;padding:2px 6px;border-radius:8px;cursor:pointer;border:1px solid ${v[f]?'#43a047':'#e0e0e0'};background:${v[f]?'#e8f5e9':'#f9f9f9'};color:${v[f]?'#2e7d32':'#aaa'};font-weight:600">${v[f]?'✓':''} ${lbl}</span>`).join('')}
+    </div>
+    ${advField ? `<button onclick="event.stopPropagation();toggleJulgaeField('${pKey2}',${c.id},'${advField}');renderJulgae()" style="margin-top:7px;width:100%;padding:4px;border-radius:6px;border:1px solid ${col.color};background:${col.color}15;color:${col.color};font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">→ ${col.advLabel}</button>` : ''}
+  </div>`;
+}).join('')}
           </div>
         </div>`;
       }).join('');
@@ -5897,7 +5919,7 @@ function renderFees() {
   const _fmMgrKeys = Object.keys(_fmByMgr).sort((a,b)=>a.localeCompare(b,'ko'));
   const _genFeeRow = c => {
     const collected = isMonthCollected(c.id, ym);
-    const oldMonth = ym < '2026-06';
+    const oldMonth = ym < '2026-01';
     const feeHist = ((G.feeHistory||{})[c.id]||{})[ym];
     const streak = !collected ? getUnpaidStreak(c, ym) : 0;
     const streakBadge = streak >= 2
@@ -5964,7 +5986,7 @@ function renderFees() {
       const months = clientMonths(c);
       for (let i=1; i<=6; i++) {
         const checkYM = adjYM2(curYM, -i);
-        if (checkYM < '2026-06') continue;
+        if (checkYM < '2026-01') continue;
         if (!months.includes(checkYM)) continue;
         if (G.monthlyFees[c.id]?.[checkYM]) continue; // already collected
         if (i===1) { aging.m1.count++; aging.m1.total += c.fee||0; }
@@ -7633,7 +7655,7 @@ function openClientNotes(id) {
   const notes = (G.clientNotes||{})[id] || [];
   const feeHist = (G.feeChangeHistory||{})[id] || [];
   showModal(`<div style="max-width:520px">
-  <div class="modal-header"><h3>📝 ${esc(c.name)} — 메모/이력</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+  <div class="modal-header"><h3>📝 ${esc(c.name)} — 메모/이력</h3><div style="display:flex;gap:6px;align-items:center"><button onclick="closeModal();openClientFilingHistory(${id})" style="padding:4px 12px;background:#e8f0fe;color:#1565c0;border:1px solid #c5cae9;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">📋 신고이력</button><button class="close-btn" onclick="closeModal()">✕</button></div></div>
   <div class="modal-body">
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <div style="display:flex;flex-direction:column;gap:6px;flex:1">
@@ -7662,6 +7684,50 @@ function openClientNotes(id) {
     </div>` : ''}
   </div></div>`);
 }
+function openClientFilingHistory(clientId) {
+  const c = G.clients.find(x => x.id === clientId);
+  if (!c) return;
+  const periods = (G.periods || []).filter(p => (p.enrolled || []).includes(clientId));
+  const sorted = [...periods].sort((a,b) => (b.id||'').localeCompare(a.id||''));
+  const rows = sorted.map(p => {
+    const v = julgaeVal(p.id, clientId);
+    const statusDots = [
+      ['d','자료', v.d], ['b','기장', v.b], ['a','결재', v.a], ['s','수금', v.s]
+    ].map(([f,lbl,on]) => `<span style="font-size:10px;padding:2px 6px;border-radius:8px;border:1px solid ${on?'#43a047':'#e0e0e0'};background:${on?'#e8f5e9':'#f9f9f9'};color:${on?'#2e7d32':'#aaa'};font-weight:600">${on?'✓':''} ${lbl}</span>`).join(' ');
+    const fee = v.fee ? v.fee.toLocaleString()+'원' : '-';
+    const paid = v.paid ? v.paid.toLocaleString()+'원' : (v.s ? fee : '-');
+    return `<tr style="border-bottom:1px solid #f5f5f5" onclick="switchTab('julgae');setTimeout(()=>{document.querySelector('#jr-${clientId}')?.scrollIntoView({block:'center',behavior:'smooth'})},400);closeModal()">
+      <td style="padding:8px 10px;font-size:13px;font-weight:600;cursor:pointer;color:#1565c0">${esc(p.label||p.id)}</td>
+      <td style="padding:8px 10px;font-size:12px">${statusDots}</td>
+      <td style="padding:8px 10px;text-align:right;font-size:13px;color:#1565c0;font-weight:600">${fee}</td>
+      <td style="padding:8px 10px;text-align:right;font-size:13px;color:${v.s?'#2e7d32':'#aaa'}">${paid}</td>
+    </tr>`;
+  }).join('');
+  showModal(`<div style="max-width:620px">
+    <div class="modal-header"><h3>📋 ${esc(c.name)} — 신고이력</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      ${sorted.length === 0 ? '<div style="text-align:center;color:#aaa;padding:30px">신고이력이 없습니다</div>' : `
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr style="background:#f8f9ff;border-bottom:2px solid #e8eaf6">
+              <th style="padding:8px 10px;text-align:left;font-size:12px;color:#555">신고기간</th>
+              <th style="padding:8px 10px;text-align:left;font-size:12px;color:#555">진행상태</th>
+              <th style="padding:8px 10px;text-align:right;font-size:12px;color:#555">수수료</th>
+              <th style="padding:8px 10px;text-align:right;font-size:12px;color:#555">수금</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <div style="font-size:11px;color:#aaa;margin-top:10px;text-align:center">행 클릭 시 해당 신고결재 탭으로 이동합니다</div>`}
+      <div style="margin-top:14px;text-align:right">
+        <button onclick="closeModal();openClientNotes(${clientId})" style="padding:6px 16px;background:#f5f5f5;color:#555;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit">📝 메모/이력</button>
+        <button onclick="closeModal();openForm(${clientId})" style="margin-left:6px;padding:6px 16px;background:#4f8ef7;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit">✏ 편집</button>
+      </div>
+    </div>
+  </div>`);
+}
 function addClientNote(id) {
   const txt = (document.getElementById('note-input')||{}).value?.trim();
   if (!txt) return;
@@ -7677,6 +7743,103 @@ function deleteClientNote(clientId, noteId) {
   G.clientNotes[clientId] = G.clientNotes[clientId].filter(n=>n.id!==noteId);
   saveToLS();
   openClientNotes(clientId);
+}
+function openQuickMemo(clientId, btn) {
+  // Remove any existing quick memo popover
+  document.querySelectorAll('.quick-memo-pop').forEach(el => el.remove());
+  const c = G.clients.find(x => x.id === clientId);
+  if (!c) return;
+  const pop = document.createElement('div');
+  pop.className = 'quick-memo-pop';
+  pop.style.cssText = 'position:fixed;z-index:9000;background:#fff;border:1.5px solid #4f8ef7;border-radius:12px;padding:12px;box-shadow:0 4px 20px rgba(0,0,0,.18);width:280px';
+  const rect = btn.getBoundingClientRect();
+  const top = Math.min(rect.bottom + 4, window.innerHeight - 180);
+  const left = Math.min(rect.left, window.innerWidth - 296);
+  pop.style.top = top + 'px';
+  pop.style.left = left + 'px';
+  pop.innerHTML = `<div style="font-size:12px;font-weight:700;color:#4f8ef7;margin-bottom:6px">✎ ${esc(c.name)} 메모</div>
+    <textarea id="qm-ta" placeholder="메모 입력..." style="width:100%;box-sizing:border-box;height:72px;padding:7px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;font-family:inherit;resize:none"></textarea>
+    <div style="display:flex;gap:6px;margin-top:7px">
+      <button onclick="saveQuickMemo(${clientId})" style="flex:1;padding:6px;background:#4f8ef7;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">저장</button>
+      <button onclick="document.querySelectorAll('.quick-memo-pop').forEach(el=>el.remove())" style="padding:6px 12px;background:#f5f5f5;color:#555;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit">취소</button>
+      <button onclick="document.querySelectorAll('.quick-memo-pop').forEach(el=>el.remove());openClientNotes(${clientId})" style="padding:6px 10px;background:#f5f5f5;color:#888;border:1px solid #e0e0e0;border-radius:8px;font-size:11px;cursor:pointer;font-family:inherit" title="전체 이력 보기">📝</button>
+    </div>`;
+  document.body.appendChild(pop);
+  setTimeout(() => { document.getElementById('qm-ta')?.focus(); }, 50);
+  // Close on outside click
+  setTimeout(() => {
+    document.addEventListener('click', function _qmClose(e) {
+      if (!pop.contains(e.target) && e.target !== btn) {
+        pop.remove();
+        document.removeEventListener('click', _qmClose);
+      }
+    });
+  }, 100);
+}
+function saveQuickMemo(clientId) {
+  const txt = (document.getElementById('qm-ta')||{}).value?.trim();
+  if (!txt) { toast('메모를 입력해주세요', 'warning'); return; }
+  if (!G.clientNotes) G.clientNotes = {};
+  if (!G.clientNotes[clientId]) G.clientNotes[clientId] = [];
+  G.clientNotes[clientId].push({id: Date.now()+'', date: new Date().toLocaleString('ko-KR'), text: txt, reminder: ''});
+  saveToLS();
+  document.querySelectorAll('.quick-memo-pop').forEach(el => el.remove());
+  toast('메모가 저장되었습니다', 'success');
+  if (G.currentTab === 'clients') renderClients();
+}
+
+function openPeriodComparison() {
+  const periods = G.periods || [];
+  if (!periods.length) { toast('신고 기간이 없습니다', 'warning'); return; }
+  const sorted = [...periods].sort((a,b)=>(b.id||'').localeCompare(a.id||''));
+  const rows = sorted.slice(0, 20).map(p => {
+    const pData = G.julgae[p.id] || {};
+    const enrolled = p.enrolled || [];
+    const total = enrolled.length;
+    const feeSum = enrolled.reduce((s, cid) => s + (pData[cid]?.fee || 0), 0);
+    const paidSum = enrolled.reduce((s, cid) => {
+      const v = pData[cid] || {};
+      return s + (v.s ? (v.paid || v.fee || 0) : 0);
+    }, 0);
+    const unpaid = feeSum - paidSum;
+    const pct = feeSum ? Math.round(paidSum / feeSum * 100) : 0;
+    return { p, total, feeSum, paidSum, unpaid, pct };
+  });
+  const tableRows = rows.map(r => `
+    <tr style="border-bottom:1px solid #f0f0f0">
+      <td style="padding:8px 10px;font-size:13px;font-weight:600">${esc(r.p.label||r.p.id)}</td>
+      <td style="padding:8px 10px;text-align:right;font-size:13px">${r.total}개</td>
+      <td style="padding:8px 10px;text-align:right;font-size:13px;color:#1565c0;font-weight:700">${r.feeSum.toLocaleString()}원</td>
+      <td style="padding:8px 10px;text-align:right;font-size:13px;color:#2e7d32">${r.paidSum.toLocaleString()}원</td>
+      <td style="padding:8px 10px;text-align:right;font-size:13px;color:${r.unpaid>0?'#c62828':'#aaa'}">${r.unpaid>0?r.unpaid.toLocaleString()+'원':'-'}</td>
+      <td style="padding:8px 10px;text-align:center">
+        <div style="display:flex;align-items:center;gap:6px">
+          <div style="flex:1;height:8px;background:#f0f0f0;border-radius:4px;overflow:hidden"><div style="height:100%;width:${r.pct}%;background:${r.pct>=100?'#2e7d32':r.pct>=50?'#43a047':'#ef5350'};border-radius:4px"></div></div>
+          <span style="font-size:11px;font-weight:700;color:${r.pct>=100?'#2e7d32':r.pct>=50?'#388e3c':'#c62828'};min-width:30px">${r.pct}%</span>
+        </div>
+      </td>
+    </tr>`).join('');
+  showModal(`<div style="max-width:680px">
+    <div class="modal-header"><h3>📊 기간별 수수료 비교</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr style="background:#f8f9ff;border-bottom:2px solid #e8eaf6">
+              <th style="padding:8px 10px;text-align:left;font-size:12px;color:#555">기간</th>
+              <th style="padding:8px 10px;text-align:right;font-size:12px;color:#555">업체수</th>
+              <th style="padding:8px 10px;text-align:right;font-size:12px;color:#555">청구액</th>
+              <th style="padding:8px 10px;text-align:right;font-size:12px;color:#555">수금</th>
+              <th style="padding:8px 10px;text-align:right;font-size:12px;color:#555">미수금</th>
+              <th style="padding:8px 10px;text-align:center;font-size:12px;color:#555">수금률</th>
+            </tr>
+          </thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </div>
+      ${rows.length===0?'<div style="text-align:center;color:#aaa;padding:30px">데이터가 없습니다</div>':''}
+    </div>
+  </div>`);
 }
 
 // ══════════════════════════════════════════════════════
