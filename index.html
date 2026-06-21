@@ -1409,19 +1409,21 @@ function _renderDashboardInner() {
   const monthlyTotal     = monthlyClients.reduce((a,c)=>a+(c.fee||0),0);
   const monthlyCollected = monthlyClients.filter(c=>G.monthlyFees[c.id]?.[thisYM]).reduce((a,c)=>a+(c.fee||0),0);
 
-  // 신고 수수료 (전체 누계)
+  // 신고 수수료 (전체 누계) — v.fee 없으면 거래처 기본 수수료(feeJojung/feeSingo) 폴백
   let filingTotal=0, filingCollected=0;
   const filingUnpaidClients = [];
   for (const pKey of Object.keys(G.julgae)) {
+    const period2 = G.periods.find(p=>p.id===pKey);
+    const fKey2 = REPORT_FEE_FIELD[(period2?.reportType||'')] || 'fee';
     const pData = G.julgae[pKey];
     for (const [cidStr,v] of Object.entries(pData)) {
-      if (!v||!v.fee) continue;
-      filingTotal += v.fee;
-      if (v.s) filingCollected += v.fee;
-      else {
-        const cl = G.clients.find(c=>c.id===Number(cidStr));
-        if (cl) filingUnpaidClients.push({client:cl, fee:v.fee, period:G.periods.find(p=>p.id===pKey)});
-      }
+      if (!v) continue;
+      const cl = G.clients.find(c=>c.id===Number(cidStr));
+      const fee2 = v.fee || (cl?.[fKey2]||0);
+      if (!fee2) continue;
+      filingTotal += fee2;
+      if (v.s) filingCollected += fee2;
+      else if (cl) filingUnpaidClients.push({client:cl, fee:fee2, period:period2});
     }
   }
 
@@ -4453,7 +4455,7 @@ function renderJulgae() {
     - jTypeHideable.filter(k=>hc[k]).length
     - jSeongsiExtra.filter(k=>hc[k]).length;
   const feeFieldKey = REPORT_FEE_FIELD[rt] || 'fee';
-  const _jFeeSum    = c => { const v=julgaeVal(pKey2,c.id); return (v.fee||0)+(isSeongsiType?(v.feeSeongsi||0):0); };
+  const _jFeeSum    = c => { const v=julgaeVal(pKey2,c.id); const f=v.fee||(c[feeFieldKey]||0); return f+(isSeongsiType?(v.feeSeongsi||0):0); };
   const feeTotal    = clients.reduce((a,c) => a + _jFeeSum(c), 0);
   const feeCollected= clients.filter(c => julgaeVal(pKey2,c.id).s).reduce((a,c) => a + _jFeeSum(c), 0);
   // 정렬
