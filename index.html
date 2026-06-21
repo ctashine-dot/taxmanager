@@ -7877,7 +7877,7 @@ async function brGenOne(cid) {
 사무소: ${s.name||'세무사무소'}, 계좌: ${s.bank||''} ${s.account||''} (${s.accountHolder||''})
 조건: ${tone}한 어투, SMS 100자 이내, 금액 강조, 본문만, 마크다운 없이`;
     const res = await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',headers:{'Content-Type':'application/json','x-api-key':(G.settings?.aiKey||''),'anthropic-version':'2023-06-01'},
+      method:'POST',headers:aiHeaders(),
       body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:200,messages:[{role:'user',content:prompt}]})
     });
     const data = await res.json();
