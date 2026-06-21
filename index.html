@@ -8508,11 +8508,83 @@ function toast(msg, type='info', ms=3000) {
   box.appendChild(el);
   setTimeout(()=>{el.style.cssText+=';opacity:0;transition:opacity .3s';setTimeout(()=>el.remove(),300);},ms);
 }
-function manualSave() {
-  saveToLS();
-  const toast = document.getElementById('save-toast');
-  toast.style.display = 'inline';
-  setTimeout(() => { toast.style.display = 'none'; }, 2000);
+async function manualSave() {
+  const btn = document.getElementById('save-btn');
+  const toastEl = document.getElementById('save-toast');
+  if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; btn.textContent = '⏳ 저장 중...'; }
+  try {
+    // localStorage 저장 (동기)
+    try {
+      localStorage.setItem('tm_clients', JSON.stringify(G.clients));
+      localStorage.setItem('tm_periods', JSON.stringify(G.periods));
+      localStorage.setItem('tm_julgae', JSON.stringify(G.julgae));
+      localStorage.setItem('tm_settings', JSON.stringify(G.settings));
+      localStorage.setItem('tm_monthlyFees', JSON.stringify(G.monthlyFees));
+      localStorage.setItem('tm_invoiceData', JSON.stringify(G.invoiceData||{}));
+      localStorage.setItem('tm_clientNotes', JSON.stringify(G.clientNotes||{}));
+      localStorage.setItem('tm_taxInvoice', JSON.stringify(G.taxInvoice||{}));
+      localStorage.setItem('tm_favorites', JSON.stringify(G.favorites||[]));
+      localStorage.setItem('tm_feeHistory', JSON.stringify(G.feeHistory||{}));
+      localStorage.setItem('tm_managerHistory', JSON.stringify(G.managerHistory||{}));
+      localStorage.setItem('tm_feeChangeHistory', JSON.stringify(G.feeChangeHistory||{}));
+      localStorage.setItem('tm_clientTags', JSON.stringify(G.clientTags||{}));
+      localStorage.setItem('tm_docChecklist', JSON.stringify(G.docChecklist||{}));
+      localStorage.setItem('tm_closureChecklist', JSON.stringify(G.closureChecklist||{}));
+      localStorage.setItem('tm_withholding', JSON.stringify(G.withholding||{}));
+      localStorage.setItem('tm_invoiceHistory', JSON.stringify(G.invoiceHistory||[]));
+      localStorage.setItem('tm_periodNotes', JSON.stringify(G.periodNotes||{}));
+      localStorage.setItem('tm_julgaeLinks', JSON.stringify(G.julgaeLinks||{}));
+      localStorage.setItem('tm_feePayments', JSON.stringify(G.feePayments||{}));
+      localStorage.setItem('tm_filterPresets', JSON.stringify(G.filterPresets||[]));
+      localStorage.setItem('tm_contactLogs', JSON.stringify(G.contactLogs||{}));
+      localStorage.setItem('tm_adHocFees', JSON.stringify(G.adHocFees||{}));
+      if (G.julgaeSelectedPeriods) localStorage.setItem('tm_julgaeSelectedPeriods', JSON.stringify(G.julgaeSelectedPeriods));
+      if (G.julgaeSelectedYears) localStorage.setItem('tm_julgaeSelectedYears', JSON.stringify(G.julgaeSelectedYears));
+    } catch(e) {
+      showSaveError('로컬 저장 공간 부족 — 일부 데이터가 저장되지 않았습니다');
+      return;
+    }
+    // Firebase 저장 (비동기, 로그인 시)
+    if (G.user) {
+      await fbDb.ref('taxmanager/' + G.user.uid).set({
+        clients:     JSON.stringify(G.clients),
+        periods:     JSON.stringify(G.periods),
+        julgae:      JSON.stringify(G.julgae),
+        settings:    JSON.stringify(G.settings),
+        monthlyFees: JSON.stringify(G.monthlyFees),
+        invoiceData: JSON.stringify(G.invoiceData||{}),
+        clientNotes: JSON.stringify(G.clientNotes||{}),
+        taxInvoice:  JSON.stringify(G.taxInvoice||{}),
+        favorites:   JSON.stringify(G.favorites||[]),
+        feeHistory:  JSON.stringify(G.feeHistory||{}),
+        managerHistory: JSON.stringify(G.managerHistory||{}),
+        feeChangeHistory: JSON.stringify(G.feeChangeHistory||{}),
+        clientTags:  JSON.stringify(G.clientTags||{}),
+        docChecklist: JSON.stringify(G.docChecklist||{}),
+        closureChecklist: JSON.stringify(G.closureChecklist||{}),
+        withholding: JSON.stringify(G.withholding||{}),
+        periodNotes: JSON.stringify(G.periodNotes||{}),
+        julgaeLinks: JSON.stringify(G.julgaeLinks||{}),
+        feePayments: JSON.stringify(G.feePayments||{}),
+        filterPresets: JSON.stringify(G.filterPresets||[]),
+        contactLogs: JSON.stringify(G.contactLogs||{}),
+        adHocFees: JSON.stringify(G.adHocFees||{}),
+        julgaeSelectedPeriods: JSON.stringify(G.julgaeSelectedPeriods||[]),
+        julgaeSelectedYears: JSON.stringify(G.julgaeSelectedYears||[]),
+      });
+      toastEl.textContent = '✔ 클라우드 저장됨';
+    } else {
+      toastEl.textContent = '✔ 로컬 저장됨 (로그인 시 클라우드 동기화)';
+    }
+    toastEl.style.display = 'inline';
+    toastEl.style.color = '#81c784';
+    setTimeout(() => { toastEl.style.display = 'none'; }, 3000);
+  } catch(e) {
+    console.error('저장 실패:', e);
+    showSaveError('Firebase 저장 실패 — 로컬에만 저장됨 (' + (e.message||'네트워크 오류') + ')');
+  } finally {
+    if (btn) { btn.disabled = false; btn.style.opacity = ''; btn.textContent = '💾 저장'; }
+  }
 }
 
 function updateBadge() {
