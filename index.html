@@ -504,6 +504,7 @@ let G = {
   invoiceHistory: [],
   julgaeBulkMode: false,
   julgaeBulkSelected: [],
+  julgaeNumFilters: {},
   filterRisk: '',
   clientSort: { field: 'd', dir: 'asc' },
   periodNotes: {},
@@ -2310,6 +2311,86 @@ function openJulgaeRepSearch(btnEl) {
     </div>`;
   document.body.appendChild(pop);
   setTimeout(()=>{ const i=document.getElementById('jrs-inp'); if(i){i.focus();const l=G.julgaeRepSearch.length;i.setSelectionRange(l,l);} document.addEventListener('click',_fpOutside); },50);
+}
+function _setJNF(field, type, min, max) {
+  if (!G.julgaeNumFilters) G.julgaeNumFilters = {};
+  G.julgaeNumFilters[field] = {type, min, max};
+  renderJulgae();
+}
+function _clearJNF(field) {
+  if (G.julgaeNumFilters) delete G.julgaeNumFilters[field];
+  document.getElementById('filter-popup')?.remove();
+  document.removeEventListener('click', _fpOutside);
+  _fpField = null;
+  renderJulgae();
+}
+function _applyJNFGte(field) {
+  const v = document.getElementById('jnf-min')?.value;
+  if (v === '' || isNaN(Number(v))) return;
+  _setJNF(field, 'gte', Number(v), null);
+}
+function _applyJNFLte(field) {
+  const v = document.getElementById('jnf-max')?.value;
+  if (v === '' || isNaN(Number(v))) return;
+  _setJNF(field, 'lte', null, Number(v));
+}
+function _applyJNFRange(field) {
+  const mn = document.getElementById('jnf-rmin')?.value;
+  const mx = document.getElementById('jnf-rmax')?.value;
+  if (mn === '' || mx === '' || isNaN(Number(mn)) || isNaN(Number(mx))) return;
+  _setJNF(field, 'range', Number(mn), Number(mx));
+}
+function openJulgaeNumFilter(field, btnEl) {
+  const existing = document.getElementById('filter-popup');
+  const _fkey = '__jnf_' + field;
+  if (existing) { existing.remove(); document.removeEventListener('click', _fpOutside); if (_fpField === _fkey) { _fpField = null; return; } }
+  _fpField = _fkey;
+  const cur = (G.julgaeNumFilters || {})[field];
+  const labels = {prevRevenue:'직전매출', fee:'조정료', paid:'입금', unpaid:'미수', fee25:'25년', fee24:'24년', fee23:'23년'};
+  const label = labels[field] || field;
+  const pop = document.createElement('div');
+  pop.id = 'filter-popup';
+  pop.className = 'fpop';
+  const rect = btnEl.getBoundingClientRect();
+  pop.style.top = Math.min(rect.bottom + 6, window.innerHeight - 320) + 'px';
+  pop.style.left = Math.max(8, Math.min(rect.right - 250, window.innerWidth - 268)) + 'px';
+  pop.style.width = '252px';
+  const curMin = (cur?.min != null) ? cur.min : '';
+  const curMax = (cur?.max != null) ? cur.max : '';
+  const _act = t => cur?.type === t ? '#e8f0fe' : '#fff';
+  const _bor = t => cur?.type === t ? '#4f8ef7' : '#e0e0e0';
+  const _col = t => cur?.type === t ? '#1565c0' : '#555';
+  const _inp = (id, val, ph) => `<input id="${id}" type="number" value="${val}" placeholder="${ph}" style="flex:1;padding:5px 7px;border:1.5px solid #e0e0e0;border-radius:6px;font-size:12px;font-family:inherit;min-width:0">`;
+  const _apbtn = (onclick) => `<button onclick="${onclick}" style="padding:5px 9px;border-radius:6px;border:none;background:#4f8ef7;color:#fff;cursor:pointer;font-size:11px;font-family:inherit;flex-shrink:0">적용</button>`;
+  pop.innerHTML = `
+    <div style="font-size:12px;font-weight:800;color:#333;margin-bottom:10px">${label} 필터</div>
+    <div style="display:flex;gap:6px;margin-bottom:8px">
+      <button onclick="_setJNF('${field}','zero',0,0)" style="flex:1;padding:6px;border-radius:7px;border:1.5px solid ${_bor('zero')};background:${_act('zero')};color:${_col('zero')};cursor:pointer;font-size:12px;font-family:inherit">= 0</button>
+      <button onclick="_setJNF('${field}','nonzero',0,0)" style="flex:1;padding:6px;border-radius:7px;border:1.5px solid ${_bor('nonzero')};background:${_act('nonzero')};color:${_col('nonzero')};cursor:pointer;font-size:12px;font-family:inherit">≠ 0</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:4px;margin-bottom:6px">
+      <span style="font-size:11px;color:#666;width:22px;flex-shrink:0">이상</span>
+      ${_inp('jnf-min', curMin, '최솟값')}
+      ${_apbtn("_applyJNFGte('"+field+"')")}
+    </div>
+    <div style="display:flex;align-items:center;gap:4px;margin-bottom:6px">
+      <span style="font-size:11px;color:#666;width:22px;flex-shrink:0">이하</span>
+      ${_inp('jnf-max', curMax, '최댓값')}
+      ${_apbtn("_applyJNFLte('"+field+"')")}
+    </div>
+    <div style="display:flex;align-items:center;gap:4px;margin-bottom:10px">
+      <span style="font-size:11px;color:#666;width:22px;flex-shrink:0">범위</span>
+      ${_inp('jnf-rmin', curMin, '최솟값')}
+      <span style="font-size:11px;flex-shrink:0">~</span>
+      ${_inp('jnf-rmax', curMax, '최댓값')}
+      ${_apbtn("_applyJNFRange('"+field+"')")}
+    </div>
+    <div style="display:flex;gap:6px">
+      <button onclick="_clearJNF('${field}')" style="flex:1;padding:7px;border-radius:8px;border:1px solid #e0e0e0;background:#fff3e0;color:#e65100;font-size:12px;cursor:pointer;font-family:inherit">필터 해제</button>
+      <button onclick="document.getElementById('filter-popup')?.remove();document.removeEventListener('click',_fpOutside);_fpField=null" style="flex:1;padding:7px;border-radius:8px;border:none;background:#4f8ef7;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">닫기</button>
+    </div>`;
+  document.body.appendChild(pop);
+  setTimeout(() => document.addEventListener('click', _fpOutside), 50);
 }
 function julgaeCycleBtn(field, label, states) {
   if (!states) states = ['전체','완료','미완료'];
@@ -4389,6 +4470,30 @@ function renderJulgae() {
     return d !== 0 ? _jDir * d : a.name.localeCompare(b.name, 'ko');
   });
 
+  // 숫자 컬럼 필터 (income 계열 전용)
+  if (isIncomeType || isSeongsiType) {
+    const _nf = G.julgaeNumFilters || {};
+    const _applyNF = (field, getter) => {
+      const f = _nf[field]; if (!f) return;
+      clients = clients.filter(c => {
+        const v = getter(c);
+        if (f.type === 'zero')   return v === 0;
+        if (f.type === 'nonzero') return v !== 0;
+        if (f.type === 'gte')   return v >= (f.min || 0);
+        if (f.type === 'lte')   return v <= (f.max || 0);
+        if (f.type === 'range') return v >= (f.min || 0) && v <= (f.max || 0);
+        return true;
+      });
+    };
+    _applyNF('prevRevenue', c => { const v=julgaeVal(pKey2,c.id); return v.prevRevenue||0; });
+    _applyNF('fee',  c => { const v=julgaeVal(pKey2,c.id); return v.fee||0; });
+    _applyNF('paid', c => { const v=julgaeVal(pKey2,c.id); return v.paid||0; });
+    _applyNF('unpaid', c => { const v=julgaeVal(pKey2,c.id); return (v.fee||0)-(v.paid||0); });
+    _applyNF('fee25', c => { const v=julgaeVal(pKey2,c.id); return v.fee25||0; });
+    _applyNF('fee24', c => { const v=julgaeVal(pKey2,c.id); return v.fee24||0; });
+    _applyNF('fee23', c => { const v=julgaeVal(pKey2,c.id); return v.fee23||0; });
+  }
+
   // 구분선 삽입 헬퍼 (taxType·manager 정렬 시)
   const _needsSep = _jSort === 'taxType' || _jSort === 'manager';
   const _getSepLabel = c => _jSort === 'taxType'
@@ -4403,6 +4508,11 @@ function renderJulgae() {
       onblur="const n=Number(this.value.replace(/,/g,''));if(!isNaN(n)&&this.value!=='')this.value=n.toLocaleString();"
       onchange="updateJulgaeNum('${pKey2}',${cid},'${field}',this.value.replace(/,/g,''))"
       style="width:100%;text-align:right;border:1px solid #e0e0e0;border-radius:5px;padding:2px 3px;font-size:10px;font-family:inherit;${extraStyle}">`;
+  };
+
+  const _jnfBtn = (field) => {
+    const active = !!((G.julgaeNumFilters||{})[field]);
+    return `<button onclick="event.stopPropagation();openJulgaeNumFilter('${field}',this)" style="padding:1px 4px;border-radius:4px;border:1.5px solid ${active?'#4f8ef7':'#ddd'};background:${active?'#e8f0fe':'transparent'};color:${active?'#1565c0':'#bbb'};cursor:pointer;font-size:9px;margin-left:2px;flex-shrink:0" title="${active?'숫자 필터 적용 중':'숫자 필터'}">▾</button>`;
   };
 
   const jChips = _hcChips([
@@ -4644,6 +4754,7 @@ function renderJulgae() {
     <button class="btn-sm" style="background:${G.julgaeBulkMode?'#e8f5e9':'#f5f5f5'};color:${G.julgaeBulkMode?'#2e7d32':'#888'};border:1.5px solid ${G.julgaeBulkMode?'#43a047':'#e0e0e0'}" onclick="G.julgaeBulkMode=!G.julgaeBulkMode;G.julgaeBulkSelected=[];renderJulgae()">☑ 일괄처리${G.julgaeBulkMode?' ON':''}</button>
     <button class="btn-sm" style="background:#e8f0fe;color:#1565c0;border:1.5px solid #90caf9" onclick="openWithholdingModal()">📋 원천세</button>
     <button class="btn-sm" style="background:${G.julgaeKeepFilters?'#fff8e1':'#f5f5f5'};color:${G.julgaeKeepFilters?'#e65100':'#888'};border:1.5px solid ${G.julgaeKeepFilters?'#ffcc80':'#e0e0e0'}" onclick="G.julgaeKeepFilters=!G.julgaeKeepFilters;renderJulgae()" title="기간 전환 시 현재 필터를 유지합니다">🔒 필터 유지${G.julgaeKeepFilters?' ON':''}</button>
+    ${Object.keys(G.julgaeNumFilters||{}).length>0?`<button class="btn-sm" style="background:#e8f0fe;color:#1565c0;border:1.5px solid #4f8ef7" onclick="G.julgaeNumFilters={};renderJulgae()" title="모든 숫자 필터 초기화">🔢 숫자필터 초기화 (${Object.keys(G.julgaeNumFilters||{}).length}개)</button>`:''}
     ${(G.income26Unmatched||[]).length>0?`<button class="btn-sm" style="background:#fce4ec;color:#c62828;border:1.5px solid #ef9a9a" onclick="showIncome26Unmatched()">⚠ 미매칭 ${(G.income26Unmatched||[]).length}개</button>`:''}
   </div>
 
@@ -4713,7 +4824,7 @@ function renderJulgae() {
         <th style="width:100px;text-align:right;${_hcStyle('j_col_paytax')}"><div style="display:flex;align-items:center;justify-content:flex-end">납부세액${_hcBtn('j_col_paytax')}</div></th>
         <th style="width:80px;text-align:right;${_hcStyle('j_col_resident')}"><div style="display:flex;align-items:center;justify-content:flex-end">주민세${_hcBtn('j_col_resident')}</div></th>
         <th style="width:90px;text-align:right;${_hcStyle('j_col_totalsum')}"><div style="display:flex;align-items:center;justify-content:flex-end">합계${_hcBtn('j_col_totalsum')}</div></th>
-        <th style="width:100px;text-align:right;${_hcStyle('j_col_prevrevenue')}"><div style="display:flex;align-items:center;justify-content:flex-end">직전매출${_hcBtn('j_col_prevrevenue')}</div></th>
+        <th style="width:100px;text-align:right;${_hcStyle('j_col_prevrevenue')}"><div style="display:flex;align-items:center;justify-content:flex-end">직전매출${_jnfBtn('prevRevenue')}${_hcBtn('j_col_prevrevenue')}</div></th>
       `:isVatType?`
         <th style="width:110px;text-align:right;${_hcStyle('j_col_revenue')}"><div style="display:flex;align-items:center;justify-content:flex-end">매출액${_hcBtn('j_col_revenue')}</div></th>
         <th style="width:110px;text-align:right;${_hcStyle('j_col_purchase')}"><div style="display:flex;align-items:center;justify-content:flex-end">매입액${_hcBtn('j_col_purchase')}</div></th>
@@ -4726,13 +4837,13 @@ function renderJulgae() {
         <th style="width:110px;text-align:right;${_hcStyle('j_col_income')}"><div style="display:flex;align-items:center;justify-content:flex-end">소득금액${_hcBtn('j_col_income')}</div></th>
         <th style="width:110px;text-align:right;${_hcStyle('j_col_taxbase')}"><div style="display:flex;align-items:center;justify-content:flex-end">과세표준${_hcBtn('j_col_taxbase')}</div></th>
       `}
-      ${isSeongsiType?`<th style="width:100px;text-align:right;${_hcStyle('j_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">조정료${_hcBtn('j_fee')}</div></th><th style="width:100px;text-align:right;${_hcStyle('j_feess')}"><div style="display:flex;align-items:center;justify-content:flex-end">성실신고료${_hcBtn('j_feess')}</div></th>`:isIncomeType?`<th style="width:100px;text-align:right;${_hcStyle('j_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">조정료${_hcBtn('j_fee')}</div></th>`:`<th style="width:110px;text-align:right;${_hcStyle('j_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">수수료청구${_hcBtn('j_fee')}</div></th>`}
+      ${isSeongsiType?`<th style="width:100px;text-align:right;${_hcStyle('j_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">조정료${_jnfBtn('fee')}${_hcBtn('j_fee')}</div></th><th style="width:100px;text-align:right;${_hcStyle('j_feess')}"><div style="display:flex;align-items:center;justify-content:flex-end">성실신고료${_hcBtn('j_feess')}</div></th>`:isIncomeType?`<th style="width:100px;text-align:right;${_hcStyle('j_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">조정료${_jnfBtn('fee')}${_hcBtn('j_fee')}</div></th>`:`<th style="width:110px;text-align:right;${_hcStyle('j_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">수수료청구${_hcBtn('j_fee')}</div></th>`}
       ${isIncomeType?`
-        <th style="width:90px;text-align:right;${_hcStyle('j_col_paid')}"><div style="display:flex;align-items:center;justify-content:flex-end">입금${_hcBtn('j_col_paid')}</div></th>
-        <th style="width:80px;text-align:right;${_hcStyle('j_col_unpaid')}"><div style="display:flex;align-items:center;justify-content:flex-end">미수${_hcBtn('j_col_unpaid')}</div></th>
-        <th style="width:90px;text-align:right;${_hcStyle('j_col_fee25')}"><div style="display:flex;align-items:center;justify-content:flex-end">25년${_hcBtn('j_col_fee25')}</div></th>
-        <th style="width:90px;text-align:right;${_hcStyle('j_col_fee24')}"><div style="display:flex;align-items:center;justify-content:flex-end">24년${_hcBtn('j_col_fee24')}</div></th>
-        <th style="width:90px;text-align:right;${_hcStyle('j_col_fee23')}"><div style="display:flex;align-items:center;justify-content:flex-end">23년${_hcBtn('j_col_fee23')}</div></th>
+        <th style="width:90px;text-align:right;${_hcStyle('j_col_paid')}"><div style="display:flex;align-items:center;justify-content:flex-end">입금${_jnfBtn('paid')}${_hcBtn('j_col_paid')}</div></th>
+        <th style="width:80px;text-align:right;${_hcStyle('j_col_unpaid')}"><div style="display:flex;align-items:center;justify-content:flex-end">미수${_jnfBtn('unpaid')}${_hcBtn('j_col_unpaid')}</div></th>
+        <th style="width:90px;text-align:right;${_hcStyle('j_col_fee25')}"><div style="display:flex;align-items:center;justify-content:flex-end">25년${_jnfBtn('fee25')}${_hcBtn('j_col_fee25')}</div></th>
+        <th style="width:90px;text-align:right;${_hcStyle('j_col_fee24')}"><div style="display:flex;align-items:center;justify-content:flex-end">24년${_jnfBtn('fee24')}${_hcBtn('j_col_fee24')}</div></th>
+        <th style="width:90px;text-align:right;${_hcStyle('j_col_fee23')}"><div style="display:flex;align-items:center;justify-content:flex-end">23년${_jnfBtn('fee23')}${_hcBtn('j_col_fee23')}</div></th>
       `:''}
       <th style="width:70px;text-align:center;padding:3px;${_hcStyle('j_collect')}"><div style="display:flex;align-items:center">${julgaeCycleBtn('julgaeFeeFilter','수금',['전체','수금','미수금'])}${_hcBtn('j_collect')}</div></th>
       <th style="width:44px;text-align:center;padding:3px;${_hcStyle('j_link')}"><div style="display:flex;align-items:center"><span style="font-size:11px">자료링크</span>${_hcBtn('j_link')}</div></th>
