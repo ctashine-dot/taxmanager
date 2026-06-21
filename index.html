@@ -9224,6 +9224,108 @@ function importCorp26DataV1() {
   localStorage.setItem('tm_importCorp26V1','1');
 }
 
+function importCorp26DataV2() {
+  if (localStorage.getItem('tm_importCorp26V2')) return;
+  const period = G.periods.find(p =>
+    (p.reportType === 'corp' || p.type === '법인세') &&
+    (p.id.includes('2026') || (p.label||'').includes('26년') || (p.label||'').includes('26 년'))
+  );
+  if (!period) { localStorage.setItem('tm_importCorp26V2','1'); return; }
+  const pKey = period.id;
+  if (!G.julgae[pKey]) G.julgae[pKey] = {};
+  if (!period.enrolled) period.enrolled = [];
+
+  const setData = (clientId, row) => {
+    G.julgae[pKey][clientId] = {
+      ...(G.julgae[pKey][clientId]||{}),
+      revenue: row.revenue, income: row.income, totalTax: row.totalTax,
+      payTax: row.payTax, residentTax: row.residentTax,
+      fee: row.fee, paid: row.paid,
+      fee23: row.fee23, fee24: row.fee24, fee25: row.fee25,
+      prevRevenue: row.prevRevenue,
+      s: row.paid > 0,
+    };
+    if (!period.enrolled.includes(clientId)) period.enrolled.push(clientId);
+  };
+
+  // 13개 기존 업체: 엑셀명 → DB 검색 함수
+  const MAPPED = [
+    { excel: '(주)해피엔나이스',       find: c => c.name === '(주)해피앤나이스' },
+    { excel: '삼화오토모티브코리아',    find: c => c.name.includes('삼화오토모티브') },
+    { excel: '서진 SNL',               find: c => c.name.includes('서진에스엔엘') },
+    { excel: '㈜빅뱅-누리',            find: c => c.name === '(주)빅뱅' },
+    { excel: '주식회사원스탑소프트',    find: c => c.name.includes('원스탑소프트') },
+    { excel: '㈜유림이엔티',            find: c => c.name.includes('유림이엔티') },
+    { excel: '주시고히사 코팩정보통신', find: c => c.name.includes('코팩') },
+    { excel: '㈜알고오디-사베씨지점',  find: c => c.name.includes('알고오디') },
+    { excel: '케이그라운드벤처스',      find: c => c.name.includes('케이그라운드') },
+    { excel: '하우스이엔엠',            find: c => c.name.includes('하우스이엔엠') },
+    { excel: '(주)에이원건축사사무소',  find: c => c.name.includes('에이원건축') },
+    { excel: '농업회사법인 달다래',     find: c => c.name.includes('달다래') },
+    { excel: '주식회사 비엠에듀',       find: c => c.name.includes('비엠에스에듀') },
+  ];
+
+  const DATA_MAP = {
+    '(주)해피엔나이스':{"revenue":315995721,"income":8395023,"totalTax":755552,"payTax":749972,"residentTax":75555,"fee":800000,"paid":800000,"fee23":750000,"fee24":800000,"fee25":898700,"prevRevenue":328651295},
+    '삼화오토모티브코리아':{"revenue":0,"income":-314187029,"totalTax":0,"payTax":0,"residentTax":0,"fee":520000,"paid":1500000,"fee23":0,"fee24":0,"fee25":5500000,"prevRevenue":0},
+    '서진 SNL':{"revenue":1140236164,"income":21049385,"totalTax":1894444,"payTax":154974,"residentTax":189444,"fee":1400000,"paid":1400000,"fee23":1200000,"fee24":1400000,"fee25":1650000,"prevRevenue":1458481238},
+    '㈜빅뱅-누리':{"revenue":20883825919,"income":27826572,"totalTax":0,"payTax":0,"residentTax":0,"fee":6000000,"paid":0,"fee23":5000000,"fee24":0,"fee25":6600000,"prevRevenue":22664421585},
+    '주식회사원스탑소프트':{"revenue":62744602,"income":-5409365,"totalTax":0,"payTax":0,"residentTax":0,"fee":520000,"paid":520000,"fee23":1900000,"fee24":1600000,"fee25":738205,"prevRevenue":216227471},
+    '㈜유림이엔티':{"revenue":3386014308,"income":201848381,"totalTax":14129386,"payTax":10930226,"residentTax":1412938,"fee":5000000,"paid":5000000,"fee23":1500000,"fee24":1718000,"fee25":3096500,"prevRevenue":2410130877},
+    '주시고히사 코팩정보통신':{"revenue":57000000,"income":12977862,"totalTax":908450,"payTax":903610,"residentTax":90845,"fee":520000,"paid":520000,"fee23":0,"fee24":0,"fee25":0,"prevRevenue":0},
+    '㈜알고오디-사베씨지점':{"revenue":11556596,"income":-1320364,"totalTax":0,"payTax":0,"residentTax":0,"fee":520000,"paid":0,"fee23":300000,"fee24":400000,"fee25":572000,"prevRevenue":5868069},
+    '케이그라운드벤처스':{"revenue":1189297638,"income":377133736,"totalTax":38682609,"payTax":32085769,"residentTax":3868260,"fee":1600000,"paid":0,"fee23":500000,"fee24":0,"fee25":2468400,"prevRevenue":1161509659},
+    '하우스이엔엠':{"revenue":0,"income":-20004287,"totalTax":0,"payTax":0,"residentTax":0,"fee":400000,"paid":0,"fee23":300000,"fee24":400000,"fee25":440000,"prevRevenue":0},
+    '(주)에이원건축사사무소':{"revenue":393758491,"income":-23343664,"totalTax":0,"payTax":0,"residentTax":0,"fee":770000,"paid":0,"fee23":2100000,"fee24":850000,"fee25":1320000,"prevRevenue":834333846},
+    '농업회사법인 달다래':{"revenue":509530500,"income":0,"totalTax":0,"payTax":-14780,"residentTax":0,"fee":1000000,"paid":0,"fee23":0,"fee24":1500000,"fee25":1000000,"prevRevenue":39948000},
+    '주식회사 비엠에듀':{"revenue":137113000,"income":-2307860,"totalTax":0,"payTax":0,"residentTax":0,"fee":500000,"paid":0,"fee23":0,"fee24":0,"fee25":0,"prevRevenue":0},
+  };
+
+  // 4개 신규 업체 (DB에 없어 새로 생성)
+  const NEW_DATA = [
+    {name:'에프엔티코리아(주)',rep:'최완일',revenue:315391400,income:29074862,totalTax:2250557,payTax:1571997,residentTax:225055,fee:800000,paid:0,fee23:650000,fee24:741000,fee25:816200,prevRevenue:271077900},
+    {name:'㈜빅핸즈',rep:'홍선애',revenue:652000000,income:-54178951,totalTax:0,payTax:0,residentTax:0,fee:600000,paid:600000,fee23:390000,fee24:1000000,fee25:572000,prevRevenue:0},
+    {name:'㈜사랑정찬',rep:'최성복',revenue:780194469,income:-10504441,totalTax:0,payTax:0,residentTax:0,fee:1294000,paid:0,fee23:0,fee24:0,fee25:1017500,prevRevenue:412293388},
+    {name:'주식회사 홀리네',rep:'',revenue:0,income:0,totalTax:0,payTax:0,residentTax:0,fee:0,paid:0,fee23:0,fee24:0,fee25:0,prevRevenue:0},
+  ];
+
+  let matched = 0, created = 0, failed = [];
+
+  for (const m of MAPPED) {
+    const row = DATA_MAP[m.excel];
+    if (!row) continue;
+    const client = G.clients.find(m.find);
+    if (client) { setData(client.id, row); matched++; }
+    else failed.push(m.excel);
+  }
+
+  for (const row of NEW_DATA) {
+    const maxId = G.clients.reduce((a,c)=>Math.max(a,c.id||0), 0);
+    const newId = maxId + 1;
+    const nc = {
+      id: newId, name: row.name, rep: row.rep,
+      taxType:'법인', vatType:'일반',
+      dealType:'신고대리', dealTypes:['신고대리'],
+      bizType:'', taxOffice:'', bizNo:'', jumin:'', phone:'', email:'',
+      manager:'', managers:[],
+      fee: row.fee||0, feeStatus:'청구완료', status:'정상',
+      dataReceived:false, bookkeeping:false, approved:false,
+      memo:'', contractDate:'2020-01-01', contracts:[], relatedGroup:'',
+      terminationDate:'', terminationReason:'', closureYear:'',
+      closureTaxFiled:false, closureTaxApproved:false,
+    };
+    G.clients.push(nc);
+    setData(newId, row);
+    created++;
+  }
+
+  saveToLS();
+  const msg2 = `26년 법인세 추가 완료: 기존 ${matched}개 매핑, 신규 ${created}개 등록` +
+    (failed.length ? ` / 실패: ${failed.join(', ')}` : '');
+  toast(msg2, failed.length ? 'warning' : 'success', 8000);
+  localStorage.setItem('tm_importCorp26V2','1');
+}
+
 function removeDuplicateClientsV1() {
   if (localStorage.getItem('tm_removeDuplicatesV1')) return;
   // name+rep 기준 중복 탐지: 낮은 ID(원본) 유지, 높은 ID(마이그레이션 추가분) 제거
@@ -9585,6 +9687,7 @@ async function loadFromFirebase() {
     createUnmatchedV1();
     removeDuplicateClientsV1();
     importCorp26DataV1();
+    importCorp26DataV2();
     if (!localStorage.getItem('tm_contractDateFillV1')) {
       let filled = 0;
       G.clients.forEach(c => { if (!c.contractDate) { c.contractDate = '2020-01-01'; filled++; } });
