@@ -7770,33 +7770,189 @@ function recordTRRToJulgae() {
   const data = window._trrReviewData;
   if (!data) { toast('검토 데이터가 없습니다', 'warning'); return; }
 
-  // 거래처·기간 선택
   const clientId = window._trrMatchedClientId || Number(document.getElementById('trr-client-sel')?.value) || 0;
   const pKey = window._trrPKey || document.getElementById('trr-period-sel')?.value || '';
 
-  if (!clientId || !pKey) {
-    // 선택 모달
-    const clients = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업');
-    showModal(`<div style="max-width:440px">
-      <div class="modal-header"><h3>📋 신고리스트에 기록</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
-      <div class="modal-body">
-        <div style="font-size:12px;color:#888;margin-bottom:12px">기록할 거래처와 신고기간을 선택해주세요.</div>
-        <label class="flabel">거래처</label>
-        <select id="trr-sel-client" class="fsel" style="margin-bottom:10px">
-          <option value="">-- 선택 --</option>
-          ${clients.map(c=>`<option value="${c.id}" ${c.id===clientId?'selected':''}>${esc(c.name)}</option>`).join('')}
-        </select>
-        <label class="flabel">신고기간</label>
-        <select id="trr-sel-period" class="fsel" style="margin-bottom:14px">
-          <option value="">-- 선택 --</option>
-          ${(G.periods||[]).filter(p=>!p.locked).slice(-20).reverse().map(p=>`<option value="${p.id}" ${p.id===pKey?'selected':''}>${esc(p.label||p.id)}</option>`).join('')}
-        </select>
-        <button class="btn-primary" style="width:100%" onclick="doRecordTRR()">기록하기</button>
-      </div>
-    </div>`);
-    return;
+  if (clientId) {
+    // 거래처 확정 → 기간만 물어보거나 바로 기록
+    if (pKey) { doRecordTRRWith(clientId, pKey); return; }
+    openTRRPeriodModal(clientId);
+  } else {
+    // 매칭된 거래처 없음 → 선택/신규등록 모달
+    openTRRUnmatchedModal();
   }
-  doRecordTRRWith(clientId, pKey);
+}
+
+function openTRRPeriodModal(clientId) {
+  const c = G.clients.find(x=>x.id===clientId);
+  const data = window._trrReviewData;
+  const fmtN = n => (n||0).toLocaleString()+'원';
+  showModal(`<div style="max-width:420px">
+    <div class="modal-header"><h3>📋 신고기간 선택</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div style="background:#e8f5e9;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:13px">
+        ✅ 거래처: <b>${esc(c?.name||'')}</b>
+        ${data?.revenue?`<span style="margin-left:8px;color:#555">수입금액 ${fmtN(data.revenue)}</span>`:''}
+      </div>
+      <label class="flabel">신고기간을 선택해주세요</label>
+      <select id="trr-period-only" class="fsel" style="margin-bottom:14px">
+        <option value="">-- 선택 --</option>
+        ${(G.periods||[]).filter(p=>!p.locked).slice(-20).reverse().map(p=>`<option value="${p.id}">${esc(p.label||p.id)}</option>`).join('')}
+      </select>
+      <button class="btn-primary" style="width:100%" onclick="(()=>{const pk=document.getElementById('trr-period-only')?.value;if(!pk){toast('신고기간을 선택해주세요','warning');return;}closeModal();doRecordTRRWith(${clientId},pk)})()">기록하기</button>
+    </div>
+  </div>`);
+}
+
+function openTRRUnmatchedModal() {
+  const data = window._trrReviewData;
+  const fmtN = n => (n||0).toLocaleString()+'원';
+  const clients = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업').sort((a,b)=>a.name.localeCompare(b.name,'ko'));
+  const periods = (G.periods||[]).filter(p=>!p.locked).slice(-20).reverse();
+
+  // 유사 업체명으로 후보 추천
+  const name = data.companyName || '';
+  const bn = (data.bizNo||'').replace(/\D/g,'');
+  const candidates = clients.filter(c =>
+    (bn && (c.bizNo||'').replace(/\D/g,'') === bn) ||
+    (name.length >= 2 && (c.name.includes(name.slice(0,4)) || name.includes(c.name.slice(0,4))))
+  ).slice(0,5);
+
+  showModal(`<div style="max-width:520px">
+    <div class="modal-header">
+      <h3>🔗 거래처 매칭</h3>
+      <button class="close-btn" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- 신고서 추출 정보 -->
+      <div style="background:#f8f9ff;border-radius:10px;padding:12px 14px;border:1.5px solid #e8eaf6;margin-bottom:16px">
+        <div style="font-size:11px;font-weight:700;color:#3949ab;margin-bottom:8px">📄 신고서에서 추출한 업체 정보</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px">
+          <div><span style="color:#888">상호:</span> <b>${esc(name||'-')}</b></div>
+          <div><span style="color:#888">사업자번호:</span> <b>${esc(data.bizNo||'-')}</b></div>
+          ${data.revenue?`<div><span style="color:#888">수입금액:</span> <b style="color:#1565c0">${fmtN(data.revenue)}</b></div>`:''}
+          ${data.payTax?`<div><span style="color:#888">납부세액:</span> <b style="color:#c62828">${fmtN(data.payTax)}</b></div>`:''}
+        </div>
+      </div>
+
+      <!-- 신고기간 공통 선택 -->
+      <label class="flabel">신고기간 <span style="color:#e53935">*</span></label>
+      <select id="trr-um-period" class="fsel" style="margin-bottom:16px">
+        <option value="">-- 선택 --</option>
+        ${periods.map(p=>`<option value="${p.id}">${esc(p.label||p.id)}</option>`).join('')}
+      </select>
+
+      <!-- 방법 1: 기존 업체 연결 -->
+      <div style="border:1.5px solid #e0e0e0;border-radius:12px;padding:14px;margin-bottom:12px">
+        <div style="font-size:13px;font-weight:800;color:#1565c0;margin-bottom:10px">① 기존 업체에 연결</div>
+
+        ${candidates.length?`<div style="font-size:11px;color:#888;margin-bottom:6px">추천 후보 (유사 업체명/사업자번호)</div>
+        <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px">
+          ${candidates.map(c=>`<label style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:#f0f4ff;border-radius:8px;cursor:pointer;font-size:13px">
+            <input type="radio" name="trr-cand" value="${c.id}" onclick="document.getElementById('trr-um-client').value=''">
+            <b>${esc(c.name)}</b><span style="color:#aaa;font-size:11px">${esc(c.rep||'')} · ${esc(c.bizNo||'')}</span>
+          </label>`).join('')}
+        </div>`:
+        `<div style="font-size:12px;color:#aaa;margin-bottom:8px">유사 업체를 찾지 못했습니다. 아래에서 직접 선택하세요.</div>`}
+
+        <label class="flabel">직접 선택</label>
+        <select id="trr-um-client" class="fsel" onchange="document.querySelectorAll('[name=trr-cand]').forEach(r=>r.checked=false)" style="margin-bottom:10px">
+          <option value="">-- 거래처 검색/선택 --</option>
+          ${clients.map(c=>`<option value="${c.id}">${esc(c.name)} (${esc(c.rep||'')})</option>`).join('')}
+        </select>
+
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-bottom:10px">
+          <input type="checkbox" id="trr-um-update-info" style="width:15px;height:15px">
+          <span>신고서의 사업자번호로 업체 정보 갱신</span>
+          <span style="font-size:11px;color:#aaa">(bizNo: ${esc(data.bizNo||'-')})</span>
+        </label>
+
+        <button onclick="doRecordTRRExisting()" style="width:100%;padding:9px;background:#e8f0fe;color:#1565c0;border:1.5px solid #90caf9;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">
+          🔗 이 업체에 기록하기
+        </button>
+      </div>
+
+      <!-- 방법 2: 신규 업체 등록 -->
+      <div style="border:1.5px solid #e0e0e0;border-radius:12px;padding:14px">
+        <div style="font-size:13px;font-weight:800;color:#2e7d32;margin-bottom:10px">② 신규 업체로 등록 후 기록</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+          <div>
+            <label class="flabel">상호 <span style="color:#e53935">*</span></label>
+            <input id="trr-new-name" class="finput" value="${esc(name)}" placeholder="상호명">
+          </div>
+          <div>
+            <label class="flabel">대표자 <span style="color:#e53935">*</span></label>
+            <input id="trr-new-rep" class="finput" placeholder="대표자명">
+          </div>
+          <div>
+            <label class="flabel">사업자번호</label>
+            <input id="trr-new-bizno" class="finput" value="${esc(data.bizNo||'')}">
+          </div>
+          <div>
+            <label class="flabel">수임유형</label>
+            <select id="trr-new-deal" class="fsel">
+              <option value="신고대리">신고대리</option>
+              <option value="기장">기장</option>
+            </select>
+          </div>
+        </div>
+        <button onclick="doRecordTRRNew()" style="width:100%;padding:9px;background:#e8f5e9;color:#2e7d32;border:1.5px solid #a5d6a7;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">
+          ➕ 신규 등록 후 기록하기
+        </button>
+      </div>
+
+    </div>
+  </div>`);
+}
+
+function _getTRRUmPeriod() {
+  const pk = document.getElementById('trr-um-period')?.value;
+  if (!pk) { toast('신고기간을 먼저 선택해주세요', 'warning'); return null; }
+  return pk;
+}
+
+function doRecordTRRExisting() {
+  const pk = _getTRRUmPeriod(); if (!pk) return;
+  const radioSel = document.querySelector('[name=trr-cand]:checked');
+  const cid = Number(radioSel?.value || document.getElementById('trr-um-client')?.value) || 0;
+  if (!cid) { toast('거래처를 선택해주세요', 'warning'); return; }
+  const updateInfo = document.getElementById('trr-um-update-info')?.checked;
+  const data = window._trrReviewData;
+  if (updateInfo && data?.bizNo) {
+    const c = G.clients.find(x=>x.id===cid);
+    if (c) { c.bizNo = data.bizNo; saveToLS(); }
+  }
+  closeModal();
+  doRecordTRRWith(cid, pk);
+}
+
+function doRecordTRRNew() {
+  const pk = _getTRRUmPeriod(); if (!pk) return;
+  const name = document.getElementById('trr-new-name')?.value?.trim();
+  const rep  = document.getElementById('trr-new-rep')?.value?.trim();
+  if (!name) { toast('상호명을 입력해주세요', 'warning'); return; }
+  if (!rep)  { toast('대표자명을 입력해주세요', 'warning'); return; }
+  const bizNo = document.getElementById('trr-new-bizno')?.value?.trim() || '';
+  const deal  = document.getElementById('trr-new-deal')?.value || '신고대리';
+  const data = window._trrReviewData;
+  const newId = Date.now();
+  const newClient = {
+    id: newId, name, rep, bizNo, jumin:'', relatedGroup:'', phone:'', email:'',
+    taxType:'개인', vatType:'일반', bizType:'', taxOffice:'',
+    manager: (G.settings?.managers?.[0]||''), managers:[],
+    fee: data?.feeRecommendation||0, feeSingo:0, feeJojung:0, feeSeongsi:0,
+    feeStatus:'청구완료', dealType: deal, dealTypes:[deal],
+    contracts: deal==='기장' ? ['기장_일반'] : ['신고대리'],
+    status:'정상', dataReceived:false, bookkeeping:false, approved:false,
+    memo:'', contractDate: new Date().toISOString().slice(0,10),
+    terminationDate:'', terminationReason:'', closureYear:'',
+    closureTaxFiled:false, closureTaxApproved:false, jointBiz:false, openDate:'', closeDate:''
+  };
+  G.clients.push(newClient);
+  closeModal();
+  doRecordTRRWith(newId, pk);
+  toast(`신규 업체 "${name}" 등록 완료`, 'success', 2500);
 }
 
 function doRecordTRR() {
