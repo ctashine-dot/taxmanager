@@ -7618,6 +7618,13 @@ function openTaxReturnReviewer(type) {
     <button class="close-btn" onclick="closeModal()">✕</button>
   </div>
   <div class="modal-body">
+    <div style="display:flex;gap:0;margin-bottom:14px;border:1.5px solid #e0e0e0;border-radius:10px;overflow:hidden">
+      <button id="trr-tab-single" onclick="switchTRRTab('single','${type}')" style="flex:1;padding:9px;background:${t.color};color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">📄 단일 검토</button>
+      <button id="trr-tab-batch" onclick="switchTRRTab('batch','${type}')" style="flex:1;padding:9px;background:#f5f5f5;color:#888;border:none;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">📂 일괄 검토 (여러 파일)</button>
+    </div>
+
+    <!-- 단일 검토 탭 -->
+    <div id="trr-pane-single">
     <div style="background:${t.bg};border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:${t.color};line-height:1.7">
       <b>📂 지원 파일</b>: 홈택스 PDF 내보내기, 세무사랑 PDF 출력<br>
       <b>📋 처리 순서</b>: PDF 업로드 → 텍스트 자동 추출 → AI 검토 → 신고리스트 기록
@@ -7662,6 +7669,38 @@ function openTaxReturnReviewer(type) {
     </button>
     <div id="trr-status" style="margin-top:8px;font-size:12px;color:#888;text-align:center"></div>
     <div id="trr-result" style="margin-top:14px"></div>
+    </div><!-- /trr-pane-single -->
+
+    <!-- 일괄 검토 탭 -->
+    <div id="trr-pane-batch" style="display:none">
+      <div style="font-size:13px;color:#555;line-height:1.7;background:#fafafa;border-radius:10px;padding:12px 14px;margin-bottom:12px">
+        여러 거래처의 PDF를 한꺼번에 선택하여 순서대로 AI 검토합니다.<br>
+        각 PDF에서 사업자번호를 자동 감지하여 거래처를 매칭합니다.
+      </div>
+      <div id="trr-batch-drop" style="border:2px dashed #e0e0e0;border-radius:12px;padding:24px;text-align:center;cursor:pointer"
+        onclick="document.getElementById('trr-batch-input').click()"
+        ondragover="event.preventDefault();this.style.borderColor='#4f8ef7'"
+        ondragleave="this.style.borderColor='#e0e0e0'"
+        ondrop="event.preventDefault();this.style.borderColor='#e0e0e0';handleBatchDrop(event,'${type}')">
+        <div style="font-size:28px;margin-bottom:6px">📂</div>
+        <div style="font-size:14px;font-weight:700;color:#555">여러 PDF를 드래그하거나 클릭하여 선택</div>
+        <div style="font-size:12px;color:#aaa;margin-top:4px">여러 파일 동시 선택 가능</div>
+      </div>
+      <input type="file" id="trr-batch-input" accept=".pdf" multiple style="display:none" onchange="addBatchFiles(this.files,'${type}')">
+      <div style="margin-top:10px">
+        <label class="flabel">신고기간 (전체 공통 적용)</label>
+        <select id="trr-batch-period" class="fsel">
+          <option value="">-- 선택 --</option>
+          ${(G.periods||[]).filter(p=>!p.locked).slice(-20).reverse().map(p=>`<option value="${p.id}">${esc(p.label||p.id)}</option>`).join('')}
+        </select>
+      </div>
+      <div id="trr-batch-list" style="margin-top:10px"></div>
+      <div id="trr-batch-controls" style="display:none;margin-top:12px">
+        <button onclick="startBatchReview('${type}')" id="trr-batch-run-btn" class="btn-primary" style="width:100%">✦ 일괄 AI 검토 시작</button>
+      </div>
+      <div id="trr-batch-results" style="margin-top:14px"></div>
+    </div><!-- /trr-pane-batch -->
+
   </div></div>`);
 }
 
@@ -7689,6 +7728,158 @@ async function handleTRRFile(file, type) {
     if (uploadArea) uploadArea.innerHTML = `<div style="color:#c62828;font-size:13px">❌ PDF 추출 실패: ${esc(e.message)}</div><div style="font-size:12px;color:#aaa;margin-top:8px">아래 텍스트 입력란에 직접 붙여넣으세요</div>`;
     if (statusEl) statusEl.textContent = '';
   }
+}
+
+function switchTRRTab(tab, type) {
+  const single = document.getElementById('trr-pane-single');
+  const batch  = document.getElementById('trr-pane-batch');
+  const tSingle = document.getElementById('trr-tab-single');
+  const tBatch  = document.getElementById('trr-tab-batch');
+  const t = {vat:{color:'#e65100'},corp:{color:'#2e7d32'},income:{color:'#3949ab'}}[type]||{color:'#4f8ef7'};
+  if (tab === 'single') {
+    if(single) single.style.display='';
+    if(batch)  batch.style.display='none';
+    if(tSingle){ tSingle.style.background=t.color; tSingle.style.color='#fff'; }
+    if(tBatch) { tBatch.style.background='#f5f5f5'; tBatch.style.color='#888'; }
+  } else {
+    if(single) single.style.display='none';
+    if(batch)  batch.style.display='';
+    if(tBatch) { tBatch.style.background=t.color; tBatch.style.color='#fff'; }
+    if(tSingle){ tSingle.style.background='#f5f5f5'; tSingle.style.color='#888'; }
+  }
+}
+
+let _batchFiles = [];
+function handleBatchDrop(event, type) {
+  addBatchFiles(event.dataTransfer.files, type);
+}
+function addBatchFiles(fileList, type) {
+  const newFiles = [...fileList].filter(f => f.name.toLowerCase().endsWith('.pdf'));
+  if (!newFiles.length) { toast('PDF 파일만 지원됩니다', 'warning'); return; }
+  _batchFiles = [..._batchFiles, ...newFiles];
+  renderBatchFileList(type);
+}
+function removeBatchFile(idx) {
+  _batchFiles.splice(idx, 1);
+  renderBatchFileList();
+}
+function renderBatchFileList(type) {
+  const listEl = document.getElementById('trr-batch-list');
+  const ctrlEl = document.getElementById('trr-batch-controls');
+  if (!listEl) return;
+  if (!_batchFiles.length) { listEl.innerHTML=''; if(ctrlEl) ctrlEl.style.display='none'; return; }
+  if(ctrlEl) ctrlEl.style.display='';
+  listEl.innerHTML = `<div style="font-size:12px;color:#888;margin-bottom:6px">${_batchFiles.length}개 파일 선택됨</div>` +
+    _batchFiles.map((f,i)=>`
+    <div id="batch-item-${i}" style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:#fafafa;border:1px solid #e8e8e8;border-radius:8px;margin-bottom:4px;font-size:13px">
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📄 ${esc(f.name)}</span>
+      <span id="batch-status-${i}" style="font-size:11px;color:#aaa;white-space:nowrap">대기</span>
+      <button onclick="removeBatchFile(${i})" style="background:none;border:none;color:#ccc;cursor:pointer;font-size:14px;padding:0 2px">✕</button>
+    </div>`).join('');
+}
+
+async function startBatchReview(type) {
+  if (!_batchFiles.length) { toast('파일을 먼저 선택해주세요','warning'); return; }
+  const pKey = document.getElementById('trr-batch-period')?.value || '';
+  const btn = document.getElementById('trr-batch-run-btn');
+  const resultsEl = document.getElementById('trr-batch-results');
+  if(btn) btn.disabled = true;
+  if(resultsEl) resultsEl.innerHTML = '';
+
+  const typeLabel = { vat:'부가가치세', corp:'법인세', income:'종합소득세' }[type] || type;
+  let allResults = [];
+
+  for (let i = 0; i < _batchFiles.length; i++) {
+    const f = _batchFiles[i];
+    const statusEl = document.getElementById(`batch-status-${i}`);
+    if(statusEl){ statusEl.textContent='추출 중...'; statusEl.style.color='#e65100'; }
+    let text = '';
+    try {
+      text = await parsePDFToText(f);
+    } catch(e) {
+      if(statusEl){ statusEl.textContent='PDF 오류'; statusEl.style.color='#c62828'; }
+      allResults.push({file:f.name, error:'PDF 추출 실패: '+e.message, data:null});
+      continue;
+    }
+    if(statusEl){ statusEl.textContent='AI 분석 중...'; statusEl.style.color='#1565c0'; }
+
+    // 거래처 자동 매칭
+    const bizMatch = text.match(/(\d{3}[-–]\d{2}[-–]\d{5})/);
+    const bn = bizMatch ? bizMatch[1].replace(/[-–]/g,'') : '';
+    const matchedClient = bn ? G.clients.find(c=>(c.bizNo||'').replace(/\D/g,'')===bn) : null;
+
+    const extractPrompt = `아래는 ${typeLabel} 신고서 PDF에서 추출한 텍스트입니다. 다음 두 가지를 수행해주세요.
+
+[신고서 텍스트]
+${text.slice(0, 6000)}
+
+---
+【1단계】 핵심 데이터 추출 — 아래 JSON을 반드시 \`\`\`json ... \`\`\` 블록으로 출력:
+{
+  "companyName": "상호명",
+  "bizNo": "사업자번호 (000-00-00000 형식)",
+  "period": "신고기간",
+  "revenue": 수입금액(숫자, 없으면 0),
+  "income": 소득금액(숫자, 없으면 0),
+  "taxBase": 과세표준(숫자, 없으면 0),
+  "totalTax": 산출세액(숫자, 없으면 0),
+  "payTax": 납부세액(숫자, 없으면 0),
+  "feeRecommendation": 추천수수료(숫자),
+  "feeReason": "수수료 추천 근거 (한 줄)"
+}
+【2단계】 검토 의견 (주요 확인사항만 간략히):`;
+
+    let reviewData = null;
+    let reviewText = '';
+    try {
+      const result = await aiCallStream(null, extractPrompt, 1500);
+      if (result) {
+        const jm = result.match(/```json\s*([\s\S]*?)\s*```/);
+        if (jm) { try { reviewData = JSON.parse(jm[1]); } catch(e){} }
+        reviewText = result.replace(/```json[\s\S]*?```/g,'').trim().slice(0, 300);
+      }
+    } catch(e) {
+      if(statusEl){ statusEl.textContent='AI 오류'; statusEl.style.color='#c62828'; }
+      allResults.push({file:f.name, error:'AI 오류: '+e.message, data:null});
+      continue;
+    }
+    if(statusEl){ statusEl.textContent='완료 ✓'; statusEl.style.color='#2e7d32'; }
+    allResults.push({file:f.name, data:reviewData, text:reviewText, matchedClient, pKey});
+
+    // 결과 카드 추가
+    const fmtN = n=>(n||0).toLocaleString()+'원';
+    const card = document.createElement('div');
+    card.style.cssText='border:1.5px solid #e0e0e0;border-radius:12px;padding:14px;margin-bottom:10px';
+    card.innerHTML = `
+      <div style="font-size:13px;font-weight:700;margin-bottom:8px">
+        ${reviewData?.companyName ? `<span style="color:#333">${esc(reviewData.companyName)}</span>` : `<span style="color:#aaa">${esc(f.name)}</span>`}
+        ${matchedClient ? `<span style="font-size:11px;color:#2e7d32;margin-left:6px">✓ 거래처 매칭: ${esc(matchedClient.name)}</span>` : `<span style="font-size:11px;color:#e65100;margin-left:6px">⚠ 거래처 미매칭</span>`}
+      </div>
+      ${reviewData ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:12px;color:#555;margin-bottom:8px">
+        ${reviewData.revenue?`<div>수입금액: <b style="color:#1565c0">${fmtN(reviewData.revenue)}</b></div>`:''}
+        ${reviewData.payTax?`<div>납부세액: <b style="color:#c62828">${fmtN(reviewData.payTax)}</b></div>`:''}
+        ${reviewData.feeRecommendation?`<div>추천수수료: <b style="color:#2e7d32">${fmtN(reviewData.feeRecommendation)}</b></div>`:''}
+      </div>`:''}
+      ${reviewText ? `<div style="font-size:11px;color:#777;line-height:1.6;margin-bottom:8px;max-height:60px;overflow:hidden">${esc(reviewText)}</div>`:''}
+      ${reviewData ? `<div style="display:flex;gap:6px">
+        <button onclick="recordBatchItem(${JSON.stringify(reviewData).replace(/"/g,'&quot;')}, ${matchedClient?.id||0}, '${pKey}')"
+          style="flex:1;padding:7px;background:#4f8ef7;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">
+          📋 신고리스트에 기록
+        </button>
+      </div>` : `<div style="color:#e53935;font-size:12px">검토 데이터 없음</div>`}`;
+    if(resultsEl) resultsEl.appendChild(card);
+  }
+
+  if(btn) btn.disabled = false;
+  const doneCount = allResults.filter(r=>r.data).length;
+  toast(`일괄 검토 완료: ${doneCount}/${_batchFiles.length}개 성공`, doneCount===_batchFiles.length?'success':'warning', 4000);
+}
+
+function recordBatchItem(reviewData, clientId, pKey) {
+  window._trrReviewData = reviewData;
+  window._trrMatchedClientId = clientId || null;
+  window._trrPKey = pKey || '';
+  recordTRRToJulgae();
 }
 
 function autoMatchTRRClient(text) {
@@ -7810,10 +8001,32 @@ ${text.slice(0, 6000)}
     window._trrMatchedClientId = matchedClient?.id || clientId || null;
     window._trrPKey = pKey;
 
+    const initFee = reviewData?.feeRecommendation || 0;
     resultDiv.innerHTML = `
       ${dataCard}
       <div class="ai-result" style="font-size:13px;line-height:1.7">${formatted}</div>
-      ${reviewData ? `<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+      ${reviewData ? `
+      <div style="background:#f1f8e9;border:1.5px solid #a5d6a7;border-radius:12px;padding:14px 16px;margin-top:12px">
+        <div style="font-size:13px;font-weight:700;color:#2e7d32;margin-bottom:10px">💰 수수료 직접 입력 후 데이터 반영</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+          <div>
+            <label style="font-size:11px;color:#555;display:block;margin-bottom:4px">청구 조정료</label>
+            <input id="trr-fee-input" type="text" inputmode="numeric" value="${initFee ? initFee.toLocaleString() : ''}" placeholder="0"
+              style="width:100%;border:1px solid #a5d6a7;border-radius:6px;padding:7px 8px;font-size:13px;box-sizing:border-box;text-align:right;font-family:inherit"
+              onfocus="this.value=this.value.replace(/,/g,'')"
+              onblur="const n=Number(this.value.replace(/,/g,''));this.value=n?n.toLocaleString():''">
+          </div>
+          <div>
+            <label style="font-size:11px;color:#555;display:block;margin-bottom:4px">성실신고수수료 <span style="color:#bbb">(해당 없으면 빈칸)</span></label>
+            <input id="trr-seongsi-input" type="text" inputmode="numeric" value="" placeholder="해당 없음"
+              style="width:100%;border:1px solid #a5d6a7;border-radius:6px;padding:7px 8px;font-size:13px;box-sizing:border-box;text-align:right;font-family:inherit"
+              onfocus="this.value=this.value.replace(/,/g,'')"
+              onblur="const n=Number(this.value.replace(/,/g,''));if(n)this.value=n.toLocaleString();else this.value=''">
+          </div>
+        </div>
+        <button onclick="applyTRRManualFee()" style="width:100%;padding:8px;background:#388e3c;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">✅ 데이터 반영</button>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
         <button onclick="recordTRRToJulgae()" style="flex:1;padding:10px;background:#4f8ef7;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">📋 신고리스트에 기록</button>
         <button onclick="copyText(document.getElementById('trr-result').innerText)" style="padding:10px 16px;background:#f5f5f5;color:#555;border:1px solid #e0e0e0;border-radius:10px;font-size:13px;cursor:pointer;font-family:inherit">📋 복사</button>
       </div>` : ''}`;
@@ -7821,6 +8034,16 @@ ${text.slice(0, 6000)}
     resultDiv.innerHTML = `<div style="color:#e53935;padding:12px">AI 검토 오류: ${esc(String(e.message||e))}</div>`;
   }
   if (btn) btn.disabled = false;
+}
+
+function applyTRRManualFee() {
+  const feeVal = Number((document.getElementById('trr-fee-input')?.value||'').replace(/,/g,'')) || 0;
+  const seongsiVal = Number((document.getElementById('trr-seongsi-input')?.value||'').replace(/,/g,'')) || 0;
+  if (!window._trrReviewData) window._trrReviewData = {};
+  window._trrReviewData.feeRecommendation = feeVal;
+  window._trrReviewData.feeSeongsi = seongsiVal;
+  const msg = `조정료 ${feeVal.toLocaleString()}원${seongsiVal ? ` / 성실신고 ${seongsiVal.toLocaleString()}원` : ''}`;
+  toast(`✅ 수수료 반영 완료: ${msg} — 이제 신고리스트에 기록하세요`, 'success', 3000);
 }
 
 function recordTRRToJulgae() {
@@ -7913,11 +8136,12 @@ function openTRRUnmatchedModal() {
         </div>`:
         `<div style="font-size:12px;color:#aaa;margin-bottom:8px">유사 업체를 찾지 못했습니다. 아래에서 직접 선택하세요.</div>`}
 
-        <label class="flabel">직접 선택</label>
-        <select id="trr-um-client" class="fsel" onchange="document.querySelectorAll('[name=trr-cand]').forEach(r=>r.checked=false)" style="margin-bottom:10px">
-          <option value="">-- 거래처 검색/선택 --</option>
-          ${clients.map(c=>`<option value="${c.id}">${esc(c.name)} (${esc(c.rep||'')})</option>`).join('')}
-        </select>
+        <label class="flabel">거래처 검색</label>
+        <input type="text" id="trr-um-search" placeholder="상호명 또는 대표자 입력..." autocomplete="off"
+          style="width:100%;border:1.5px solid #90caf9;border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:4px"
+          oninput="filterTRRClientSearch(this.value)">
+        <div id="trr-um-search-list" style="max-height:160px;overflow-y:auto;border:1px solid #e0e0e0;border-radius:8px;background:#fff;margin-bottom:10px;display:none"></div>
+        <input type="hidden" id="trr-um-client" value="">
 
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-bottom:10px">
           <input type="checkbox" id="trr-um-update-info" style="width:15px;height:15px">
@@ -7961,6 +8185,41 @@ function openTRRUnmatchedModal() {
 
     </div>
   </div>`);
+}
+
+function filterTRRClientSearch(q) {
+  const list = document.getElementById('trr-um-search-list');
+  const hidden = document.getElementById('trr-um-client');
+  if (!list) return;
+  const kw = q.trim().toLowerCase();
+  if (!kw) { list.style.display='none'; if(hidden) hidden.value=''; return; }
+  const matches = G.clients.filter(c => c.status!=='해지' && c.status!=='폐업' &&
+    (c.name.toLowerCase().includes(kw) || (c.rep||'').toLowerCase().includes(kw) || (c.bizNo||'').includes(kw))
+  ).slice(0,20);
+  if (!matches.length) {
+    list.innerHTML = `<div style="padding:10px;font-size:12px;color:#aaa;text-align:center">검색 결과 없음</div>`;
+    list.style.display='block';
+    if(hidden) hidden.value='';
+    return;
+  }
+  list.innerHTML = matches.map(c=>`
+    <div onclick="selectTRRClient(${c.id},'${esc(c.name)}')"
+      style="padding:8px 12px;font-size:13px;cursor:pointer;border-bottom:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center"
+      onmouseover="this.style.background='#e8f0fe'" onmouseout="this.style.background=''">
+      <span><b>${esc(c.name)}</b> <span style="color:#888;font-size:11px">${esc(c.rep||'')}</span></span>
+      <span style="font-size:11px;color:#aaa">${esc(c.bizNo||'')}</span>
+    </div>`).join('');
+  list.style.display='block';
+}
+
+function selectTRRClient(id, name) {
+  const hidden = document.getElementById('trr-um-client');
+  const search = document.getElementById('trr-um-search');
+  const list = document.getElementById('trr-um-search-list');
+  if (hidden) hidden.value = id;
+  if (search) search.value = name;
+  if (list) list.style.display='none';
+  document.querySelectorAll('[name=trr-cand]').forEach(r=>r.checked=false);
 }
 
 function _getTRRUmPeriod() {
@@ -8033,12 +8292,12 @@ function doRecordTRRWith(clientId, pKey) {
     ...(data.totalTax ? { totalTax: data.totalTax }  : {}),
     ...(data.payTax   ? { payTax: data.payTax }      : {}),
     ...(data.feeRecommendation ? { fee: data.feeRecommendation } : {}),
+    ...(data.feeSeongsi ? { feeSeongsi: data.feeSeongsi } : {}),
   };
   G.julgae[pKey][clientId] = updated;
-  // 기간 enrolled에 추가
+  // enrolled가 이미 명시적으로 사용 중인 경우에만 추가 (빈 배열이면 "전체 자동" 상태이므로 건드리지 않음)
   const period = G.periods.find(p=>p.id===pKey);
-  if (period && !period.enrolled?.includes(clientId)) {
-    if (!period.enrolled) period.enrolled = [];
+  if (period && period.enrolled?.length > 0 && !period.enrolled.includes(clientId)) {
     period.enrolled.push(clientId);
   }
   // AI 검토 메모 저장
