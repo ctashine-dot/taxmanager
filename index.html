@@ -1565,6 +1565,36 @@ function _renderDashboardInner() {
       <div class="stat-value" style="color:#f57f17">${G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&getManagers(c).length===0).length}</div>
       <div class="stat-sub">클릭해서 배정</div>
     </div>
+    ${(()=>{
+      const activeC = G.clients.filter(c=>c.status==='정상'||c.status==='주의');
+      const incomePeriod = [...(G.periods||[])].filter(p=>['income','seongsi'].includes(p.reportType)).sort((a,b)=>(b.id||'').localeCompare(a.id||''))[0];
+      const corpPeriod   = [...(G.periods||[])].filter(p=>p.reportType==='corp').sort((a,b)=>(b.id||'').localeCompare(a.id||''))[0];
+      let seongsiCnt=0, auditCnt=0;
+      if (incomePeriod) {
+        const pKey = incomePeriod.id+'|'+(incomePeriod.reportType||incomePeriod.type);
+        for (const c of activeC) {
+          if (c.taxType==='법인') continue;
+          const rev = (julgaeVal(pKey,c.id)||{}).revenue||0;
+          if (rev > 0 && rev >= seongsiLimit(c.bizType).lim) seongsiCnt++;
+        }
+      }
+      if (corpPeriod) {
+        const pKey = corpPeriod.id+'|'+(corpPeriod.reportType||corpPeriod.type);
+        for (const c of activeC) {
+          if (c.taxType!=='법인') continue;
+          const rev = (julgaeVal(pKey,c.id)||{}).revenue||0;
+          if (rev >= 10000000000) auditCnt++;
+        }
+      }
+      return `<div class="stat-card" style="border-left:4px solid #7b1fa2;cursor:pointer;grid-column:span 1" onclick="openAuditSeongsiReport()">
+        <div class="stat-label">성실신고 대상 예상</div>
+        <div style="display:flex;align-items:baseline;gap:10px">
+          <div class="stat-value" style="color:#c62828">${seongsiCnt}</div>
+          <div style="font-size:12px;color:#1565c0;font-weight:700">${auditCnt}개 외부감사</div>
+        </div>
+        <div class="stat-sub">클릭해서 상세보기</div>
+      </div>`;
+    })()}
   </div>
 
   ${(G.settings?.dashWidgets?.julgaeCard!==false)?(()=>{
@@ -4953,6 +4983,17 @@ function renderJulgae() {
       const bosuBadge = (_bosuRec && _bosuRec.fee > 0)
         ? `<div onclick="applyBosuFee('${pKey2}',${c.id},'${_bosuRec.field}',${_bosuRec.fee})" style="font-size:9px;color:#7b1fa2;background:#f3e5f5;border-radius:4px;padding:1px 4px;cursor:pointer;margin-top:2px;text-align:right" title="클릭하여 수수료 자동입력: ${_bosuRec.fee.toLocaleString()}원">💡${_bosuRec.fee.toLocaleString()}</div>`
         : '';
+      const _chkRev = isVatType ? (v.salesAmount||0) : (v.revenue||0);
+      const _si = c.taxType!=='법인' && _chkRev>0 ? seongsiLimit(c.bizType) : null;
+      const revAuxBadge = _si ? (
+        _chkRev >= _si.lim
+          ? `<div style="font-size:9px;font-weight:700;color:#c62828;background:#ffebee;border-radius:3px;padding:1px 4px;margin-top:2px;text-align:right" title="성실신고 확인대상 (${_si.label} ${(_si.lim/1e8).toFixed(1)}억 이상)">⚠성실신고</div>`
+          : _chkRev >= _si.lim*0.85
+          ? `<div style="font-size:9px;color:#e65100;background:#fff3e0;border-radius:3px;padding:1px 4px;margin-top:2px;text-align:right" title="성실신고 기준 근접 (${_si.label} ${(_si.lim/1e8).toFixed(1)}억, 현재 ${(_chkRev/1e8).toFixed(2)}억)">📈${(_si.lim/1e8).toFixed(1)}억근접</div>`
+          : ''
+      ) : (c.taxType==='법인' && _chkRev>=10000000000
+        ? `<div style="font-size:9px;color:#1565c0;background:#e3f2fd;border-radius:3px;padding:1px 4px;margin-top:2px;text-align:right" title="외부감사 검토필요 (매출 100억↑ — 자산·부채·인원 추가확인)">🔍외부감사</div>`
+        : '');
       const _lastMemo = (G.clientNotes?.[c.id]||[]).slice(-1)[0]?.text||c.memo||'';
       const _memoTitle = _lastMemo ? esc(_lastMemo.slice(0,120)) : '';
       const _revChg = (v.revenue&&v.prevRevenue) ? Math.round((v.revenue-v.prevRevenue)/v.prevRevenue*100) : null;
@@ -4978,7 +5019,7 @@ function renderJulgae() {
           <div class="chk ${v.a?'on':''}" style="margin:0 auto;width:24px;height:24px;touch-action:none;user-select:none;-webkit-user-select:none" onpointerdown="julgaeChkDown(this,'${pKey2}',${c.id},'a',${v.a?1:0})" onpointerup="julgaeChkUp(this,'${pKey2}',${c.id},'a',${v.a?1:0})" onpointercancel="julgaeChkCancel(this)" onpointerleave="julgaeChkCancel(this)">${v.a?'✓':''}</div>
         </td>
         ${isIncomeType?`
-          <td style="text-align:right;padding:4px 8px;${hc['j_col_revenue']?'display:none':''}">${niInput(c.id,'revenue',v.revenue)}</td>
+          <td style="text-align:right;padding:4px 8px;${hc['j_col_revenue']?'display:none':''}">${niInput(c.id,'revenue',v.revenue)}${revAuxBadge}</td>
           <td style="text-align:right;padding:4px 8px;${hc['j_col_income']?'display:none':''}">${niInput(c.id,'income',v.income)}</td>
           <td style="text-align:center;padding:4px;font-size:12px;font-weight:700;${hc['j_col_margin']?'display:none':''}${margin!==null?(Number(margin)<0?';color:#e53935':';color:#2e7d32'):';color:#ccc'}">${margin!==null?margin+'%':'-'}</td>
           <td style="text-align:right;padding:4px 8px;${hc['j_col_taxamt']?'display:none':''}">${niInput(c.id,'totalTax',v.totalTax)}</td>
@@ -4987,14 +5028,14 @@ function renderJulgae() {
           ${(()=>{const _rt=v.residentTax||Math.round((v.totalTax||0)*0.1);const ts=(v.payTax||0)+_rt;return`<td data-jsum="${pKey2}_${c.id}" style="text-align:right;padding:4px 8px;font-size:12px;font-weight:600;color:#333;${hc['j_col_totalsum']?'display:none':''}">${ts?ts.toLocaleString():'-'}</td>`})()}
           <td style="text-align:right;padding:4px 8px;${hc['j_col_prevrevenue']?'display:none':''}">${niInput(c.id,'prevRevenue',v.prevRevenue)}</td>
         `:isVatType?`
-          <td style="text-align:right;padding:4px 8px;${hc['j_col_revenue']?'display:none':''}">${niInput(c.id,'salesAmount',v.salesAmount)}${prevRevTxt}</td>
+          <td style="text-align:right;padding:4px 8px;${hc['j_col_revenue']?'display:none':''}">${niInput(c.id,'salesAmount',v.salesAmount)}${prevRevTxt}${revAuxBadge}</td>
           <td style="text-align:right;padding:4px 8px;${hc['j_col_purchase']?'display:none':''}">${niInput(c.id,'purchaseAmount',v.purchaseAmount)}</td>
           <td style="text-align:right;padding:4px 8px;${hc['j_col_vat']?'display:none':''}">${niInput(c.id,'vatAmount',v.vatAmount)}</td>
         `:isSajupType?`
-          <td style="text-align:right;padding:4px 8px;${hc['j_col_revenue']?'display:none':''}">${niInput(c.id,'revenue',v.revenue)}${prevRevTxt}</td>
+          <td style="text-align:right;padding:4px 8px;${hc['j_col_revenue']?'display:none':''}">${niInput(c.id,'revenue',v.revenue)}${prevRevTxt}${revAuxBadge}</td>
           <td style="text-align:right;padding:4px 8px;${hc['j_col_purchase']?'display:none':''}">${niInput(c.id,'expenses',v.expenses)}</td>
         `:`
-          <td style="text-align:right;padding:4px 8px;${hc['j_col_revenue']?'display:none':''}">${niInput(c.id,'revenue',v.revenue)}${prevRevTxt}</td>
+          <td style="text-align:right;padding:4px 8px;${hc['j_col_revenue']?'display:none':''}">${niInput(c.id,'revenue',v.revenue)}${prevRevTxt}${revAuxBadge}</td>
           <td style="text-align:right;padding:4px 8px;${hc['j_col_income']?'display:none':''}">${niInput(c.id,'income',v.income)}</td>
           <td style="text-align:right;padding:4px 8px;${hc['j_col_taxbase']?'display:none':''}">${niInput(c.id,'taxBase',v.taxBase)}</td>
         `}
@@ -10246,6 +10287,97 @@ function removeDuplicateClientsV1() {
   const removed = before - G.clients.length;
   if (removed > 0) { saveToLS(); toast(`중복 거래처 ${removed}개 제거 완료`, 'success', 5000); }
   localStorage.setItem('tm_removeDuplicatesV1','1');
+}
+
+// ── 성실신고·외부감사 기준 ──────────────────────────────────────────
+function seongsiLimit(bizType) {
+  const b = bizType || '';
+  if (/도매|소매|도·소매|농업|어업|임업|광업|부동산매매/.test(b)) return { lim: 1500000000, label: '도소매·농어업' };
+  if (/제조|숙박|음식점|음식|건설|운수|금융|보험|통신|전기|가스|수도/.test(b)) return { lim: 750000000, label: '제조·음식점·건설' };
+  return { lim: 500000000, label: '서비스·부동산임대 등' };
+}
+
+function openAuditSeongsiReport() {
+  const activeClients = G.clients.filter(c => c.status === '정상' || c.status === '주의');
+  // 가장 최근 종소세 기간
+  const incomePeriod = [...(G.periods||[])].filter(p => ['income','seongsi'].includes(p.reportType)).sort((a,b)=>(b.id||'').localeCompare(a.id||''))[0];
+  // 가장 최근 법인세 기간
+  const corpPeriod   = [...(G.periods||[])].filter(p => p.reportType === 'corp').sort((a,b)=>(b.id||'').localeCompare(a.id||''))[0];
+
+  const seongsiRows = [], auditRows = [];
+  if (incomePeriod) {
+    const pKey = incomePeriod.id + '|' + (incomePeriod.reportType||incomePeriod.type);
+    for (const c of activeClients) {
+      if (c.taxType === '법인') continue;
+      const v = julgaeVal(pKey, c.id);
+      const rev = v.revenue || 0;
+      if (rev <= 0) continue;
+      const si = seongsiLimit(c.bizType);
+      if (rev >= si.lim * 0.8) seongsiRows.push({ c, rev, si, ok: rev >= si.lim });
+    }
+  }
+  if (corpPeriod) {
+    const pKey = corpPeriod.id + '|' + (corpPeriod.reportType||corpPeriod.type);
+    for (const c of activeClients) {
+      if (c.taxType !== '법인') continue;
+      const v = julgaeVal(pKey, c.id);
+      const rev = v.revenue || 0;
+      if (rev >= 10000000000) auditRows.push({ c, rev });
+    }
+  }
+  seongsiRows.sort((a,b)=>b.rev-a.rev);
+  auditRows.sort((a,b)=>b.rev-a.rev);
+
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.innerHTML = `<div class="modal" style="max-width:620px">
+    <div class="modal-header"><h3>📊 성실신고·외부감사 현황</h3><button class="close-btn" onclick="this.closest('.overlay').remove()">✕</button></div>
+    <div class="modal-body" style="max-height:75vh;overflow-y:auto">
+      <div style="background:#fff8e1;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:11px;color:#5d4037;line-height:1.7">
+        <b>성실신고확인 대상 기준 (수입금액 기준)</b><br>
+        ▸ 도매·소매·농어업·광업·부동산매매업 <b>15억원</b> 이상<br>
+        ▸ 제조·음식점·숙박·건설·운수·금융·통신 등 <b>7억5천만원</b> 이상<br>
+        ▸ 부동산임대·서비스·교육·의료 등 기타 <b>5억원</b> 이상
+      </div>
+      <div style="background:#e3f2fd;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:11px;color:#1565c0;line-height:1.7">
+        <b>외부감사 대상 기준</b> (다음 4가지 중 2가지 이상 해당 시)<br>
+        ▸ 자산총액 120억원 이상 &nbsp;▸ 부채총액 70억원 이상<br>
+        ▸ 매출액 100억원 이상 &nbsp;▸ 종업원 300인 이상
+      </div>
+
+      <div style="font-size:13px;font-weight:800;margin-bottom:8px">
+        ⚠ 성실신고 대상 예상
+        <span style="font-size:11px;font-weight:400;color:#888">(${incomePeriod?incomePeriod.label:'기간 없음'} 기준, ${seongsiRows.filter(r=>r.ok).length}명 대상 / ${seongsiRows.filter(r=>!r.ok).length}명 근접)</span>
+      </div>
+      ${seongsiRows.length === 0 ? '<p style="color:#aaa;font-size:12px;padding:8px 0">매출 데이터가 있는 대상자가 없습니다</p>' :
+        seongsiRows.map(({c,rev,si,ok})=>`
+        <div style="display:flex;align-items:center;gap:6px;padding:6px 4px;border-bottom:1px solid #f0f0f0;font-size:12px">
+          <div style="flex:1;min-width:0">
+            <span style="font-weight:700">${esc(c.name)}</span>
+            <span style="font-size:10px;color:#999;margin-left:4px">${esc(c.bizType||'')}</span>
+          </div>
+          <span style="color:#333;font-weight:600;white-space:nowrap">${rev.toLocaleString()}원</span>
+          <span style="font-size:10px;color:#aaa;white-space:nowrap">${si.label} ${(si.lim/1e8).toFixed(1)}억</span>
+          <span style="padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700;white-space:nowrap;${ok?'background:#ffebee;color:#c62828':'background:#fff3e0;color:#e65100'}">${ok?'⚠ 대상':'근접'}</span>
+        </div>`).join('')}
+
+      <div style="font-size:13px;font-weight:800;margin:14px 0 8px">
+        🔍 외부감사 검토 법인
+        <span style="font-size:11px;font-weight:400;color:#888">(${corpPeriod?corpPeriod.label:'기간 없음'} 기준, 매출 100억+ ${auditRows.length}개)</span>
+      </div>
+      ${auditRows.length === 0 ? '<p style="color:#aaa;font-size:12px;padding:8px 0">해당 없음</p>' :
+        auditRows.map(({c,rev})=>`
+        <div style="display:flex;align-items:center;gap:6px;padding:6px 4px;border-bottom:1px solid #f0f0f0;font-size:12px">
+          <span style="flex:1;font-weight:700">${esc(c.name)}</span>
+          <span style="color:#1565c0;font-weight:700;white-space:nowrap">${rev.toLocaleString()}원</span>
+          <span style="padding:1px 7px;border-radius:10px;font-size:10px;background:#e3f2fd;color:#1565c0;font-weight:700">매출 ${(rev/1e8).toFixed(0)}억</span>
+        </div>`).join('')}
+
+      <p style="font-size:10px;color:#bbb;margin-top:12px">※ 매출액 기준만 표시 / 업종은 업태 키워드로 자동분류 (실제 업종과 다를 수 있음)<br>※ 외부감사는 매출 기준 1개 항목만 확인 — 자산·부채·인원 등 추가 확인 필요</p>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
 }
 
 function showNameRepDuplicates() {
