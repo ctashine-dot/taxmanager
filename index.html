@@ -5105,9 +5105,53 @@ function renderJulgae() {
   </div>`:''}`}
   ` : ''}
   `}`;
+  initJulgaeDragScroll();
 }
 
-function switchJulgaePeriod(idx) {
+function initJulgaeDragScroll() {
+  const wrap = document.querySelector('#page-julgae .tbl-wrap');
+  if (!wrap) return;
+
+  // 마우스 드래그 스크롤 (입력칸 외 영역 드래그)
+  let isDragging = false, startX, scrollLeft;
+  wrap.addEventListener('mousedown', e => {
+    if (e.target.closest('input,button,select,a,label')) return;
+    isDragging = true;
+    startX = e.clientX;
+    scrollLeft = wrap.scrollLeft;
+    wrap.style.cursor = 'grabbing';
+    wrap.style.userSelect = 'none';
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    wrap.scrollLeft = scrollLeft - (e.clientX - startX);
+  });
+  document.addEventListener('mouseup', () => {
+    if (isDragging) { isDragging = false; wrap.style.cursor = ''; wrap.style.userSelect = ''; }
+  });
+
+  // 터치 드래그 스크롤 (세로모드 가로 스크롤 지원)
+  let tStartX, tStartY, tScrollLeft, tIsHoriz = null;
+  wrap.addEventListener('touchstart', e => {
+    const t = e.touches[0];
+    tStartX = t.clientX; tStartY = t.clientY;
+    tScrollLeft = wrap.scrollLeft;
+    tIsHoriz = null;
+  }, {passive: true});
+  wrap.addEventListener('touchmove', e => {
+    const dx = e.touches[0].clientX - tStartX;
+    const dy = e.touches[0].clientY - tStartY;
+    if (tIsHoriz === null && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
+      tIsHoriz = Math.abs(dx) > Math.abs(dy);
+    }
+    if (tIsHoriz) {
+      wrap.scrollLeft = tScrollLeft - dx;
+      e.preventDefault();
+    }
+  }, {passive: false});
+  wrap.addEventListener('touchend', () => { tIsHoriz = null; }, {passive: true});
+}
   G.julgaePeriodIdx = idx;
   if (!G.julgaeKeepFilters) {
     G.julgaeSearch=''; G.julgaeRepSearch=''; G.julgaeManagers=[];
@@ -7698,7 +7742,7 @@ function openTaxReturnReviewer(type) {
       <div id="trr-batch-controls" style="display:none;margin-top:12px">
         <button onclick="startBatchReview('${type}')" id="trr-batch-run-btn" class="btn-primary" style="width:100%">✦ 일괄 AI 검토 시작</button>
       </div>
-      <div id="trr-batch-results" style="margin-top:14px"></div>
+      <div id="trr-batch-results" style="margin-top:14px;max-height:50vh;overflow-y:auto;overflow-x:hidden"></div>
     </div><!-- /trr-pane-batch -->
 
   </div></div>`);
@@ -7750,6 +7794,7 @@ function switchTRRTab(tab, type) {
 }
 
 let _batchFiles = [];
+let _batchResults = [];
 function handleBatchDrop(event, type) {
   addBatchFiles(event.dataTransfer.files, type);
 }
@@ -7785,9 +7830,9 @@ async function startBatchReview(type) {
   const resultsEl = document.getElementById('trr-batch-results');
   if(btn) btn.disabled = true;
   if(resultsEl) resultsEl.innerHTML = '';
+  _batchResults = [];
 
   const typeLabel = { vat:'부가가치세', corp:'법인세', income:'종합소득세' }[type] || type;
-  let allResults = [];
 
   for (let i = 0; i < _batchFiles.length; i++) {
     const f = _batchFiles[i];
@@ -7844,26 +7889,37 @@ ${text.slice(0, 6000)}
       continue;
     }
     if(statusEl){ statusEl.textContent='완료 ✓'; statusEl.style.color='#2e7d32'; }
-    allResults.push({file:f.name, data:reviewData, text:reviewText, matchedClient, pKey});
+    const bIdx = _batchResults.length;
+    _batchResults.push({file:f.name, data:reviewData, text:reviewText, matchedClient, pKey, recorded:false});
 
-    // 결과 카드 추가
+    // 결과 카드 추가 (카드 ID로 나중에 상태 업데이트)
     const fmtN = n=>(n||0).toLocaleString()+'원';
     const card = document.createElement('div');
-    card.style.cssText='border:1.5px solid #e0e0e0;border-radius:12px;padding:14px;margin-bottom:10px';
+    card.id = `batch-card-${bIdx}`;
+    card.style.cssText='border:1.5px solid #e0e0e0;border-radius:12px;padding:14px;margin-bottom:10px;transition:border-color .2s,background .2s';
+    const clientParts = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업').sort((a,b)=>a.name.localeCompare(b.name,'ko'));
     card.innerHTML = `
-      <div style="font-size:13px;font-weight:700;margin-bottom:8px">
-        ${reviewData?.companyName ? `<span style="color:#333">${esc(reviewData.companyName)}</span>` : `<span style="color:#aaa">${esc(f.name)}</span>`}
-        ${matchedClient ? `<span style="font-size:11px;color:#2e7d32;margin-left:6px">✓ 거래처 매칭: ${esc(matchedClient.name)}</span>` : `<span style="font-size:11px;color:#e65100;margin-left:6px">⚠ 거래처 미매칭</span>`}
+      <div style="font-size:13px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;flex-wrap:wrap;gap:6px">
+        <span>${reviewData?.companyName ? esc(reviewData.companyName) : esc(f.name)}</span>
+        ${matchedClient
+          ? `<span id="bc-match-${bIdx}" style="font-size:11px;color:#2e7d32;background:#e8f5e9;padding:2px 8px;border-radius:10px">✓ ${esc(matchedClient.name)}</span>`
+          : `<span id="bc-match-${bIdx}" style="font-size:11px;color:#e65100;background:#fff3e0;padding:2px 8px;border-radius:10px">⚠ 거래처 미매칭</span>`}
       </div>
-      ${reviewData ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:12px;color:#555;margin-bottom:8px">
-        ${reviewData.revenue?`<div>수입금액: <b style="color:#1565c0">${fmtN(reviewData.revenue)}</b></div>`:''}
+      ${reviewData ? `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;font-size:12px;color:#555;margin-bottom:8px">
+        ${reviewData.revenue?`<div>수입: <b style="color:#1565c0">${fmtN(reviewData.revenue)}</b></div>`:''}
         ${reviewData.payTax?`<div>납부세액: <b style="color:#c62828">${fmtN(reviewData.payTax)}</b></div>`:''}
-        ${reviewData.feeRecommendation?`<div>추천수수료: <b style="color:#2e7d32">${fmtN(reviewData.feeRecommendation)}</b></div>`:''}
+        ${reviewData.feeRecommendation?`<div>추천: <b style="color:#2e7d32">${fmtN(reviewData.feeRecommendation)}</b></div>`:''}
       </div>`:''}
-      ${reviewText ? `<div style="font-size:11px;color:#777;line-height:1.6;margin-bottom:8px;max-height:60px;overflow:hidden">${esc(reviewText)}</div>`:''}
-      ${reviewData ? `<div style="display:flex;gap:6px">
-        <button onclick="recordBatchItem(${JSON.stringify(reviewData).replace(/"/g,'&quot;')}, ${matchedClient?.id||0}, '${pKey}')"
-          style="flex:1;padding:7px;background:#4f8ef7;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">
+      ${reviewText ? `<div style="font-size:11px;color:#777;line-height:1.6;margin-bottom:8px;padding:8px;background:#fafafa;border-radius:6px;white-space:pre-wrap;word-break:break-word">${esc(reviewText)}</div>`:''}
+      ${!matchedClient ? `<div style="margin-bottom:8px">
+        <input type="text" placeholder="거래처 검색 (이름/대표자)..." autocomplete="off"
+          style="width:100%;border:1px solid #ffcc80;border-radius:6px;padding:6px 8px;font-size:12px;box-sizing:border-box;font-family:inherit"
+          oninput="filterBatchClientSearch(this.value,${bIdx})">
+        <div id="bc-search-${bIdx}" style="max-height:120px;overflow-y:auto;border:1px solid #e0e0e0;border-radius:6px;background:#fff;display:none;margin-top:2px"></div>
+      </div>`:``}
+      ${reviewData ? `<div id="bc-btn-area-${bIdx}">
+        <button onclick="batchRecord(${bIdx})"
+          style="width:100%;padding:7px;background:#4f8ef7;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">
           📋 신고리스트에 기록
         </button>
       </div>` : `<div style="color:#e53935;font-size:12px">검토 데이터 없음</div>`}`;
@@ -7871,15 +7927,53 @@ ${text.slice(0, 6000)}
   }
 
   if(btn) btn.disabled = false;
-  const doneCount = allResults.filter(r=>r.data).length;
+  const doneCount = _batchResults.filter(r=>r.data).length;
   toast(`일괄 검토 완료: ${doneCount}/${_batchFiles.length}개 성공`, doneCount===_batchFiles.length?'success':'warning', 4000);
 }
 
-function recordBatchItem(reviewData, clientId, pKey) {
-  window._trrReviewData = reviewData;
-  window._trrMatchedClientId = clientId || null;
-  window._trrPKey = pKey || '';
-  recordTRRToJulgae();
+function filterBatchClientSearch(q, bIdx) {
+  const listEl = document.getElementById(`bc-search-${bIdx}`);
+  if (!listEl) return;
+  const kw = q.trim().toLowerCase();
+  if (!kw) { listEl.style.display='none'; return; }
+  const matches = G.clients.filter(c => c.status!=='해지' && c.status!=='폐업' &&
+    (c.name.toLowerCase().includes(kw) || (c.rep||'').toLowerCase().includes(kw))
+  ).slice(0,10);
+  if (!matches.length) { listEl.innerHTML='<div style="padding:8px;font-size:12px;color:#aaa;text-align:center">검색 결과 없음</div>'; listEl.style.display='block'; return; }
+  listEl.innerHTML = matches.map(c=>`
+    <div onclick="selectBatchClient(${c.id},'${esc(c.name)}',${bIdx})"
+      style="padding:7px 10px;font-size:12px;cursor:pointer;border-bottom:1px solid #f0f0f0"
+      onmouseover="this.style.background='#e8f0fe'" onmouseout="this.style.background=''">
+      <b>${esc(c.name)}</b> <span style="color:#888">${esc(c.rep||'')}</span>
+    </div>`).join('');
+  listEl.style.display='block';
+}
+
+function selectBatchClient(clientId, name, bIdx) {
+  if (_batchResults[bIdx]) _batchResults[bIdx].matchedClient = G.clients.find(c=>c.id===clientId);
+  const matchEl = document.getElementById(`bc-match-${bIdx}`);
+  if (matchEl) { matchEl.textContent = `✓ ${name}`; matchEl.style.color='#2e7d32'; matchEl.style.background='#e8f5e9'; }
+  const searchEl = document.getElementById(`bc-search-${bIdx}`);
+  if (searchEl) searchEl.style.display='none';
+  const input = searchEl?.previousElementSibling;
+  if (input) input.value = name;
+}
+
+function batchRecord(bIdx) {
+  const item = _batchResults[bIdx];
+  if (!item || item.recorded) return;
+  if (!item.pKey) { toast('신고기간이 선택되지 않았습니다', 'warning'); return; }
+  if (!item.matchedClient?.id) { toast('거래처를 먼저 선택해주세요 (위 검색창에서)', 'warning'); return; }
+  window._trrReviewData = item.data;
+  doRecordTRRWith(item.matchedClient.id, item.pKey);
+  item.recorded = true;
+  const card = document.getElementById(`batch-card-${bIdx}`);
+  if (card) {
+    card.style.borderColor = '#a5d6a7';
+    card.style.background = '#f9fff9';
+    const btnArea = document.getElementById(`bc-btn-area-${bIdx}`);
+    if (btnArea) btnArea.innerHTML = '<div style="text-align:center;padding:6px;font-size:12px;color:#2e7d32;font-weight:700">✅ 기록 완료</div>';
+  }
 }
 
 function autoMatchTRRClient(text) {
@@ -8027,7 +8121,10 @@ ${text.slice(0, 6000)}
         <button onclick="applyTRRManualFee()" style="width:100%;padding:8px;background:#388e3c;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">✅ 데이터 반영</button>
       </div>
       <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
-        <button onclick="recordTRRToJulgae()" style="flex:1;padding:10px;background:#4f8ef7;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">📋 신고리스트에 기록</button>
+        <button id="trr-record-btn" onclick="recordTRRToJulgae()" disabled
+          style="flex:1;padding:10px;background:#b0bec5;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:not-allowed;font-family:inherit;opacity:0.7">
+          📋 ↑ 수수료 입력 후 데이터 반영 필요
+        </button>
         <button onclick="copyText(document.getElementById('trr-result').innerText)" style="padding:10px 16px;background:#f5f5f5;color:#555;border:1px solid #e0e0e0;border-radius:10px;font-size:13px;cursor:pointer;font-family:inherit">📋 복사</button>
       </div>` : ''}`;
   } catch(e) {
@@ -8044,6 +8141,14 @@ function applyTRRManualFee() {
   window._trrReviewData.feeSeongsi = seongsiVal;
   const msg = `조정료 ${feeVal.toLocaleString()}원${seongsiVal ? ` / 성실신고 ${seongsiVal.toLocaleString()}원` : ''}`;
   toast(`✅ 수수료 반영 완료: ${msg} — 이제 신고리스트에 기록하세요`, 'success', 3000);
+  const btn = document.getElementById('trr-record-btn');
+  if (btn) {
+    btn.disabled = false;
+    btn.style.background = '#4f8ef7';
+    btn.style.cursor = 'pointer';
+    btn.style.opacity = '1';
+    btn.textContent = '📋 신고리스트에 기록';
+  }
 }
 
 function recordTRRToJulgae() {
