@@ -4933,8 +4933,8 @@ function renderJulgae() {
       const _prevRevVal1 = isVatType ? (prev1?.salesAmount||0) : (prev1?.revenue||0);
       const _prevRevVal2 = isVatType ? (prev2?.salesAmount||0) : (prev2?.revenue||0);
       const prevRevTxt = [
-        _prevRevVal1 ? `<div style="font-size:10px;color:#aaa">전년:${_prevRevVal1.toLocaleString()}</div>` : '',
-        _prevRevVal2 ? `<div style="font-size:10px;color:#aaa">전전년:${_prevRevVal2.toLocaleString()}</div>` : ''
+        _prevRevVal1 ? `<div style="font-size:9px;color:#bbb">전:${_prevRevVal1.toLocaleString()}</div>` : '',
+        _prevRevVal2 ? `<div style="font-size:9px;color:#bbb">전전:${_prevRevVal2.toLocaleString()}</div>` : ''
       ].join('');
       const prevFeeTxt = [
         prev1?.fee ? `<div style="font-size:10px;color:#aaa">전년:${prev1.fee.toLocaleString()}</div>` : '',
@@ -4951,7 +4951,7 @@ function renderJulgae() {
       const _revVal4bosu = isVatType ? (v.salesAmount||0) : (v.revenue||0);
       const _bosuRec = getBosuFeeRec(_revVal4bosu, period.reportType);
       const bosuBadge = (_bosuRec && _bosuRec.fee > 0)
-        ? `<div onclick="applyBosuFee('${pKey2}',${c.id},'${_bosuRec.field}',${_bosuRec.fee})" style="font-size:9px;color:#7b1fa2;background:#f3e5f5;border-radius:4px;padding:2px 5px;cursor:pointer;margin-top:2px;text-align:right;white-space:nowrap" title="클릭하여 수수료 자동입력">💡 추천 ${_bosuRec.fee.toLocaleString()}원</div>`
+        ? `<div onclick="applyBosuFee('${pKey2}',${c.id},'${_bosuRec.field}',${_bosuRec.fee})" style="font-size:9px;color:#7b1fa2;background:#f3e5f5;border-radius:4px;padding:1px 4px;cursor:pointer;margin-top:2px;text-align:right" title="클릭하여 수수료 자동입력: ${_bosuRec.fee.toLocaleString()}원">💡${_bosuRec.fee.toLocaleString()}</div>`
         : '';
       const _lastMemo = (G.clientNotes?.[c.id]||[]).slice(-1)[0]?.text||c.memo||'';
       const _memoTitle = _lastMemo ? esc(_lastMemo.slice(0,120)) : '';
