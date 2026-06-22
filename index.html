@@ -4540,12 +4540,13 @@ function renderJulgae() {
 
   const niInput = (cid, field, val, extraStyle='') => {
     const disp = val ? Number(val).toLocaleString() : '';
-    return `<input type="text" inputmode="numeric" class="julgae-num-input" data-jni="${pKey2}_${cid}_${field}" value="${disp}" placeholder=""
-      onfocus="this.value=this.value.replace(/,/g,'')"
-      onblur="const n=Number(this.value.replace(/,/g,''));if(!isNaN(n)&&this.value!==''){this.value=n?n.toLocaleString():'';}else if(this.value===''){}"
+    const sz = disp ? Math.max(6, disp.length + 1) : 6;
+    return `<input type="text" inputmode="numeric" class="julgae-num-input" data-jni="${pKey2}_${cid}_${field}" value="${disp}" placeholder="" size="${sz}"
+      onfocus="const raw=this.value.replace(/,/g,'');this.value=raw;this.setAttribute('size',Math.max(8,raw.length+2))"
+      onblur="const raw=this.value.replace(/,/g,'');const n=Number(raw);if(raw!==''&&!isNaN(n)){const d=n?n.toLocaleString():'';this.value=d;this.setAttribute('size',d?Math.max(6,d.length+1):6);}else{this.value='';this.setAttribute('size',6);}"
       onkeydown="if(event.key==='Enter'){event.preventDefault();const all=[...document.querySelectorAll('.julgae-num-input')];const i=all.indexOf(this);if(i>=0&&i<all.length-1)all[i+1].focus();}"
       onchange="updateJulgaeNum('${pKey2}',${cid},'${field}',this.value.replace(/,/g,''))"
-      style="width:100%;text-align:right;border:1px solid #e0e0e0;border-radius:5px;padding:2px 3px;font-size:10px;font-family:inherit;${extraStyle}">`;
+      style="text-align:right;border:1px solid #e0e0e0;border-radius:5px;padding:2px 3px;font-size:10px;font-family:inherit;box-sizing:content-box;${extraStyle}">`;
   };
 
   const _jnfBtn = (field) => {
@@ -4891,33 +4892,33 @@ function renderJulgae() {
       <th style="width:62px;text-align:center;padding:3px;${_hcStyle('j_consul')}"><div style="display:flex;flex-direction:column;align-items:center;gap:2px">${julgaeCycleBtn('julgaeConsulFilter','상담')}<button onclick="checkAllJulgaeField('c')" style="font-size:9px;padding:1px 5px;border-radius:4px;border:1px solid #1565c0;background:#e3f2fd;color:#1565c0;cursor:pointer;white-space:nowrap" title="상담 전체 체크/해제">전체</button>${_hcBtn('j_consul')}</div></th>
       <th style="width:62px;text-align:center;padding:3px;${_hcStyle('j_done')}"><div style="display:flex;flex-direction:column;align-items:center;gap:2px">${julgaeCycleBtn('julgaeDoneFilter','결재')}<button onclick="checkAllJulgaeField('a')" style="font-size:9px;padding:1px 5px;border-radius:4px;border:1px solid #2e7d32;background:#e8f5e9;color:#2e7d32;cursor:pointer;white-space:nowrap" title="결재 전체 체크/해제">전체</button>${_hcBtn('j_done')}</div></th>
       ${isIncomeType?`
-        <th style="width:100px;text-align:right;${_hcStyle('j_col_revenue')}"><div style="display:flex;align-items:center;justify-content:flex-end">매출액${_hcBtn('j_col_revenue')}</div></th>
-        <th style="width:100px;text-align:right;${_hcStyle('j_col_income')}"><div style="display:flex;align-items:center;justify-content:flex-end">소득금액${_hcBtn('j_col_income')}</div></th>
+        <th style="text-align:right;${_hcStyle('j_col_revenue')}"><div style="display:flex;align-items:center;justify-content:flex-end">매출액${_hcBtn('j_col_revenue')}</div></th>
+        <th style="text-align:right;${_hcStyle('j_col_income')}"><div style="display:flex;align-items:center;justify-content:flex-end">소득금액${_hcBtn('j_col_income')}</div></th>
         <th style="width:55px;text-align:center;${_hcStyle('j_col_margin')}"><div style="display:flex;align-items:center;justify-content:center">소득율${_hcBtn('j_col_margin')}</div></th>
-        <th style="width:100px;text-align:right;${_hcStyle('j_col_taxamt')}"><div style="display:flex;align-items:center;justify-content:flex-end">총부담세액${_hcBtn('j_col_taxamt')}</div></th>
-        <th style="width:100px;text-align:right;${_hcStyle('j_col_paytax')}"><div style="display:flex;align-items:center;justify-content:flex-end">납부세액${_hcBtn('j_col_paytax')}</div></th>
-        <th style="width:80px;text-align:right;${_hcStyle('j_col_resident')}"><div style="display:flex;align-items:center;justify-content:flex-end">주민세${_hcBtn('j_col_resident')}</div></th>
-        <th style="width:90px;text-align:right;${_hcStyle('j_col_totalsum')}"><div style="display:flex;align-items:center;justify-content:flex-end">합계${_hcBtn('j_col_totalsum')}</div></th>
-        <th style="width:100px;text-align:right;${_hcStyle('j_col_prevrevenue')}"><div style="display:flex;align-items:center;justify-content:flex-end">직전매출${_jnfBtn('prevRevenue')}${_hcBtn('j_col_prevrevenue')}</div></th>
+        <th style="text-align:right;${_hcStyle('j_col_taxamt')}"><div style="display:flex;align-items:center;justify-content:flex-end">총부담세액${_hcBtn('j_col_taxamt')}</div></th>
+        <th style="text-align:right;${_hcStyle('j_col_paytax')}"><div style="display:flex;align-items:center;justify-content:flex-end">납부세액${_hcBtn('j_col_paytax')}</div></th>
+        <th style="text-align:right;${_hcStyle('j_col_resident')}"><div style="display:flex;align-items:center;justify-content:flex-end">주민세${_hcBtn('j_col_resident')}</div></th>
+        <th style="text-align:right;${_hcStyle('j_col_totalsum')}"><div style="display:flex;align-items:center;justify-content:flex-end">합계${_hcBtn('j_col_totalsum')}</div></th>
+        <th style="text-align:right;${_hcStyle('j_col_prevrevenue')}"><div style="display:flex;align-items:center;justify-content:flex-end">직전매출${_jnfBtn('prevRevenue')}${_hcBtn('j_col_prevrevenue')}</div></th>
       `:isVatType?`
-        <th style="width:110px;text-align:right;${_hcStyle('j_col_revenue')}"><div style="display:flex;align-items:center;justify-content:flex-end">매출액${_hcBtn('j_col_revenue')}</div></th>
-        <th style="width:110px;text-align:right;${_hcStyle('j_col_purchase')}"><div style="display:flex;align-items:center;justify-content:flex-end">매입액${_hcBtn('j_col_purchase')}</div></th>
-        <th style="width:110px;text-align:right;${_hcStyle('j_col_vat')}"><div style="display:flex;align-items:center;justify-content:flex-end">부가세${_hcBtn('j_col_vat')}</div></th>
+        <th style="text-align:right;${_hcStyle('j_col_revenue')}"><div style="display:flex;align-items:center;justify-content:flex-end">매출액${_hcBtn('j_col_revenue')}</div></th>
+        <th style="text-align:right;${_hcStyle('j_col_purchase')}"><div style="display:flex;align-items:center;justify-content:flex-end">매입액${_hcBtn('j_col_purchase')}</div></th>
+        <th style="text-align:right;${_hcStyle('j_col_vat')}"><div style="display:flex;align-items:center;justify-content:flex-end">부가세${_hcBtn('j_col_vat')}</div></th>
       `:isSajupType?`
-        <th style="width:110px;text-align:right;${_hcStyle('j_col_revenue')}"><div style="display:flex;align-items:center;justify-content:flex-end">수입금액${_hcBtn('j_col_revenue')}</div></th>
-        <th style="width:110px;text-align:right;${_hcStyle('j_col_purchase')}"><div style="display:flex;align-items:center;justify-content:flex-end">필요경비${_hcBtn('j_col_purchase')}</div></th>
+        <th style="text-align:right;${_hcStyle('j_col_revenue')}"><div style="display:flex;align-items:center;justify-content:flex-end">수입금액${_hcBtn('j_col_revenue')}</div></th>
+        <th style="text-align:right;${_hcStyle('j_col_purchase')}"><div style="display:flex;align-items:center;justify-content:flex-end">필요경비${_hcBtn('j_col_purchase')}</div></th>
       `:`
-        <th style="width:110px;text-align:right;${_hcStyle('j_col_revenue')}"><div style="display:flex;align-items:center;justify-content:flex-end">수입금액${_hcBtn('j_col_revenue')}</div></th>
-        <th style="width:110px;text-align:right;${_hcStyle('j_col_income')}"><div style="display:flex;align-items:center;justify-content:flex-end">소득금액${_hcBtn('j_col_income')}</div></th>
-        <th style="width:110px;text-align:right;${_hcStyle('j_col_taxbase')}"><div style="display:flex;align-items:center;justify-content:flex-end">과세표준${_hcBtn('j_col_taxbase')}</div></th>
+        <th style="text-align:right;${_hcStyle('j_col_revenue')}"><div style="display:flex;align-items:center;justify-content:flex-end">수입금액${_hcBtn('j_col_revenue')}</div></th>
+        <th style="text-align:right;${_hcStyle('j_col_income')}"><div style="display:flex;align-items:center;justify-content:flex-end">소득금액${_hcBtn('j_col_income')}</div></th>
+        <th style="text-align:right;${_hcStyle('j_col_taxbase')}"><div style="display:flex;align-items:center;justify-content:flex-end">과세표준${_hcBtn('j_col_taxbase')}</div></th>
       `}
-      ${isSeongsiType?`<th style="width:100px;text-align:right;${_hcStyle('j_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">조정료${_jnfBtn('fee')}${_hcBtn('j_fee')}</div></th><th style="width:100px;text-align:right;${_hcStyle('j_feess')}"><div style="display:flex;align-items:center;justify-content:flex-end">성실신고료${_hcBtn('j_feess')}</div></th>`:isIncomeType?`<th style="width:100px;text-align:right;${_hcStyle('j_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">조정료${_jnfBtn('fee')}${_hcBtn('j_fee')}</div></th>`:`<th style="width:110px;text-align:right;${_hcStyle('j_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">수수료청구${_hcBtn('j_fee')}</div></th>`}
+      ${isSeongsiType?`<th style="text-align:right;${_hcStyle('j_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">조정료${_jnfBtn('fee')}${_hcBtn('j_fee')}</div></th><th style="text-align:right;${_hcStyle('j_feess')}"><div style="display:flex;align-items:center;justify-content:flex-end">성실신고료${_hcBtn('j_feess')}</div></th>`:isIncomeType?`<th style="text-align:right;${_hcStyle('j_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">조정료${_jnfBtn('fee')}${_hcBtn('j_fee')}</div></th>`:`<th style="text-align:right;${_hcStyle('j_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">수수료청구${_hcBtn('j_fee')}</div></th>`}
       ${isIncomeType?`
-        <th style="width:90px;text-align:right;${_hcStyle('j_col_paid')}"><div style="display:flex;align-items:center;justify-content:flex-end">입금${_jnfBtn('paid')}${_hcBtn('j_col_paid')}</div></th>
-        <th style="width:80px;text-align:right;${_hcStyle('j_col_unpaid')}"><div style="display:flex;align-items:center;justify-content:flex-end">미수${_jnfBtn('unpaid')}${_hcBtn('j_col_unpaid')}</div></th>
-        <th style="width:90px;text-align:right;${_hcStyle('j_col_fee25')}"><div style="display:flex;align-items:center;justify-content:flex-end">25년${_jnfBtn('fee25')}${_hcBtn('j_col_fee25')}</div></th>
-        <th style="width:90px;text-align:right;${_hcStyle('j_col_fee24')}"><div style="display:flex;align-items:center;justify-content:flex-end">24년${_jnfBtn('fee24')}${_hcBtn('j_col_fee24')}</div></th>
-        <th style="width:90px;text-align:right;${_hcStyle('j_col_fee23')}"><div style="display:flex;align-items:center;justify-content:flex-end">23년${_jnfBtn('fee23')}${_hcBtn('j_col_fee23')}</div></th>
+        <th style="text-align:right;${_hcStyle('j_col_paid')}"><div style="display:flex;align-items:center;justify-content:flex-end">입금${_jnfBtn('paid')}${_hcBtn('j_col_paid')}</div></th>
+        <th style="text-align:right;${_hcStyle('j_col_unpaid')}"><div style="display:flex;align-items:center;justify-content:flex-end">미수${_jnfBtn('unpaid')}${_hcBtn('j_col_unpaid')}</div></th>
+        <th style="text-align:right;${_hcStyle('j_col_fee25')}"><div style="display:flex;align-items:center;justify-content:flex-end">25년${_jnfBtn('fee25')}${_hcBtn('j_col_fee25')}</div></th>
+        <th style="text-align:right;${_hcStyle('j_col_fee24')}"><div style="display:flex;align-items:center;justify-content:flex-end">24년${_jnfBtn('fee24')}${_hcBtn('j_col_fee24')}</div></th>
+        <th style="text-align:right;${_hcStyle('j_col_fee23')}"><div style="display:flex;align-items:center;justify-content:flex-end">23년${_jnfBtn('fee23')}${_hcBtn('j_col_fee23')}</div></th>
       `:''}
       <th style="width:70px;text-align:center;padding:3px;${_hcStyle('j_collect')}"><div style="display:flex;align-items:center">${julgaeCycleBtn('julgaeFeeFilter','수금',['전체','수금','미수금'])}${_hcBtn('j_collect')}</div></th>
       <th style="width:44px;text-align:center;padding:3px;${_hcStyle('j_link')}"><div style="display:flex;align-items:center"><span style="font-size:11px">자료링크</span>${_hcBtn('j_link')}</div></th>
