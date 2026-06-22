@@ -73,7 +73,8 @@ body{font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;background:#f0
 .tbl-wrap::-webkit-scrollbar-thumb{background:#bbb;border-radius:4px}
 .tbl-wrap::-webkit-scrollbar-thumb:hover{background:#888}
 table{width:100%;border-collapse:collapse;font-size:13px;background:#fff}
-#page-julgae .tbl-wrap table{width:max-content}
+#page-julgae .tbl-wrap{overflow-x:scroll;touch-action:pan-x;-webkit-overflow-scrolling:touch}
+#page-julgae .tbl-wrap table{width:max-content;min-width:700px}
 thead tr{background:#f8f9ff;border-bottom:2px solid #e8eaf6}
 th{padding:10px 12px;text-align:left;font-weight:700;color:#555;white-space:nowrap;font-size:12px}
 tbody tr{border-bottom:1px solid #f0f0f0;cursor:pointer;transition:background .1s}
@@ -1162,6 +1163,15 @@ function filteredClients() {
 // ══════════════════════════════════════════════════════
 function badge(label, color='gray') {
   return `<span class="badge badge-${color}">${esc(label)}</span>`;
+}
+function julgaeName(name) {
+  if (!name) return name;
+  let n = name.trim();
+  if (n.startsWith('주식회사 ')) return '(주)' + n.slice(5);
+  if (n.startsWith('주식회사')) return '(주)' + n.slice(4);
+  if (n.endsWith(' 주식회사')) return n.slice(0, -5) + '(주)';
+  if (n.endsWith('주식회사')) return n.slice(0, -4) + '(주)';
+  return n.replace(/㈜/g, '(주)');
 }
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -5002,10 +5012,10 @@ function renderJulgae() {
         ${G.julgaeBulkMode?`<td style="text-align:center;width:32px" onclick="event.stopPropagation();toggleJulgaeSelect(${c.id})"><input type="checkbox" ${(G.julgaeBulkSelected||[]).includes(c.id)?'checked':''} style="width:16px;height:16px;cursor:pointer" onclick="event.stopPropagation();toggleJulgaeSelect(${c.id})"></td>`:''}
         <td style="color:#aaa;font-size:11px">${++_rowN}</td>
         <td onclick="${item.isGroupHeader?`toggleJulgaeGroup('${item.groupKey}')`:`openClientNotes(${c.id})`}" style="cursor:pointer"${_memoTitle?` title="${_memoTitle}"`:''} >${item.isGroupHeader
-          ?`<div class="td-name" style="display:flex;align-items:center;gap:4px;min-width:0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${esc(c.name)}</span><span style="background:#7b1fa2;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;white-space:nowrap;flex-shrink:0">+${item.groupClients.length-1} ${item.expanded?'▲':'▼'}</span>${_noteIcon}</div>`
+          ?`<div class="td-name" style="display:flex;align-items:center;gap:4px;min-width:0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font-size:${julgaeName(c.name).length>12?'10px':julgaeName(c.name).length>8?'11px':'12px'}">${esc(julgaeName(c.name))}</span><span style="background:#7b1fa2;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;white-space:nowrap;flex-shrink:0">+${item.groupClients.length-1} ${item.expanded?'▲':'▼'}</span>${_noteIcon}</div>`
           :item.isGroupChild
-            ?`<div style="display:flex;align-items:center;gap:4px;padding-left:18px;min-width:0"><span style="color:#ccc;font-size:11px;flex-shrink:0">└</span><div class="td-name" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${esc(c.name)}</div>${_revBadge}${_noteIcon}</div>`
-            :`<div class="td-name" style="display:flex;align-items:center;gap:3px;min-width:0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${esc(c.name)}</span>${_revBadge}${_noteIcon}</div>`
+            ?`<div style="display:flex;align-items:center;gap:4px;padding-left:18px;min-width:0"><span style="color:#ccc;font-size:11px;flex-shrink:0">└</span><div class="td-name" style="font-size:${julgaeName(c.name).length>12?'10px':julgaeName(c.name).length>8?'11px':'12px'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${esc(julgaeName(c.name))}</div>${_revBadge}${_noteIcon}</div>`
+            :`<div class="td-name" style="display:flex;align-items:center;gap:3px;min-width:0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font-size:${julgaeName(c.name).length>12?'10px':julgaeName(c.name).length>8?'11px':'12px'}">${esc(julgaeName(c.name))}</span>${_revBadge}${_noteIcon}</div>`
         }</td>
         <td style="font-size:12px;color:#444;${hc['j_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
         <td style="color:#555;font-size:12px;${hc['j_manager']?'display:none':''}">${getManagers(c).length?getManagers(c).join(', '):'<span style="color:#ff7043;font-size:11px">⚠ 미지정</span>'}</td>
@@ -5112,7 +5122,11 @@ function initJulgaeDragScroll() {
   const wrap = document.querySelector('#page-julgae .tbl-wrap');
   if (!wrap) return;
 
-  // 마우스 드래그 스크롤 (입력칸 외 영역 드래그)
+  // 이전 document 리스너 제거 (renderJulgae 재호출 시 누적 방지)
+  if (window._jMM) document.removeEventListener('mousemove', window._jMM);
+  if (window._jMU) document.removeEventListener('mouseup', window._jMU);
+
+  // 마우스 드래그 스크롤 (PC: 입력칸 외 영역 드래그)
   let isDragging = false, startX, scrollLeft;
   wrap.addEventListener('mousedown', e => {
     if (e.target.closest('input,button,select,a,label')) return;
@@ -5123,34 +5137,16 @@ function initJulgaeDragScroll() {
     wrap.style.userSelect = 'none';
     e.preventDefault();
   });
-  document.addEventListener('mousemove', e => {
+  window._jMM = e => {
     if (!isDragging) return;
     wrap.scrollLeft = scrollLeft - (e.clientX - startX);
-  });
-  document.addEventListener('mouseup', () => {
+  };
+  window._jMU = () => {
     if (isDragging) { isDragging = false; wrap.style.cursor = ''; wrap.style.userSelect = ''; }
-  });
-
-  // 터치 드래그 스크롤 (세로모드 가로 스크롤 지원)
-  let tStartX, tStartY, tScrollLeft, tIsHoriz = null;
-  wrap.addEventListener('touchstart', e => {
-    const t = e.touches[0];
-    tStartX = t.clientX; tStartY = t.clientY;
-    tScrollLeft = wrap.scrollLeft;
-    tIsHoriz = null;
-  }, {passive: true});
-  wrap.addEventListener('touchmove', e => {
-    const dx = e.touches[0].clientX - tStartX;
-    const dy = e.touches[0].clientY - tStartY;
-    if (tIsHoriz === null && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
-      tIsHoriz = Math.abs(dx) > Math.abs(dy);
-    }
-    if (tIsHoriz) {
-      wrap.scrollLeft = tScrollLeft - dx;
-      e.preventDefault();
-    }
-  }, {passive: false});
-  wrap.addEventListener('touchend', () => { tIsHoriz = null; }, {passive: true});
+  };
+  document.addEventListener('mousemove', window._jMM);
+  document.addEventListener('mouseup', window._jMU);
+  // 터치 스크롤은 CSS touch-action:pan-x 로 처리
 }
 
 function switchJulgaePeriod(idx) {
