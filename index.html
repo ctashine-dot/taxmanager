@@ -4540,13 +4540,13 @@ function renderJulgae() {
 
   const niInput = (cid, field, val, extraStyle='') => {
     const disp = val ? Number(val).toLocaleString() : '';
-    const sz = disp ? Math.max(6, disp.length + 1) : 6;
-    return `<input type="text" inputmode="numeric" class="julgae-num-input" data-jni="${pKey2}_${cid}_${field}" value="${disp}" placeholder="" size="${sz}"
-      onfocus="const raw=this.value.replace(/,/g,'');this.value=raw;this.setAttribute('size',Math.max(8,raw.length+2))"
-      onblur="const raw=this.value.replace(/,/g,'');const n=Number(raw);if(raw!==''&&!isNaN(n)){const d=n?n.toLocaleString():'';this.value=d;this.setAttribute('size',d?Math.max(6,d.length+1):6);}else{this.value='';this.setAttribute('size',6);}"
+    const w = disp ? Math.max(58, Math.ceil(disp.length * 6.5) + 10) : 58;
+    return `<input type="text" inputmode="numeric" class="julgae-num-input" data-jni="${pKey2}_${cid}_${field}" value="${disp}" placeholder=""
+      onfocus="this.value=this.value.replace(/,/g,'')"
+      onblur="const raw=this.value.replace(/,/g,'');const n=Number(raw);if(raw!==''&&!isNaN(n)){const d=n?n.toLocaleString():'';this.value=d;}else{this.value='';}"
       onkeydown="if(event.key==='Enter'){event.preventDefault();const all=[...document.querySelectorAll('.julgae-num-input')];const i=all.indexOf(this);if(i>=0&&i<all.length-1)all[i+1].focus();}"
       onchange="updateJulgaeNum('${pKey2}',${cid},'${field}',this.value.replace(/,/g,''))"
-      style="text-align:right;border:1px solid #e0e0e0;border-radius:5px;padding:2px 3px;font-size:10px;font-family:inherit;box-sizing:content-box;${extraStyle}">`;
+      style="width:${w}px;text-align:right;border:1px solid #e0e0e0;border-radius:5px;padding:2px 4px;font-size:10px;font-family:inherit;box-sizing:border-box;${extraStyle}">`;
   };
 
   const _jnfBtn = (field) => {
@@ -4978,7 +4978,7 @@ function renderJulgae() {
           <div class="chk ${v.a?'on':''}" style="margin:0 auto;width:24px;height:24px;touch-action:none;user-select:none;-webkit-user-select:none" onpointerdown="julgaeChkDown(this,'${pKey2}',${c.id},'a',${v.a?1:0})" onpointerup="julgaeChkUp(this,'${pKey2}',${c.id},'a',${v.a?1:0})" onpointercancel="julgaeChkCancel(this)" onpointerleave="julgaeChkCancel(this)">${v.a?'✓':''}</div>
         </td>
         ${isIncomeType?`
-          <td style="text-align:right;padding:4px 8px;${hc['j_col_revenue']?'display:none':''}">${niInput(c.id,'revenue',v.revenue)}${bosuBadge}</td>
+          <td style="text-align:right;padding:4px 8px;${hc['j_col_revenue']?'display:none':''}">${niInput(c.id,'revenue',v.revenue)}</td>
           <td style="text-align:right;padding:4px 8px;${hc['j_col_income']?'display:none':''}">${niInput(c.id,'income',v.income)}</td>
           <td style="text-align:center;padding:4px;font-size:12px;font-weight:700;${hc['j_col_margin']?'display:none':''}${margin!==null?(Number(margin)<0?';color:#e53935':';color:#2e7d32'):';color:#ccc'}">${margin!==null?margin+'%':'-'}</td>
           <td style="text-align:right;padding:4px 8px;${hc['j_col_taxamt']?'display:none':''}">${niInput(c.id,'totalTax',v.totalTax)}</td>
@@ -4987,14 +4987,14 @@ function renderJulgae() {
           ${(()=>{const _rt=v.residentTax||Math.round((v.totalTax||0)*0.1);const ts=(v.payTax||0)+_rt;return`<td data-jsum="${pKey2}_${c.id}" style="text-align:right;padding:4px 8px;font-size:12px;font-weight:600;color:#333;${hc['j_col_totalsum']?'display:none':''}">${ts?ts.toLocaleString():'-'}</td>`})()}
           <td style="text-align:right;padding:4px 8px;${hc['j_col_prevrevenue']?'display:none':''}">${niInput(c.id,'prevRevenue',v.prevRevenue)}</td>
         `:isVatType?`
-          <td style="text-align:right;padding:4px 8px;${hc['j_col_revenue']?'display:none':''}">${niInput(c.id,'salesAmount',v.salesAmount)}${prevRevTxt}${bosuBadge}</td>
+          <td style="text-align:right;padding:4px 8px;${hc['j_col_revenue']?'display:none':''}">${niInput(c.id,'salesAmount',v.salesAmount)}${prevRevTxt}</td>
           <td style="text-align:right;padding:4px 8px;${hc['j_col_purchase']?'display:none':''}">${niInput(c.id,'purchaseAmount',v.purchaseAmount)}</td>
           <td style="text-align:right;padding:4px 8px;${hc['j_col_vat']?'display:none':''}">${niInput(c.id,'vatAmount',v.vatAmount)}</td>
         `:isSajupType?`
-          <td style="text-align:right;padding:4px 8px;${hc['j_col_revenue']?'display:none':''}">${niInput(c.id,'revenue',v.revenue)}${prevRevTxt}${bosuBadge}</td>
+          <td style="text-align:right;padding:4px 8px;${hc['j_col_revenue']?'display:none':''}">${niInput(c.id,'revenue',v.revenue)}${prevRevTxt}</td>
           <td style="text-align:right;padding:4px 8px;${hc['j_col_purchase']?'display:none':''}">${niInput(c.id,'expenses',v.expenses)}</td>
         `:`
-          <td style="text-align:right;padding:4px 8px;${hc['j_col_revenue']?'display:none':''}">${niInput(c.id,'revenue',v.revenue)}${prevRevTxt}${bosuBadge}</td>
+          <td style="text-align:right;padding:4px 8px;${hc['j_col_revenue']?'display:none':''}">${niInput(c.id,'revenue',v.revenue)}${prevRevTxt}</td>
           <td style="text-align:right;padding:4px 8px;${hc['j_col_income']?'display:none':''}">${niInput(c.id,'income',v.income)}</td>
           <td style="text-align:right;padding:4px 8px;${hc['j_col_taxbase']?'display:none':''}">${niInput(c.id,'taxBase',v.taxBase)}</td>
         `}
@@ -5005,11 +5005,12 @@ function renderJulgae() {
           </td>
           <td style="text-align:right;padding:4px 8px;${hc['j_feess']?'display:none':''}">
             ${niInput(c.id,'feeSeongsi',autoFee2,autoFee2?'font-weight:700;color:#7b1fa2':'')}
+            ${bosuBadge}
           </td>
         `:`
           <td style="text-align:right;padding:4px 8px;${hc['j_fee']?'display:none':''}">
             ${niInput(c.id,'fee',autoFee,autoFee?'font-weight:700;color:#7b1fa2':'')}
-            ${isIncomeType?'':(prevFeeTxt)}
+            ${isIncomeType?bosuBadge:(prevFeeTxt)}
           </td>
         `}
         ${isIncomeType?`
