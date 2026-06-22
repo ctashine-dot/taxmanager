@@ -5152,6 +5152,8 @@ function initJulgaeDragScroll() {
   }, {passive: false});
   wrap.addEventListener('touchend', () => { tIsHoriz = null; }, {passive: true});
 }
+
+function switchJulgaePeriod(idx) {
   G.julgaePeriodIdx = idx;
   if (!G.julgaeKeepFilters) {
     G.julgaeSearch=''; G.julgaeRepSearch=''; G.julgaeManagers=[];
