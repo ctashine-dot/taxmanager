@@ -81,7 +81,8 @@ tbody tr:nth-child(even){background:#fafbff}
 tbody tr:hover{background:#e8f0fe}
 td{padding:10px 12px;vertical-align:middle}
 .td-name{font-weight:700;font-size:13px}
-#page-julgae table td:nth-child(2){min-width:160px;max-width:240px}
+#page-julgae table td:nth-child(2){min-width:100px;max-width:140px;overflow:hidden}
+@media(min-width:1024px){#page-julgae table td:nth-child(2){max-width:200px}}
 .td-sub{font-size:11px;color:#999}
 
 /* ── 체크박스 */
@@ -4959,10 +4960,10 @@ function renderJulgae() {
         ${G.julgaeBulkMode?`<td style="text-align:center;width:32px" onclick="event.stopPropagation();toggleJulgaeSelect(${c.id})"><input type="checkbox" ${(G.julgaeBulkSelected||[]).includes(c.id)?'checked':''} style="width:16px;height:16px;cursor:pointer" onclick="event.stopPropagation();toggleJulgaeSelect(${c.id})"></td>`:''}
         <td style="color:#aaa;font-size:11px">${++_rowN}</td>
         <td onclick="${item.isGroupHeader?`toggleJulgaeGroup('${item.groupKey}')`:`openClientNotes(${c.id})`}" style="cursor:pointer"${_memoTitle?` title="${_memoTitle}"`:''} >${item.isGroupHeader
-          ?`<div class="td-name" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0"><span style="word-break:keep-all">${esc(c.name)}</span><span style="background:#7b1fa2;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;white-space:nowrap;flex-shrink:0">+${item.groupClients.length-1} ${item.expanded?'▲':'▼'}</span>${_noteIcon}</div>`
+          ?`<div class="td-name" style="display:flex;align-items:center;gap:4px;min-width:0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${esc(c.name)}</span><span style="background:#7b1fa2;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;white-space:nowrap;flex-shrink:0">+${item.groupClients.length-1} ${item.expanded?'▲':'▼'}</span>${_noteIcon}</div>`
           :item.isGroupChild
-            ?`<div style="display:flex;align-items:center;gap:4px;padding-left:22px;min-width:0"><span style="color:#ccc;font-size:11px;flex-shrink:0">└</span><div class="td-name" style="font-size:12px;word-break:keep-all">${esc(c.name)}</div>${_revBadge}${_noteIcon}</div>`
-            :`<div class="td-name" style="display:flex;align-items:center;gap:3px;min-width:0;flex-wrap:wrap"><span style="word-break:keep-all">${esc(c.name)}</span>${_revBadge}${_noteIcon}</div>`
+            ?`<div style="display:flex;align-items:center;gap:4px;padding-left:18px;min-width:0"><span style="color:#ccc;font-size:11px;flex-shrink:0">└</span><div class="td-name" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${esc(c.name)}</div>${_revBadge}${_noteIcon}</div>`
+            :`<div class="td-name" style="display:flex;align-items:center;gap:3px;min-width:0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${esc(c.name)}</span>${_revBadge}${_noteIcon}</div>`
         }</td>
         <td style="font-size:12px;color:#444;${hc['j_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
         <td style="color:#555;font-size:12px;${hc['j_manager']?'display:none':''}">${getManagers(c).length?getManagers(c).join(', '):'<span style="color:#ff7043;font-size:11px">⚠ 미지정</span>'}</td>
