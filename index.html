@@ -4565,7 +4565,7 @@ function renderJulgae() {
     _applyNF('prevRevenue', c => { const v=julgaeVal(pKey2,c.id); return v.prevRevenue||0; });
     _applyNF('fee',  c => { const v=julgaeVal(pKey2,c.id); return v.fee||0; });
     _applyNF('paid', c => { const v=julgaeVal(pKey2,c.id); return v.paid||0; });
-    _applyNF('unpaid', c => { const v=julgaeVal(pKey2,c.id); return (v.fee||0)-(v.paid||0); });
+    _applyNF('unpaid', c => { const v=julgaeVal(pKey2,c.id); return (v.fee||0)+(v.feeSeongsi||0)-(v.paid||0); });
     _applyNF('fee25', c => { const v=julgaeVal(pKey2,c.id); return v.fee25||0; });
     _applyNF('fee24', c => { const v=julgaeVal(pKey2,c.id); return v.fee24||0; });
     _applyNF('fee23', c => { const v=julgaeVal(pKey2,c.id); return v.fee23||0; });
@@ -4990,8 +4990,17 @@ function renderJulgae() {
       const margin = (v.revenue&&v.income) ? (v.income/v.revenue*100).toFixed(1) : null;
       const _revVal4bosu = isVatType ? (v.salesAmount||0) : (v.revenue||0);
       const _bosuRec = getBosuFeeRec(_revVal4bosu, period.reportType);
-      const bosuBadge = (_bosuRec && _bosuRec.fee > 0)
-        ? `<div onclick="applyBosuFee('${pKey2}',${c.id},'${_bosuRec.field}',${_bosuRec.fee})" style="font-size:9px;color:#7b1fa2;background:#f3e5f5;border-radius:4px;padding:1px 4px;cursor:pointer;margin-top:2px;text-align:right" title="클릭하여 수수료 자동입력: ${_bosuRec.fee.toLocaleString()}원">💡${_bosuRec.fee.toLocaleString()}</div>`
+      // 성실신고 타입: 조정료 칸엔 income 기준, 성실신고료 칸엔 seongsi 기준 별도 추천
+      const _bosuRecFee = (isSeongsiType && _revVal4bosu > 0)
+        ? (() => { const tier = getBosuTier(_revVal4bosu); return {field:'fee', fee:tier.income}; })()
+        : _bosuRec;
+      const _bosuRecSs = (isSeongsiType && _bosuRec && _bosuRec.fee > 0) ? _bosuRec : null;
+      const _badgeStyle = 'font-size:9px;color:#7b1fa2;background:#f3e5f5;border-radius:4px;padding:1px 4px;cursor:pointer;margin-top:2px;text-align:right';
+      const bosuBadge = (_bosuRecFee && _bosuRecFee.fee > 0)
+        ? `<div onclick="applyBosuFee('${pKey2}',${c.id},'${_bosuRecFee.field}',${_bosuRecFee.fee})" style="${_badgeStyle}" title="클릭하여 자동입력: ${_bosuRecFee.fee.toLocaleString()}원">💡${_bosuRecFee.fee.toLocaleString()}</div>`
+        : '';
+      const bosuBadgeSs = _bosuRecSs
+        ? `<div onclick="applyBosuFee('${pKey2}',${c.id},'${_bosuRecSs.field}',${_bosuRecSs.fee})" style="${_badgeStyle}" title="클릭하여 자동입력: ${_bosuRecSs.fee.toLocaleString()}원">💡${_bosuRecSs.fee.toLocaleString()}</div>`
         : '';
       const _chkRev = isVatType ? (v.salesAmount||0) : (v.revenue||0);
       const _si = c.taxType!=='법인' && _chkRev>0 ? seongsiLimit(c.bizType) : null;
@@ -5053,10 +5062,11 @@ function renderJulgae() {
           <td style="text-align:right;padding:4px 8px;${hc['j_fee']?'display:none':''}">
             ${niInput(c.id,'fee',autoFee,autoFee?'font-weight:700;color:#7b1fa2':'')}
             ${prevFeeTxt}
+            ${bosuBadge}
           </td>
           <td style="text-align:right;padding:4px 8px;${hc['j_feess']?'display:none':''}">
             ${niInput(c.id,'feeSeongsi',autoFee2,autoFee2?'font-weight:700;color:#7b1fa2':'')}
-            ${bosuBadge}
+            ${bosuBadgeSs}
           </td>
         `:`
           <td style="text-align:right;padding:4px 8px;${hc['j_fee']?'display:none':''}">
@@ -5066,7 +5076,7 @@ function renderJulgae() {
         `}
         ${isIncomeType?`
           <td style="text-align:right;padding:4px 8px;${hc['j_col_paid']?'display:none':''}">${niInput(c.id,'paid',v.paid,v.paid?'font-weight:700;color:#2e7d32':'')}</td>
-          ${(()=>{const unpaid=(v.fee||0)-(v.paid||0);return`<td style="text-align:right;padding:4px 8px;font-size:12px;font-weight:600;${hc['j_col_unpaid']?'display:none':''}${unpaid>0?';color:#e53935':unpaid<0?';color:#1565c0':';color:#aaa'}">${unpaid!==0?unpaid.toLocaleString():'-'}</td>`})()}
+          ${(()=>{const unpaid=(v.fee||0)+(v.feeSeongsi||0)-(v.paid||0);return`<td style="text-align:right;padding:4px 8px;font-size:12px;font-weight:600;${hc['j_col_unpaid']?'display:none':''}${unpaid>0?';color:#e53935':unpaid<0?';color:#1565c0':';color:#aaa'}">${unpaid!==0?unpaid.toLocaleString():'-'}</td>`})()}
           <td style="text-align:right;padding:4px 8px;${hc['j_col_fee25']?'display:none':''}">${niInput(c.id,'fee25',v.fee25)}</td>
           <td style="text-align:right;padding:4px 8px;${hc['j_col_fee24']?'display:none':''}">${niInput(c.id,'fee24',v.fee24)}</td>
           <td style="text-align:right;padding:4px 8px;${hc['j_col_fee23']?'display:none':''}">${niInput(c.id,'fee23',v.fee23)}</td>
@@ -8076,7 +8086,16 @@ ${text.slice(0, 6000)}
           <span style="color:#2e7d32;font-weight:700">💰 추천 수수료: ${fmtN(reviewData.feeRecommendation)}</span>
           <span style="color:#555;margin-left:6px;font-size:12px">${esc(reviewData.feeReason||'')}</span>
         </div>`:''}
-        ${matchedClient?`<div style="margin-top:8px;font-size:12px;color:#2e7d32">✓ 거래처 감지: <b>${esc(matchedClient.name)}</b></div>`:''}
+        <div style="margin-top:8px;font-size:12px">
+          <span id="trr-matched-label" style="color:${matchedClient?'#2e7d32':'#e65100'}">${matchedClient?`✓ 거래처 감지: <b>${esc(matchedClient.name)}</b>`:'⚠ 거래처 미매칭'}</span>
+          <button onclick="toggleTRRClientChange()" style="margin-left:8px;font-size:11px;padding:2px 8px;border-radius:6px;border:1px solid #bbb;background:#f5f5f5;cursor:pointer;font-family:inherit">변경</button>
+        </div>
+        <div id="trr-client-change-area" style="display:none;margin-top:6px">
+          <input type="text" id="trr-change-client-q" placeholder="거래처 검색 (이름/대표자)..." autocomplete="off"
+            style="width:100%;border:1px solid #90caf9;border-radius:6px;padding:6px 8px;font-size:12px;box-sizing:border-box;font-family:inherit"
+            oninput="searchTRRClientChange(this.value)">
+          <div id="trr-change-client-list" style="max-height:140px;overflow-y:auto;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 6px 6px;background:#fff"></div>
+        </div>
       </div>`;
     }
 
@@ -8147,6 +8166,39 @@ function applyTRRManualFee() {
     btn.style.opacity = '1';
     btn.textContent = '📋 신고리스트에 기록';
   }
+}
+
+function toggleTRRClientChange() {
+  const area = document.getElementById('trr-client-change-area');
+  if (!area) return;
+  const open = area.style.display === 'none';
+  area.style.display = open ? 'block' : 'none';
+  if (open) {
+    const inp = document.getElementById('trr-change-client-q');
+    if (inp) { inp.value = ''; inp.focus(); searchTRRClientChange(''); }
+  }
+}
+
+function searchTRRClientChange(q) {
+  const listEl = document.getElementById('trr-change-client-list');
+  if (!listEl) return;
+  const clients = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업').sort((a,b)=>a.name.localeCompare(b.name,'ko'));
+  const lq = q.trim().toLowerCase();
+  const filtered = lq ? clients.filter(c=>(c.name||'').toLowerCase().includes(lq)||(c.rep||'').toLowerCase().includes(lq)) : clients.slice(0,30);
+  if (!filtered.length) { listEl.innerHTML = '<div style="padding:8px;font-size:12px;color:#aaa">검색 결과 없음</div>'; return; }
+  listEl.innerHTML = filtered.slice(0,30).map(c=>`
+    <div onclick="selectTRRClientChange(${c.id},'${esc(c.name)}')" style="padding:7px 10px;font-size:12px;cursor:pointer;border-bottom:1px solid #f0f0f0"
+      onmouseover="this.style.background='#e8f0fe'" onmouseout="this.style.background=''">
+      ${esc(c.name)}${c.rep?`<span style="color:#999;margin-left:6px">${esc(c.rep)}</span>`:''}
+    </div>`).join('');
+}
+
+function selectTRRClientChange(clientId, name) {
+  window._trrMatchedClientId = clientId;
+  const label = document.getElementById('trr-matched-label');
+  if (label) { label.style.color = '#2e7d32'; label.innerHTML = `✓ 거래처: <b>${esc(name)}</b>`; }
+  const area = document.getElementById('trr-client-change-area');
+  if (area) area.style.display = 'none';
 }
 
 function recordTRRToJulgae() {
