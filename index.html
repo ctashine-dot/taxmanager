@@ -7807,6 +7807,7 @@ function openTaxReturnReviewer(type) {
     income: { label: '종합소득세', icon: '👤', color: '#3949ab', bg: '#e8eaf6' },
   };
   const t = typeInfo[type] || typeInfo.vat;
+  window._trrCurrentType = type;
   showModal(`<div style="max-width:640px;width:100%">
   <div class="modal-header">
     <h3>${t.icon} ${t.label} 신고서 AI 검토</h3>
@@ -7897,6 +7898,13 @@ function openTaxReturnReviewer(type) {
     </div><!-- /trr-pane-batch -->
 
   </div></div>`);
+  // 이전 검토 결과 복원 (같은 신고 유형)
+  const _saved = (window._trrSavedResults||{})[type];
+  if (_saved?.html) {
+    const _el = document.getElementById('trr-result');
+    if (_el) _el.innerHTML = _saved.html;
+    if (_saved.reviewData) window._trrReviewData = _saved.reviewData;
+  }
 }
 
 function handleTRRDrop(event, type) {
@@ -8233,6 +8241,14 @@ ${text.slice(0, 6000)}
 ⚠️ **확인 필요 항목**
 - (이상하거나 주의가 필요한 항목)
 
+📋 **세무조정 검토사항**
+- 접대비: 한도 초과 여부 확인 (중소기업 기준 적용)
+- 감가상각비: 내용연수·상각방법 적정성
+- 기부금: 법정/지정 한도 적용 여부
+- 대손충당금·대손금: 요건 충족 여부
+- 이월결손금: 공제 가능 금액 반영 여부
+- 그 외 신고서에서 확인되는 세무조정 특이사항
+
 📌 **누락 가능 공제·감면**
 - (적용 가능한데 누락된 것으로 보이는 항목)
 
@@ -8342,6 +8358,8 @@ ${text.slice(0, 6000)}
         </button>
         <button onclick="copyText(document.getElementById('trr-result').innerText)" style="padding:10px 16px;background:#f5f5f5;color:#555;border:1px solid #e0e0e0;border-radius:10px;font-size:13px;cursor:pointer;font-family:inherit">📋 복사</button>
       </div>` : ''}`;
+    window._trrSavedResults = window._trrSavedResults || {};
+    window._trrSavedResults[type] = { html: resultDiv.innerHTML, reviewData: window._trrReviewData };
   } catch(e) {
     resultDiv.innerHTML = `<div style="color:#e53935;padding:12px">AI 검토 오류: ${esc(String(e.message||e))}</div>`;
   }
@@ -8363,6 +8381,11 @@ function applyTRRManualFee() {
     btn.style.cursor = 'pointer';
     btn.style.opacity = '1';
     btn.textContent = '📋 신고리스트에 기록';
+  }
+  // 수수료 반영 후 상태 저장
+  if (window._trrCurrentType && window._trrSavedResults) {
+    const _el = document.getElementById('trr-result');
+    if (_el) window._trrSavedResults[window._trrCurrentType] = { html: _el.innerHTML, reviewData: window._trrReviewData };
   }
 }
 
@@ -8430,7 +8453,11 @@ function _trrAfterRecord(clientId, pKey) {
       cb.id = 'trr-clear-btn';
       cb.textContent = '🗑 결과 삭제';
       cb.style.cssText = 'padding:10px 14px;background:#fff;color:#e53935;border:1.5px solid #ffcdd2;border-radius:10px;font-size:13px;cursor:pointer;font-family:inherit';
-      cb.onclick = () => { document.getElementById('trr-result').innerHTML = ''; window._trrReviewData = null; };
+      cb.onclick = () => {
+        document.getElementById('trr-result').innerHTML = '';
+        window._trrReviewData = null;
+        if (window._trrSavedResults) delete window._trrSavedResults[window._trrCurrentType||''];
+      };
       row.appendChild(cb);
     }
   }
@@ -8438,7 +8465,16 @@ function _trrAfterRecord(clientId, pKey) {
   banner.style.cssText = 'background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;padding:10px 12px;margin-top:10px;font-size:13px;color:#2e7d32;font-weight:600';
   banner.textContent = `✅ ${c?.name||clientId} / ${p?.label||pKey} 신고리스트에 기록 완료`;
   const result = document.getElementById('trr-result');
-  if (result) result.appendChild(banner);
+  if (result) {
+    result.appendChild(banner);
+    // 결과 저장 갱신 (기록 완료 상태 포함)
+    if (window._trrSavedResults && window._trrCurrentType) {
+      window._trrSavedResults[window._trrCurrentType] = {
+        html: result.innerHTML,
+        reviewData: window._trrReviewData
+      };
+    }
+  }
 }
 
 function openTRRPeriodModal(clientId) {
