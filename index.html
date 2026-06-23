@@ -8044,6 +8044,7 @@ ${text.slice(0, 6000)}
 【1단계】 핵심 데이터 추출 — 아래 JSON을 반드시 \`\`\`json ... \`\`\` 블록으로 출력:
 {
   "companyName": "상호명",
+  "representative": "대표자명 (없으면 빈 문자열)",
   "bizNo": "사업자번호 (000-00-00000 형식)",
   "period": "신고기간",
   "revenue": 수입금액(숫자, 없으면 0),
@@ -8210,6 +8211,7 @@ ${text.slice(0, 6000)}
 【1단계】 핵심 데이터 추출 — 아래 JSON을 반드시 \`\`\`json ... \`\`\` 블록으로 출력:
 {
   "companyName": "상호명",
+  "representative": "대표자명 (없으면 빈 문자열)",
   "bizNo": "사업자번호 (000-00-00000 형식)",
   "period": "신고기간 (예: 25년 1기 확정)",
   "revenue": 수입금액(숫자, 없으면 0),
@@ -8658,7 +8660,7 @@ function openFormFromTRR() {
   // Apply prefill after form is rendered
   setTimeout(() => {
     const nm = document.getElementById('f-name'); if(nm && prefill.name) { nm.value = prefill.name; window._formData.name = prefill.name; }
-    const bn = document.getElementById('f-bizno'); if(bn && prefill.bizNo) { bn.value = prefill.bizNo; window._formData.bizNo = prefill.bizNo; }
+    const bn = document.getElementById('f-bizNo'); if(bn && prefill.bizNo) { bn.value = prefill.bizNo; window._formData.bizNo = prefill.bizNo; }
     const rp = document.getElementById('f-rep'); if(rp && prefill.rep) { rp.value = prefill.rep; window._formData.rep = prefill.rep; }
   }, 50);
 }
