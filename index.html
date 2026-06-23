@@ -10810,14 +10810,22 @@ function toggleJulgaeSelect(clientId) {
   renderJulgae();
 }
 function checkAllJulgaeField(field) {
-  const period = G.periods[G.julgaePeriodIdx];
+  const period = G.periods[Math.min(G.julgaePeriodIdx, Math.max(0, G.periods.length-1))];
   if (!period) return;
   const pKey = period.id;
-  const enrolled = period.enrolled || [];
-  const allOn = enrolled.every(id => !!(G.julgae[pKey]?.[id]?.[field]));
+  // renderJulgae와 동일한 클라이언트 목록 사용
+  let clients = G.clients.filter(c => c.status !== '해지' && c.status !== '폐업');
+  const hasEnroll = period.enrolled && period.enrolled.length > 0;
+  if (hasEnroll) {
+    clients = clients.filter(c => period.enrolled.includes(c.id));
+  } else {
+    clients = applyReportFilter(clients, period);
+  }
+  const ids = clients.map(c => c.id);
+  const allOn = ids.every(id => !!(G.julgae[pKey]?.[id]?.[field]));
   const newVal = !allOn;
   if (!G.julgae[pKey]) G.julgae[pKey] = {};
-  enrolled.forEach(id => {
+  ids.forEach(id => {
     if (!G.julgae[pKey][id]) G.julgae[pKey][id] = {};
     G.julgae[pKey][id][field] = newVal;
   });
