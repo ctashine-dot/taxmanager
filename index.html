@@ -1596,15 +1596,18 @@ function _renderDashboardInner() {
       const corpPeriod   = [...(G.periods||[])].filter(p=>p.reportType==='corp').sort((a,b)=>(b.id||'').localeCompare(a.id||''))[0];
       let seongsiCnt=0, auditCnt=0;
       if (incomePeriod) {
-        const pKey = incomePeriod.id+'|'+(incomePeriod.reportType||incomePeriod.type);
+        const pKey = incomePeriod.id;
+        const _gSum={};
+        for(const c of activeC){if(c.taxType==='법인'||!c.incomeGroupKey)continue;const r=julgaeVal(pKey,c.id).revenue||0;if(r)_gSum[c.incomeGroupKey]=(_gSum[c.incomeGroupKey]||0)+r;}
         for (const c of activeC) {
           if (c.taxType==='법인') continue;
-          const rev = (julgaeVal(pKey,c.id)||{}).revenue||0;
+          const indiv=(julgaeVal(pKey,c.id)||{}).revenue||0;
+          const rev=c.incomeGroupKey?Math.max(indiv,_gSum[c.incomeGroupKey]||0):indiv;
           if (rev > 0 && rev >= seongsiLimit(c.bizType).lim) seongsiCnt++;
         }
       }
       if (corpPeriod) {
-        const pKey = corpPeriod.id+'|'+(corpPeriod.reportType||corpPeriod.type);
+        const pKey = corpPeriod.id;
         for (const c of activeC) {
           if (c.taxType!=='법인') continue;
           const rev = (julgaeVal(pKey,c.id)||{}).revenue||0;
@@ -4606,6 +4609,16 @@ function renderJulgae() {
   const isSajupType = rt === 'sajup';
   const isSeongsiType = rt === 'seongsi';
   const hasGkyeong = isVatType && clients.some(c => c.vatType === '겸영');
+
+  // 공동사업자 그룹별 합산 매출 (성실신고 기준 판단용 — baseClients 전체 기준)
+  const _grpRevSum = {};
+  baseClients.forEach(c => {
+    if (!c.incomeGroupKey) return;
+    const cv = julgaeVal(pKey2, c.id);
+    const rev = isVatType ? (cv.salesAmount||0) : (cv.revenue||0);
+    if (rev) _grpRevSum[c.incomeGroupKey] = (_grpRevSum[c.incomeGroupKey]||0) + rev;
+  });
+
   const hc = G.hiddenCols || {};
   const jHideable = ['j_rep','j_manager','j_book','j_done','j_consul','j_monthly_fee','j_fee','j_collect','j_link'];
   const jTypeHideable = isIncomeType ? ['j_col_revenue','j_col_income','j_col_margin','j_col_taxbase','j_col_taxamt','j_col_paytax','j_col_resident','j_col_totalsum','j_col_prevrevenue','j_col_paid','j_col_unpaid','j_col_fee25','j_col_fee24','j_col_fee23']
@@ -5107,12 +5120,16 @@ function renderJulgae() {
         ? `<div onclick="applyBosuFee('${pKey2}',${c.id},'${_bosuRecSs.field}',${_bosuRecSs.fee})" style="${_badgeStyle}" title="클릭하여 자동입력: ${_bosuRecSs.fee.toLocaleString()}원">💡${_bosuRecSs.fee.toLocaleString()}</div>`
         : '';
       const _chkRev = isVatType ? (v.salesAmount||0) : (v.revenue||0);
-      const _si = c.taxType!=='법인' && _chkRev>0 ? seongsiLimit(c.bizType) : null;
+      // 공동사업자: 그룹 합산 매출로 성실신고 기준 판단
+      const _grpRev = c.incomeGroupKey ? (_grpRevSum[c.incomeGroupKey]||0) : 0;
+      const _effRev = _grpRev > _chkRev ? _grpRev : _chkRev;
+      const _isJoint = _grpRev > _chkRev;
+      const _si = c.taxType!=='법인' && _effRev>0 ? seongsiLimit(c.bizType) : null;
       const revAuxBadge = _si ? (
-        _chkRev >= _si.lim
-          ? `<div style="font-size:9px;font-weight:700;color:#c62828;background:#ffebee;border-radius:3px;padding:1px 4px;margin-top:2px;text-align:right" title="성실신고 확인대상 (${_si.label} ${(_si.lim/1e8).toFixed(1)}억 이상)">⚠성실신고</div>`
-          : _chkRev >= _si.lim*0.85
-          ? `<div style="font-size:9px;color:#e65100;background:#fff3e0;border-radius:3px;padding:1px 4px;margin-top:2px;text-align:right" title="성실신고 기준 근접 (${_si.label} ${(_si.lim/1e8).toFixed(1)}억, 현재 ${(_chkRev/1e8).toFixed(2)}억)">📈${(_si.lim/1e8).toFixed(1)}억근접</div>`
+        _effRev >= _si.lim
+          ? `<div style="font-size:9px;font-weight:700;color:#c62828;background:#ffebee;border-radius:3px;padding:1px 4px;margin-top:2px;text-align:right" title="성실신고 확인대상 (${_si.label} ${(_si.lim/1e8).toFixed(1)}억 이상)${_isJoint?` — 공동사업자 합산 ${(_grpRev/1e8).toFixed(2)}억`:''}">⚠성실신고${_isJoint?' 👥':''}</div>`
+          : _effRev >= _si.lim*0.85
+          ? `<div style="font-size:9px;color:#e65100;background:#fff3e0;border-radius:3px;padding:1px 4px;margin-top:2px;text-align:right" title="성실신고 기준 근접 (${_si.label} ${(_si.lim/1e8).toFixed(1)}억${_isJoint?`, 공동합산 ${(_grpRev/1e8).toFixed(2)}억`:', 현재 '+(_effRev/1e8).toFixed(2)+'억'})">📈${(_si.lim/1e8).toFixed(1)}억근접${_isJoint?' 👥':''}</div>`
           : ''
       ) : (c.taxType==='법인' && _chkRev>=10000000000
         ? `<div style="font-size:9px;color:#1565c0;background:#e3f2fd;border-radius:3px;padding:1px 4px;margin-top:2px;text-align:right" title="외부감사 검토필요 (매출 100억↑ — 자산·부채·인원 추가확인)">🔍외부감사</div>`
@@ -11183,18 +11200,27 @@ function openAuditSeongsiReport() {
 
   const seongsiRows = [], auditRows = [];
   if (incomePeriod) {
-    const pKey = incomePeriod.id + '|' + (incomePeriod.reportType||incomePeriod.type);
+    const pKey = incomePeriod.id;
+    // 공동사업자 그룹별 합산 매출
+    const _grpSum = {};
+    for (const c of activeClients) {
+      if (c.taxType === '법인' || !c.incomeGroupKey) continue;
+      const rev = julgaeVal(pKey, c.id).revenue || 0;
+      if (rev) _grpSum[c.incomeGroupKey] = (_grpSum[c.incomeGroupKey]||0) + rev;
+    }
     for (const c of activeClients) {
       if (c.taxType === '법인') continue;
       const v = julgaeVal(pKey, c.id);
-      const rev = v.revenue || 0;
+      const indivRev = v.revenue || 0;
+      const grpRev = c.incomeGroupKey ? (_grpSum[c.incomeGroupKey]||0) : 0;
+      const rev = grpRev > indivRev ? grpRev : indivRev;
       if (rev <= 0) continue;
       const si = seongsiLimit(c.bizType);
-      if (rev >= si.lim * 0.8) seongsiRows.push({ c, rev, si, ok: rev >= si.lim });
+      if (rev >= si.lim * 0.8) seongsiRows.push({ c, rev, indivRev, grpRev, si, ok: rev >= si.lim });
     }
   }
   if (corpPeriod) {
-    const pKey = corpPeriod.id + '|' + (corpPeriod.reportType||corpPeriod.type);
+    const pKey = corpPeriod.id;
     for (const c of activeClients) {
       if (c.taxType !== '법인') continue;
       const v = julgaeVal(pKey, c.id);
@@ -11227,11 +11253,12 @@ function openAuditSeongsiReport() {
         <span style="font-size:11px;font-weight:400;color:#888">(${incomePeriod?incomePeriod.label:'기간 없음'} 기준, ${seongsiRows.filter(r=>r.ok).length}명 대상 / ${seongsiRows.filter(r=>!r.ok).length}명 근접)</span>
       </div>
       ${seongsiRows.length === 0 ? '<p style="color:#aaa;font-size:12px;padding:8px 0">매출 데이터가 있는 대상자가 없습니다</p>' :
-        seongsiRows.map(({c,rev,si,ok})=>`
+        seongsiRows.map(({c,rev,indivRev,grpRev,si,ok})=>`
         <div style="display:flex;align-items:center;gap:6px;padding:6px 4px;border-bottom:1px solid #f0f0f0;font-size:12px">
           <div style="flex:1;min-width:0">
             <span style="font-weight:700">${esc(c.name)}</span>
             <span style="font-size:10px;color:#999;margin-left:4px">${esc(c.bizType||'')}</span>
+            ${grpRev>indivRev?`<div style="font-size:10px;color:#7b1fa2">👥 공동사업 합산 ${(grpRev/1e8).toFixed(2)}억 (개인 ${(indivRev/1e8).toFixed(2)}억)</div>`:''}
           </div>
           <span style="color:#333;font-weight:600;white-space:nowrap">${rev.toLocaleString()}원</span>
           <span style="font-size:10px;color:#aaa;white-space:nowrap">${si.label} ${(si.lim/1e8).toFixed(1)}억</span>
