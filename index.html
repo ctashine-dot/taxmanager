@@ -5705,9 +5705,14 @@ function updateJulgaeNum(pKey, clientId, field, rawVal) {
     if (client && period) {
       if (field === 'feeSeongsi') {
         client.feeSeongsi = Number(rawVal) || 0;
+        client.seongsiConfirmFee = Number(rawVal) || 0;
       } else {
         const feeField = REPORT_FEE_FIELD[period.reportType];
         if (feeField) client[feeField] = Number(rawVal) || 0;
+        // 거래처 폼의 조정료 필드도 동기화
+        if (['corp','income','seongsi'].includes(period.reportType)) {
+          client.adjustFee = Number(rawVal) || 0;
+        }
       }
     }
   }
@@ -10253,8 +10258,13 @@ function applyBosuFee(pKey, clientId, field, fee) {
   const period = G.periods.find(p=>p.id===pKey);
   const client = G.clients.find(c=>c.id===clientId);
   if (client && period) {
-    if (field==='feeSeongsi') client.feeSeongsi = fee;
-    else { const ff=REPORT_FEE_FIELD[period.reportType]; if(ff) client[ff]=fee; }
+    if (field==='feeSeongsi') {
+      client.feeSeongsi = fee;
+      client.seongsiConfirmFee = fee;
+    } else {
+      const ff=REPORT_FEE_FIELD[period.reportType]; if(ff) client[ff]=fee;
+      if (['corp','income','seongsi'].includes(period.reportType)) client.adjustFee = fee;
+    }
   }
   saveToLS();
   renderJulgae();
