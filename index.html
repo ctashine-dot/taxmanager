@@ -652,7 +652,7 @@ function applyReportFilter(clients, period) {
 
 function julgaeVal(pKey, clientId) {
   const v = G.julgae[pKey]?.[clientId];
-  const def = {d:false, b:false, a:false, c:false, s:false, revenue:0, income:0, taxBase:0, totalTax:0, payTax:0, residentTax:0, prevRevenue:0, fee:0, paid:0, fee25:0, fee24:0, fee23:0, feeSeongsi:0};
+  const def = {d:false, b:false, a:false, c:false, s:false, revenue:0, income:0, taxBase:0, totalTax:0, payTax:0, residentTax:0, prevRevenue:0, fee:0, paid:0, fee25:0, fee24:0, fee23:0, feeSeongsi:0, fee25ss:0, fee24ss:0, fee23ss:0};
   if (!v) return def;
   if (typeof v === 'boolean') return {...def, a:v};
   return {...def, ...v};
@@ -4203,6 +4203,64 @@ function renderSchedule() {
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px">${cards}</div>`;
 }
 
+function autoFillPeriodHistory(newPeriodId, yr, reportType) {
+  if (!['income','seongsi','corp'].includes(reportType)) return;
+  if (!yr || yr < 2000) return;
+  const isSeongsi = reportType === 'seongsi';
+
+  // fee25/fee24/fee23 from previous 3 years (same reportType)
+  const feeSlots = [
+    { year: yr - 1, feeField: 'fee25', ssField: 'fee25ss' },
+    { year: yr - 2, feeField: 'fee24', ssField: 'fee24ss' },
+    { year: yr - 3, feeField: 'fee23', ssField: 'fee23ss' },
+  ];
+  feeSlots.forEach(({ year, feeField, ssField }) => {
+    const oldPeriods = G.periods.filter(p => {
+      if (p.id === newPeriodId) return false;
+      if (p.reportType !== reportType) return false;
+      const m = (p.label || '').match(/^(\d{2})년/);
+      return m && (2000 + Number(m[1])) === year;
+    });
+    oldPeriods.forEach(op => {
+      const opData = G.julgae[op.id] || {};
+      Object.entries(opData).forEach(([cidStr, v]) => {
+        if (!v || typeof v !== 'object') return;
+        const fee = v.fee || 0;
+        if (!fee) return;
+        if (!G.julgae[newPeriodId]) G.julgae[newPeriodId] = {};
+        if (!G.julgae[newPeriodId][cidStr]) G.julgae[newPeriodId][cidStr] = {};
+        if (!G.julgae[newPeriodId][cidStr][feeField]) {
+          G.julgae[newPeriodId][cidStr][feeField] = fee;
+          if (isSeongsi && v.feeSeongsi) {
+            G.julgae[newPeriodId][cidStr][ssField] = v.feeSeongsi;
+          }
+        }
+      });
+    });
+  });
+
+  // prevRevenue from previous year's revenue
+  const prevYrPeriods = G.periods.filter(p => {
+    if (p.id === newPeriodId) return false;
+    if (p.reportType !== reportType) return false;
+    const m = (p.label || '').match(/^(\d{2})년/);
+    return m && (2000 + Number(m[1])) === yr - 1;
+  });
+  prevYrPeriods.forEach(op => {
+    const opData = G.julgae[op.id] || {};
+    Object.entries(opData).forEach(([cidStr, v]) => {
+      if (!v || typeof v !== 'object') return;
+      const rev = v.revenue || 0;
+      if (!rev) return;
+      if (!G.julgae[newPeriodId]) G.julgae[newPeriodId] = {};
+      if (!G.julgae[newPeriodId][cidStr]) G.julgae[newPeriodId][cidStr] = {};
+      if (!G.julgae[newPeriodId][cidStr].prevRevenue) {
+        G.julgae[newPeriodId][cidStr].prevRevenue = rev;
+      }
+    });
+  });
+}
+
 function registerToPeriod(label, type) {
   const yr = new Date().getFullYear();
   const fullLabel = String(yr).slice(2) + '년 ' + label;
@@ -4220,6 +4278,7 @@ function registerToPeriod(label, type) {
   const reportType = tpl ? tpl.reportType : undefined;
   const targetType = tpl ? tpl.targetType : '전체';
   G.periods.push({ id, label: fullLabel, type, targetType, reportType });
+  if (reportType) autoFillPeriodHistory(id, yr, reportType);
   G.julgaePeriodIdx = G.periods.length - 1;
   saveToLS();
   switchTab('julgae');
@@ -4538,13 +4597,13 @@ function renderJulgae() {
   const isSeongsiType = rt === 'seongsi';
   const hasGkyeong = isVatType && clients.some(c => c.vatType === '겸영');
   const hc = G.hiddenCols || {};
-  const jHideable = ['j_rep','j_manager','j_book','j_done','j_consul','j_fee','j_collect','j_link'];
+  const jHideable = ['j_rep','j_manager','j_book','j_done','j_consul','j_monthly_fee','j_fee','j_collect','j_link'];
   const jTypeHideable = isIncomeType ? ['j_col_revenue','j_col_income','j_col_margin','j_col_taxbase','j_col_taxamt','j_col_paytax','j_col_resident','j_col_totalsum','j_col_prevrevenue','j_col_paid','j_col_unpaid','j_col_fee25','j_col_fee24','j_col_fee23']
                       : isVatType    ? ['j_col_revenue','j_col_purchase','j_col_vat',...(hasGkyeong?['j_col_exempt_sales','j_col_exempt_purchase']:[])  ]
                       : isSajupType  ? ['j_col_revenue','j_col_purchase']
                       :                ['j_col_revenue','j_col_income','j_col_taxbase'];
   const jSeongsiExtra = isSeongsiType ? ['j_feess'] : [];
-  const totalCols = (isSeongsiType ? 22 : isIncomeType ? 21 : isVatType ? (10+(hasGkyeong?2:0)) : isSajupType ? 9 : 10)
+  const totalCols = (isSeongsiType ? 23 : isIncomeType ? 22 : isVatType ? (11+(hasGkyeong?2:0)) : isSajupType ? 10 : 11)
     - jHideable.filter(k=>hc[k]).length
     - jTypeHideable.filter(k=>hc[k]).length
     - jSeongsiExtra.filter(k=>hc[k]).length;
@@ -4619,7 +4678,7 @@ function renderJulgae() {
   };
 
   const jChips = _hcChips([
-    ['j_rep','대표자'],['j_manager','담당자'],['j_book','기장'],['j_done','결재'],
+    ['j_rep','대표자'],['j_manager','담당자'],['j_book','기장'],['j_done','결재'],['j_monthly_fee','기장료'],
     ['j_col_revenue', isVatType?'매출액':'매출액'],
     ['j_col_income','소득금액'],['j_col_margin','소득율'],['j_col_taxbase','과세표준'],
     ['j_col_taxamt','총부담세액'],['j_col_paytax','납부세액'],['j_col_resident','주민세'],
@@ -4957,6 +5016,7 @@ function renderJulgae() {
       <th style="width:62px;text-align:center;padding:3px;${_hcStyle('j_book')}"><div style="display:flex;flex-direction:column;align-items:center;gap:2px">${julgaeCycleBtn('julgaeBookFilter','기장')}<button onclick="checkAllJulgaeField('b')" style="font-size:9px;padding:1px 5px;border-radius:4px;border:1px solid #f57c00;background:#fff3e0;color:#e65100;cursor:pointer;white-space:nowrap" title="기장 전체 체크/해제">전체</button>${_hcBtn('j_book')}</div></th>
       <th style="width:62px;text-align:center;padding:3px;${_hcStyle('j_consul')}"><div style="display:flex;flex-direction:column;align-items:center;gap:2px">${julgaeCycleBtn('julgaeConsulFilter','상담')}<button onclick="checkAllJulgaeField('c')" style="font-size:9px;padding:1px 5px;border-radius:4px;border:1px solid #1565c0;background:#e3f2fd;color:#1565c0;cursor:pointer;white-space:nowrap" title="상담 전체 체크/해제">전체</button>${_hcBtn('j_consul')}</div></th>
       <th style="width:62px;text-align:center;padding:3px;${_hcStyle('j_done')}"><div style="display:flex;flex-direction:column;align-items:center;gap:2px">${julgaeCycleBtn('julgaeDoneFilter','결재')}<button onclick="checkAllJulgaeField('a')" style="font-size:9px;padding:1px 5px;border-radius:4px;border:1px solid #2e7d32;background:#e8f5e9;color:#2e7d32;cursor:pointer;white-space:nowrap" title="결재 전체 체크/해제">전체</button>${_hcBtn('j_done')}</div></th>
+      <th style="text-align:right;min-width:64px;${_hcStyle('j_monthly_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">기장료${_hcBtn('j_monthly_fee')}</div></th>
       ${isIncomeType?`
         <th style="text-align:right;${_hcStyle('j_col_revenue')}"><div style="display:flex;align-items:center;justify-content:flex-end">매출액${_hcBtn('j_col_revenue')}</div></th>
         <th style="text-align:right;${_hcStyle('j_col_income')}"><div style="display:flex;align-items:center;justify-content:flex-end">소득금액${_hcBtn('j_col_income')}</div></th>
@@ -5015,6 +5075,7 @@ function renderJulgae() {
         ? `<span onclick="event.stopPropagation();openJulgaeNote('${_safeKey}',${c.id})" style="cursor:pointer;font-size:12px;margin-left:4px;flex-shrink:0" title="${esc(v.note)}">📝</span>`
         : `<span onclick="event.stopPropagation();openJulgaeNote('${_safeKey}',${c.id})" style="cursor:pointer;font-size:10px;color:#ddd;margin-left:4px;flex-shrink:0" title="특이사항 추가">✎</span>`;
       const margin = (v.revenue&&v.income) ? (v.income/v.revenue*100).toFixed(1) : null;
+      const _monthlyFeeRec = (() => { const rev = v.revenue || v.salesAmount || v.prevRevenue; return rev ? getJangRyo(rev, c.taxType) : 0; })();
       const _revVal4bosu = isVatType ? (v.salesAmount||0) : (v.revenue||0);
       const _bosuRec = getBosuFeeRec(_revVal4bosu, period.reportType);
       // 성실신고 타입: 조정료 칸엔 income 기준, 성실신고료 칸엔 seongsi 기준 별도 추천
@@ -5064,6 +5125,15 @@ function renderJulgae() {
         <td style="text-align:center;${hc['j_done']?'display:none':''}">
           <div class="chk ${v.a?'on':''}" style="margin:0 auto;width:24px;height:24px;touch-action:none;user-select:none;-webkit-user-select:none" onpointerdown="julgaeChkDown(this,'${pKey2}',${c.id},'a',${v.a?1:0})" onpointerup="julgaeChkUp(this,'${pKey2}',${c.id},'a',${v.a?1:0})" onpointercancel="julgaeChkCancel(this)" onpointerleave="julgaeChkCancel(this)">${v.a?'✓':''}</div>
         </td>
+        <td style="text-align:right;padding:4px 6px;min-width:64px;${hc['j_monthly_fee']?'display:none':''}">
+          <div style="font-size:12px;font-weight:700;color:${c.fee?'#1565c0':'#ccc'};cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none;padding:2px 0"
+            id="jmf-${c.id}"
+            onpointerdown="jmfDown(event,${c.id})"
+            onpointerup="jmfUp(event,${c.id})"
+            onpointercancel="jmfCancel(event)"
+            onpointerleave="jmfCancel(event)">${c.fee?c.fee.toLocaleString():'0'}</div>
+          ${_monthlyFeeRec&&_monthlyFeeRec!==c.fee?`<div onclick="jmfApplyRec(${c.id},${_monthlyFeeRec})" style="font-size:9px;color:#7b1fa2;background:#f3e5f5;border-radius:4px;padding:1px 4px;cursor:pointer;margin-top:1px;text-align:right" title="보수표 추천: ${_monthlyFeeRec.toLocaleString()}원">💡${_monthlyFeeRec.toLocaleString()}</div>`:''}
+        </td>
         ${isIncomeType?`
           <td style="text-align:right;padding:4px 8px;${hc['j_col_revenue']?'display:none':''}">${niInput(c.id,'revenue',v.revenue)}${revAuxBadge}</td>
           <td style="text-align:right;padding:4px 8px;${hc['j_col_income']?'display:none':''}">${niInput(c.id,'income',v.income)}</td>
@@ -5105,9 +5175,9 @@ function renderJulgae() {
         ${isIncomeType?`
           <td style="text-align:right;padding:4px 8px;${hc['j_col_paid']?'display:none':''}">${niInput(c.id,'paid',v.paid,v.paid?'font-weight:700;color:#2e7d32':'')}</td>
           ${(()=>{const unpaid=(v.fee||0)+(v.feeSeongsi||0)-(v.paid||0);return`<td style="text-align:right;padding:4px 8px;font-size:12px;font-weight:600;${hc['j_col_unpaid']?'display:none':''}${unpaid>0?';color:#e53935':unpaid<0?';color:#1565c0':';color:#aaa'}">${unpaid!==0?unpaid.toLocaleString():'-'}</td>`})()}
-          <td style="text-align:right;padding:4px 8px;${hc['j_col_fee25']?'display:none':''}">${niInput(c.id,'fee25',v.fee25)}</td>
-          <td style="text-align:right;padding:4px 8px;${hc['j_col_fee24']?'display:none':''}">${niInput(c.id,'fee24',v.fee24)}</td>
-          <td style="text-align:right;padding:4px 8px;${hc['j_col_fee23']?'display:none':''}">${niInput(c.id,'fee23',v.fee23)}</td>
+          <td style="text-align:right;padding:4px 8px;${hc['j_col_fee25']?'display:none':''}">${niInput(c.id,'fee25',v.fee25)}${isSeongsiType?niInput(c.id,'fee25ss',v.fee25ss,'font-size:9px;color:#7b1fa2;margin-top:2px;display:block;'):''}</td>
+          <td style="text-align:right;padding:4px 8px;${hc['j_col_fee24']?'display:none':''}">${niInput(c.id,'fee24',v.fee24)}${isSeongsiType?niInput(c.id,'fee24ss',v.fee24ss,'font-size:9px;color:#7b1fa2;margin-top:2px;display:block;'):''}</td>
+          <td style="text-align:right;padding:4px 8px;${hc['j_col_fee23']?'display:none':''}">${niInput(c.id,'fee23',v.fee23)}${isSeongsiType?niInput(c.id,'fee23ss',v.fee23ss,'font-size:9px;color:#7b1fa2;margin-top:2px;display:block;'):''}</td>
         `:''}
         <td style="text-align:center;${hc['j_collect']?'display:none':''}">
           <div class="chk ${v.s?'on':''}" style="margin:0 auto;width:24px;height:24px;touch-action:none;user-select:none;-webkit-user-select:none;${v.s?'background:#c8e6c9;border-color:#2e7d32;color:#2e7d32':''}" onpointerdown="julgaeChkDown(this,'${pKey2}',${c.id},'s',${v.s?1:0})" onpointerup="julgaeChkUp(this,'${pKey2}',${c.id},'s',${v.s?1:0})" onpointercancel="julgaeChkCancel(this)" onpointerleave="julgaeChkCancel(this)">${v.s?'💰':''}</div>
@@ -6427,6 +6497,7 @@ function applyPeriodTemplate(tplKey) {
   }
   const id = tplKey + '_' + yr + '_' + Date.now();
   G.periods.push({ id, label, type: t.type, targetType: t.targetType, reportType: t.reportType });
+  if (t.reportType) autoFillPeriodHistory(id, yr, t.reportType);
   G.julgaePeriodIdx = G.periods.length - 1;
   saveToLS();
   closeModal();
@@ -6445,6 +6516,10 @@ function savePeriod() {
   const targetType = reportType ? (targetMap[reportType]||'전체') : '전체';
   const id = 'p_' + Date.now();
   G.periods.push({ id, label, type, targetType, reportType });
+  if (reportType) {
+    const _yrM = label.match(/^(\d{2})년/);
+    if (_yrM) autoFillPeriodHistory(id, 2000 + Number(_yrM[1]), reportType);
+  }
   G.julgaePeriodIdx = G.periods.length - 1;
   saveToLS();
   closeModal();
@@ -9911,6 +9986,39 @@ function resetBosuTable() {
   saveToLS();
   openBosuTable();
 }
+// 기장료 long-press edit
+function jmfDown(e, cid) {
+  window._jmfCid = cid;
+  window._jmfTimer = setTimeout(() => {
+    window._jmfTimer = null;
+    const el = document.getElementById('jmf-' + cid);
+    if (!el) return;
+    const c = G.clients.find(x => x.id === cid);
+    if (!c) return;
+    el.outerHTML = `<input id="jmf-inp-${cid}" type="number" value="${c.fee||0}" style="width:72px;padding:3px 5px;border:1.5px solid #4f8ef7;border-radius:5px;font-size:12px;text-align:right;font-family:inherit;display:block;margin-left:auto" onblur="jmfSave(${cid})" onkeydown="if(event.key==='Enter'){event.preventDefault();jmfSave(${cid})}else if(event.key==='Escape'){renderJulgae()}">`;
+    const inp = document.getElementById('jmf-inp-' + cid);
+    if (inp) { inp.focus(); inp.select(); }
+  }, 600);
+}
+function jmfUp(e, cid) {
+  if (window._jmfTimer) { clearTimeout(window._jmfTimer); window._jmfTimer = null; }
+}
+function jmfCancel(e) {
+  if (window._jmfTimer) { clearTimeout(window._jmfTimer); window._jmfTimer = null; }
+}
+function jmfSave(cid) {
+  const inp = document.getElementById('jmf-inp-' + cid);
+  if (!inp) return;
+  const newFee = Number(inp.value) || 0;
+  const c = G.clients.find(x => x.id === cid);
+  if (c) { c.fee = newFee; saveToLS(); }
+  renderJulgae();
+}
+function jmfApplyRec(cid, rec) {
+  const c = G.clients.find(x => x.id === cid);
+  if (c) { c.fee = rec; saveToLS(); renderJulgae(); }
+}
+
 function applyBosuFee(pKey, clientId, field, fee) {
   if (!G.julgae[pKey]) G.julgae[pKey] = {};
   const cur = julgaeVal(pKey, clientId);
