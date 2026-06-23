@@ -690,6 +690,7 @@ function saveToLS() {
     localStorage.setItem('tm_filterPresets', JSON.stringify(G.filterPresets||[]));
     localStorage.setItem('tm_contactLogs', JSON.stringify(G.contactLogs||{}));
     localStorage.setItem('tm_adHocFees', JSON.stringify(G.adHocFees||{}));
+    localStorage.setItem('tm_julgaeAdhoc', JSON.stringify(G.julgaeAdhoc||{}));
     if (G.julgaeSelectedPeriods) localStorage.setItem('tm_julgaeSelectedPeriods', JSON.stringify(G.julgaeSelectedPeriods));
     if (G.julgaeSelectedYears) localStorage.setItem('tm_julgaeSelectedYears', JSON.stringify(G.julgaeSelectedYears));
     if (G.pinnedPeriods) localStorage.setItem('tm_pinnedPeriods', JSON.stringify(G.pinnedPeriods));
@@ -721,6 +722,7 @@ function saveToLS() {
       filterPresets: JSON.stringify(G.filterPresets||[]),
       contactLogs: JSON.stringify(G.contactLogs||{}),
       adHocFees: JSON.stringify(G.adHocFees||{}),
+      julgaeAdhoc: JSON.stringify(G.julgaeAdhoc||{}),
       julgaeSelectedPeriods: JSON.stringify(G.julgaeSelectedPeriods||[]),
       julgaeSelectedYears: JSON.stringify(G.julgaeSelectedYears||[]),
     }).catch(e => {
@@ -3994,7 +3996,15 @@ window.saveForm = function(id) {
   }
   saveToLS();
   window._formDataSnapshot = undefined;
+  const _trrNewId = (id === null) ? G.clients[G.clients.length-1]?.id : null;
   closeModal();
+  if (window._trrPendingAfterSave && _trrNewId && window._trrPendingPKey) {
+    const _pk = window._trrPendingPKey;
+    window._trrPendingAfterSave = false;
+    window._trrPendingPKey = null;
+    doRecordTRRWith(_trrNewId, _pk);
+    _trrAfterRecord(_trrNewId, _pk);
+  }
   if (G.currentTab==='clients') renderClients();
   else if (G.currentTab==='dashboard') renderDashboard();
   else if (G.currentTab==='closure') renderClosure();
@@ -4728,6 +4738,12 @@ function renderJulgae() {
     clients.forEach(c => _pushClient(c));
   }
 
+  // Add adhoc clients to the end of renderItems
+  const _adhocList = (G.julgaeAdhoc||{})[pKey2]||[];
+  _adhocList.forEach(adhoc => {
+    renderItems.push({ c: _makeAdhocClientObj(adhoc), isSeparator: false, isGroupHeader: false, isGroupChild: false });
+  });
+
   let _rowN = 0;
   const _numLeft = G.julgaeBulkMode ? 32 : 0;
   const _nameLeft = G.julgaeBulkMode ? 60 : 28;
@@ -4932,7 +4948,7 @@ function renderJulgae() {
     <button class="btn-sm" style="background:#e3f2fd;color:#1565c0;border:1.5px solid #90caf9" onclick="openEnrollModal('${pKey}')">
       ☑ 업체 선택${hasEnroll?` (${period.enrolled.length})`:' (자동)'}
     </button>
-<button class="btn-sm" style="background:#fff3e0;color:#e65100;border:1.5px solid #ffcc80" onclick="window._julgaeAddToPeriod='${pKey}';openForm(null)">+ 업체 추가</button>
+<button class="btn-sm" style="background:#fff3e0;color:#e65100;border:1.5px solid #ffcc80" onclick="openJulgaeAddClientModal('${pKey}')">+ 업체 추가</button>
     <button class="btn-sm" style="background:#f3e5f5;color:#6a1b9a;border:1.5px solid #ce93d8" onclick="printJulgaeList()">🖨 인쇄</button>
     <button class="btn-sm" style="background:#e0f2f1;color:#00695c;border:1.5px solid #80cbc4" onclick="copyPeriod('${pKey}')">📋 복사</button>
     <button class="btn-sm" style="background:${(G.periodNotes||{})[pKey]?'#fff3e0':'#f5f5f5'};color:${(G.periodNotes||{})[pKey]?'#e65100':'#888'};border:1.5px solid ${(G.periodNotes||{})[pKey]?'#ffcc80':'#e0e0e0'}" onclick="openPeriodNote('${pKey}')">📝 특이사항${(G.periodNotes||{})[pKey]?' ✓':''}</button>
@@ -5108,11 +5124,11 @@ function renderJulgae() {
       return `<tr id="jr-${pKey2}-${c.id}" style="background:${rowBg}">
         ${G.julgaeBulkMode?`<td style="text-align:center;width:32px" onclick="event.stopPropagation();toggleJulgaeSelect(${c.id})"><input type="checkbox" ${(G.julgaeBulkSelected||[]).includes(c.id)?'checked':''} style="width:16px;height:16px;cursor:pointer" onclick="event.stopPropagation();toggleJulgaeSelect(${c.id})"></td>`:''}
         <td style="color:#aaa;font-size:11px;position:sticky;left:${_numLeft}px;z-index:1;background:${rowBg}">${++_rowN}</td>
-        <td class="j-sname" onclick="${item.isGroupHeader?`toggleJulgaeGroup('${item.groupKey}')`:`openClientNotes(${c.id})`}" style="cursor:pointer;left:${_nameLeft}px;background:${rowBg}"${_memoTitle?` title="${_memoTitle}"`:''} >${item.isGroupHeader
+        <td class="j-sname" onclick="${item.isGroupHeader?`toggleJulgaeGroup('${item.groupKey}')`:c._julgaeAdhoc?'':(`openClientNotes(${c.id})`)}" style="cursor:${c._julgaeAdhoc?'default':'pointer'};left:${_nameLeft}px;background:${rowBg}"${_memoTitle?` title="${_memoTitle}"`:''} >${item.isGroupHeader
           ?`<div class="td-name" style="display:flex;align-items:center;gap:4px;min-width:0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font-size:${julgaeName(c.name).length>12?'10px':julgaeName(c.name).length>8?'11px':'12px'}">${esc(julgaeName(c.name))}</span><span style="background:#7b1fa2;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;white-space:nowrap;flex-shrink:0">+${item.groupClients.length-1} ${item.expanded?'▲':'▼'}</span>${_noteIcon}</div>`
           :item.isGroupChild
             ?`<div style="display:flex;align-items:center;gap:4px;padding-left:18px;min-width:0"><span style="color:#ccc;font-size:11px;flex-shrink:0">└</span><div class="td-name" style="font-size:${julgaeName(c.name).length>12?'10px':julgaeName(c.name).length>8?'11px':'12px'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${esc(julgaeName(c.name))}</div>${_revBadge}${_noteIcon}</div>`
-            :`<div class="td-name" style="display:flex;align-items:center;gap:3px;min-width:0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font-size:${julgaeName(c.name).length>12?'10px':julgaeName(c.name).length>8?'11px':'12px'}">${esc(julgaeName(c.name))}</span>${_revBadge}${_noteIcon}</div>`
+            :`<div class="td-name" style="display:flex;align-items:center;gap:3px;min-width:0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font-size:${julgaeName(c.name).length>12?'10px':julgaeName(c.name).length>8?'11px':'12px'}">${esc(julgaeName(c.name))}</span>${c._julgaeAdhoc?`<span style="background:#ff8f00;color:#fff;font-size:9px;border-radius:3px;padding:1px 4px;white-space:nowrap;flex-shrink:0">미등록</span>`:_revBadge}${c._julgaeAdhoc?`<button onclick="event.stopPropagation();deleteJulgaeAdhocEntry('${pKey2}',${c.id})" style="background:none;border:none;color:#ccc;cursor:pointer;font-size:12px;padding:0 2px;flex-shrink:0" title="리스트에서 제거">✕</button>`:_noteIcon}</div>`
         }</td>
         <td style="font-size:12px;color:#444;${hc['j_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
         <td style="color:#555;font-size:12px;${hc['j_manager']?'display:none':''}">${getManagers(c).length?getManagers(c).join(', '):'<span style="color:#ff7043;font-size:11px">⚠ 미지정</span>'}</td>
@@ -7816,9 +7832,9 @@ function openTaxReturnReviewer(type) {
       ondrop="event.preventDefault();this.style.borderColor='#e0e0e0';handleTRRDrop(event,'${type}')">
       <div style="font-size:32px;margin-bottom:8px">📄</div>
       <div style="font-size:14px;font-weight:700;color:#555">PDF 파일을 여기에 드래그하거나 클릭하여 선택</div>
-      <div style="font-size:12px;color:#aaa;margin-top:4px">홈택스 / 세무사랑 신고서 PDF</div>
+      <div style="font-size:12px;color:#aaa;margin-top:4px">홈택스 / 세무사랑 신고서 PDF (여러 파일 선택 가능)</div>
     </div>
-    <input type="file" id="trr-file-input" accept=".pdf" style="display:none" onchange="handleTRRFile(this.files[0],'${type}')">
+    <input type="file" id="trr-file-input" accept=".pdf" multiple style="display:none" onchange="handleTRRFiles(this.files,'${type}')">
 
     <div style="margin-top:10px">
       <label class="flabel">또는 직접 붙여넣기</label>
@@ -7884,8 +7900,39 @@ function openTaxReturnReviewer(type) {
 }
 
 function handleTRRDrop(event, type) {
-  const file = event.dataTransfer.files[0];
-  if (file) handleTRRFile(file, type);
+  const files = event.dataTransfer.files;
+  if (files && files.length) handleTRRFiles(files, type);
+}
+
+async function handleTRRFiles(fileList, type) {
+  const files = [...fileList].filter(f => f.name.toLowerCase().endsWith('.pdf'));
+  if (!files.length) { toast('PDF 파일만 지원됩니다', 'warning'); return; }
+  const statusEl = document.getElementById('trr-status');
+  const uploadArea = document.getElementById('trr-upload-area');
+  if (statusEl) statusEl.textContent = `${files.length}개 파일 처리 중...`;
+  if (uploadArea) uploadArea.innerHTML = `<div style="font-size:24px;margin-bottom:8px">⏳</div><div style="font-size:13px;color:#555;font-weight:600">${files.length}개 PDF 추출 중...</div>`;
+  const texts = [];
+  const fileResults = [];
+  for (const file of files) {
+    try {
+      const text = await parsePDFToText(file);
+      texts.push(text);
+      fileResults.push({ name: file.name, chars: text.length, ok: true });
+    } catch(e) {
+      fileResults.push({ name: file.name, ok: false, err: e.message });
+    }
+  }
+  const combined = texts.join('\n\n---\n\n');
+  const ta = document.getElementById('trr-text-input');
+  if (ta) ta.value = combined;
+  if (uploadArea) {
+    const okCount = fileResults.filter(r=>r.ok).length;
+    uploadArea.innerHTML = `<div style="font-size:20px;margin-bottom:6px">${okCount===files.length?'✅':'⚠️'}</div>` +
+      fileResults.map(r => `<div style="font-size:12px;${r.ok?'color:#2e7d32':'color:#c62828'};margin:2px 0">${r.ok?'✓':'✕'} ${esc(r.name)}${r.ok?' ('+r.chars.toLocaleString()+'자)':' — '+esc(r.err)}</div>`).join('') +
+      `<div style="font-size:11px;color:#888;margin-top:4px">총 ${combined.length.toLocaleString()}자 추출 완료</div>`;
+  }
+  if (statusEl) statusEl.textContent = `${files.length}개 파일 추출 완료 — AI 검토 시작 버튼을 누르세요`;
+  if (texts.length > 0) autoMatchTRRClient(combined);
 }
 
 async function handleTRRFile(file, type) {
@@ -8483,32 +8530,22 @@ function openTRRUnmatchedModal() {
         </button>
       </div>
 
-      <!-- 방법 2: 신규 업체 등록 -->
-      <div style="border:1.5px solid #e0e0e0;border-radius:12px;padding:14px">
-        <div style="font-size:13px;font-weight:800;color:#2e7d32;margin-bottom:10px">② 신규 업체로 등록 후 기록</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
-          <div>
-            <label class="flabel">상호 <span style="color:#e53935">*</span></label>
-            <input id="trr-new-name" class="finput" value="${esc(name)}" placeholder="상호명">
-          </div>
-          <div>
-            <label class="flabel">대표자 <span style="color:#e53935">*</span></label>
-            <input id="trr-new-rep" class="finput" placeholder="대표자명">
-          </div>
-          <div>
-            <label class="flabel">사업자번호</label>
-            <input id="trr-new-bizno" class="finput" value="${esc(data.bizNo||'')}">
-          </div>
-          <div>
-            <label class="flabel">수임유형</label>
-            <select id="trr-new-deal" class="fsel">
-              <option value="신고대리">신고대리</option>
-              <option value="기장">기장</option>
-            </select>
-          </div>
-        </div>
-        <button onclick="doRecordTRRNew()" style="width:100%;padding:9px;background:#e8f5e9;color:#2e7d32;border:1.5px solid #a5d6a7;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">
-          ➕ 신규 등록 후 기록하기
+      <!-- 방법 2: 신규 업체 등록 (전체 폼) -->
+      <div style="border:1.5px solid #e0e0e0;border-radius:12px;padding:14px;margin-bottom:12px">
+        <div style="font-size:13px;font-weight:800;color:#2e7d32;margin-bottom:6px">② 신규 거래처로 등록 후 기록</div>
+        <div style="font-size:12px;color:#888;margin-bottom:10px">신고서 정보가 미리 입력된 거래처 등록 화면이 열립니다.</div>
+        <button onclick="openFormFromTRR()" style="width:100%;padding:9px;background:#e8f5e9;color:#2e7d32;border:1.5px solid #a5d6a7;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">
+          ➕ 거래처 등록 화면 열기
+        </button>
+      </div>
+
+      <!-- 방법 3: 신고리스트에만 반영 -->
+      <div style="border:1.5px solid #fff3e0;border-radius:12px;padding:14px">
+        <div style="font-size:13px;font-weight:800;color:#e65100;margin-bottom:6px">③ 신고리스트에만 반영 (미등록)</div>
+        <div style="font-size:12px;color:#888;margin-bottom:10px">거래처목록에 추가하지 않고 신고리스트에만 표시됩니다.</div>
+        <input id="trr-adhoc-name" class="finput" value="${esc(name||'')}" placeholder="상호명" style="margin-bottom:8px">
+        <button onclick="doRecordTRRAdhoc()" style="width:100%;padding:9px;background:#fff3e0;color:#e65100;border:1.5px solid #ffcc80;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">
+          📋 신고리스트에만 반영
         </button>
       </div>
 
@@ -8598,6 +8635,56 @@ function doRecordTRRNew() {
   closeModal();
   doRecordTRRWith(newId, pk);
   toast(`신규 업체 "${name}" 등록 완료`, 'success', 2500);
+}
+
+function openFormFromTRR() {
+  const data = window._trrReviewData;
+  const pk = document.getElementById('trr-um-period')?.value;
+  if (!pk) { toast('신고기간을 먼저 선택해주세요', 'warning'); return; }
+  window._trrPendingPKey = pk;
+  window._trrPendingAfterSave = true;
+  window._julgaeAddToPeriod = pk;
+  closeModal();
+  // Pre-fill form data from AI review
+  const prefill = {
+    name: data?.companyName || '',
+    bizNo: data?.bizNo || '',
+    rep: data?.representative || '',
+    taxType: data?.taxType || '개인',
+    vatType: '일반',
+    dealType: '신고대리',
+  };
+  openForm(null);
+  // Apply prefill after form is rendered
+  setTimeout(() => {
+    const nm = document.getElementById('f-name'); if(nm && prefill.name) { nm.value = prefill.name; window._formData.name = prefill.name; }
+    const bn = document.getElementById('f-bizno'); if(bn && prefill.bizNo) { bn.value = prefill.bizNo; window._formData.bizNo = prefill.bizNo; }
+    const rp = document.getElementById('f-rep'); if(rp && prefill.rep) { rp.value = prefill.rep; window._formData.rep = prefill.rep; }
+  }, 50);
+}
+
+function doRecordTRRAdhoc() {
+  const pk = document.getElementById('trr-um-period')?.value;
+  if (!pk) { toast('신고기간을 먼저 선택해주세요', 'warning'); return; }
+  const data = window._trrReviewData || {};
+  const name = document.getElementById('trr-adhoc-name')?.value?.trim() || data.companyName || '(미등록)';
+  const id = -Date.now();
+  if (!G.julgaeAdhoc) G.julgaeAdhoc = {};
+  if (!G.julgaeAdhoc[pk]) G.julgaeAdhoc[pk] = [];
+  G.julgaeAdhoc[pk].push({ id, name, rep: data.representative||'', bizNo: data.bizNo||'' });
+  // Record the TRR data under this adhoc ID
+  window._trrReviewData = data;
+  doRecordTRRWith(id, pk);
+  // Ensure period enrolled includes existing auto clients if not explicitly set
+  const period = G.periods.find(p => p.id === pk);
+  if (period && (!period.enrolled || period.enrolled.length === 0)) {
+    const base = G.clients.filter(c => c.status !== '해지' && c.status !== '폐업');
+    period.enrolled = applyReportFilter(base, period).map(c => c.id);
+  }
+  saveToLS();
+  closeModal();
+  toast(`"${name}" 신고리스트에 미등록으로 반영됨`, 'success', 2500);
+  renderJulgae();
 }
 
 function doRecordTRR() {
@@ -10019,6 +10106,90 @@ function jmfApplyRec(cid, rec) {
   if (c) { c.fee = rec; saveToLS(); renderJulgae(); }
 }
 
+function _makeAdhocClientObj(adhoc) {
+  return {
+    id: adhoc.id, name: adhoc.name || '(미등록)', rep: adhoc.rep || '',
+    bizNo: adhoc.bizNo || '', taxType: adhoc.taxType || '개인',
+    vatType: adhoc.vatType || '일반', bizType: '', fee: 0,
+    dealType: '신고대리', dealTypes: ['신고대리'], managers: [], manager: '',
+    status: '정상', incomeGroupKey: '', jointBiz: false,
+    _julgaeAdhoc: true
+  };
+}
+
+function openJulgaeAddClientModal(pKey) {
+  const period = G.periods.find(p => p.id === pKey);
+  showModal(`<div style="max-width:420px">
+    <div class="modal-header">
+      <h3>업체 추가 — ${esc(period?.label||'')}</h3>
+      <button class="close-btn" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:12px">
+      <div style="border:1.5px solid #e3f2fd;border-radius:12px;padding:14px">
+        <div style="font-size:13px;font-weight:800;color:#1565c0;margin-bottom:6px">① 거래처목록에 등록</div>
+        <div style="font-size:12px;color:#888;margin-bottom:10px">전체 거래처목록에도 추가됩니다.</div>
+        <button onclick="closeModal();window._julgaeAddToPeriod='${pKey}';openForm(null)"
+          style="width:100%;padding:9px;background:#e3f2fd;color:#1565c0;border:1.5px solid #90caf9;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">
+          📋 거래처목록에 등록 후 추가
+        </button>
+      </div>
+      <div style="border:1.5px solid #fff3e0;border-radius:12px;padding:14px">
+        <div style="font-size:13px;font-weight:800;color:#e65100;margin-bottom:6px">② 신고리스트에만 추가 (미등록)</div>
+        <div style="font-size:12px;color:#888;margin-bottom:10px">거래처목록에는 추가되지 않습니다. 신고리스트에서만 표시됩니다.</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div>
+            <label class="flabel">상호 <span style="color:#e53935">*</span></label>
+            <input id="adhoc-name" class="finput" placeholder="상호명">
+          </div>
+          <div>
+            <label class="flabel">대표자</label>
+            <input id="adhoc-rep" class="finput" placeholder="대표자명">
+          </div>
+          <div>
+            <label class="flabel">사업자번호</label>
+            <input id="adhoc-bizno" class="finput" placeholder="000-00-00000">
+          </div>
+          <div>
+            <label class="flabel">인격</label>
+            <select id="adhoc-taxtype" class="fsel">
+              <option value="개인">개인</option>
+              <option value="법인">법인</option>
+            </select>
+          </div>
+        </div>
+        <button onclick="saveJulgaeAdhocEntry('${pKey}')"
+          style="width:100%;padding:9px;background:#fff3e0;color:#e65100;border:1.5px solid #ffcc80;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">
+          ➕ 신고리스트에만 추가
+        </button>
+      </div>
+    </div>
+  </div>`);
+}
+
+function saveJulgaeAdhocEntry(pKey) {
+  const name = document.getElementById('adhoc-name')?.value?.trim();
+  if (!name) { toast('상호명을 입력해주세요', 'warning'); return; }
+  const rep = document.getElementById('adhoc-rep')?.value?.trim() || '';
+  const bizNo = document.getElementById('adhoc-bizno')?.value?.trim() || '';
+  const taxType = document.getElementById('adhoc-taxtype')?.value || '개인';
+  const id = -Date.now();
+  if (!G.julgaeAdhoc) G.julgaeAdhoc = {};
+  if (!G.julgaeAdhoc[pKey]) G.julgaeAdhoc[pKey] = [];
+  G.julgaeAdhoc[pKey].push({ id, name, rep, bizNo, taxType });
+  saveToLS();
+  closeModal();
+  renderJulgae();
+  toast(`"${name}" 신고리스트에 추가됨`, 'success', 2000);
+}
+
+function deleteJulgaeAdhocEntry(pKey, id) {
+  if (!G.julgaeAdhoc?.[pKey]) return;
+  G.julgaeAdhoc[pKey] = G.julgaeAdhoc[pKey].filter(a => a.id !== id);
+  if (G.julgae[pKey]) delete G.julgae[pKey][id];
+  saveToLS();
+  renderJulgae();
+}
+
 function applyBosuFee(pKey, clientId, field, fee) {
   if (!G.julgae[pKey]) G.julgae[pKey] = {};
   const cur = julgaeVal(pKey, clientId);
@@ -11311,6 +11482,7 @@ async function loadFromFirebase() {
       G.filterPresets = data.filterPresets ? JSON.parse(data.filterPresets) : [];
       G.contactLogs = data.contactLogs ? JSON.parse(data.contactLogs) : {};
       G.adHocFees = data.adHocFees ? JSON.parse(data.adHocFees) : {};
+      G.julgaeAdhoc = data.julgaeAdhoc ? JSON.parse(data.julgaeAdhoc) : {};
         G.income26Unmatched = JSON.parse(localStorage.getItem('tm_income26Unmatched')||'[]');
       if (data.julgaeSelectedPeriods) G.julgaeSelectedPeriods = JSON.parse(data.julgaeSelectedPeriods);
       if (data.julgaeSelectedYears) G.julgaeSelectedYears = JSON.parse(data.julgaeSelectedYears);
@@ -11346,6 +11518,7 @@ async function loadFromFirebase() {
         G.filterPresets = JSON.parse(localStorage.getItem('tm_filterPresets')||'[]');
         G.contactLogs = JSON.parse(localStorage.getItem('tm_contactLogs')||'{}');
         G.adHocFees = JSON.parse(localStorage.getItem('tm_adHocFees')||'{}');
+        G.julgaeAdhoc = JSON.parse(localStorage.getItem('tm_julgaeAdhoc')||'{}');
         G.income26Unmatched = JSON.parse(localStorage.getItem('tm_income26Unmatched')||'[]');
         const sjsp = localStorage.getItem('tm_julgaeSelectedPeriods'); if(sjsp) G.julgaeSelectedPeriods = JSON.parse(sjsp);
         const sjsy = localStorage.getItem('tm_julgaeSelectedYears'); if(sjsy) G.julgaeSelectedYears = JSON.parse(sjsy);
@@ -11388,6 +11561,7 @@ async function loadFromFirebase() {
     G.filterPresets = JSON.parse(localStorage.getItem('tm_filterPresets')||'[]');
     G.contactLogs = JSON.parse(localStorage.getItem('tm_contactLogs')||'{}');
     G.adHocFees = JSON.parse(localStorage.getItem('tm_adHocFees')||'{}');
+    G.julgaeAdhoc = JSON.parse(localStorage.getItem('tm_julgaeAdhoc')||'{}');
     G.income26Unmatched = JSON.parse(localStorage.getItem('tm_income26Unmatched')||'[]');
     const _sjsp = localStorage.getItem('tm_julgaeSelectedPeriods'); if(_sjsp) G.julgaeSelectedPeriods = JSON.parse(_sjsp);
     const _sjsy = localStorage.getItem('tm_julgaeSelectedYears'); if(_sjsy) G.julgaeSelectedYears = JSON.parse(_sjsy);
