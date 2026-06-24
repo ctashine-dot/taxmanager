@@ -1918,6 +1918,23 @@ function _renderDashboardInner() {
 // ══════════════════════════════════════════════════════
 const CLIENT_PAGE_SIZE = 50;
 
+// 거래처목록 수수료 셀 내용 (기장/신고/조정료/성실 + 미수) — 그룹 리드/멤버 공통
+function clientFeeDisplay(c) {
+  if (c.status!=='정상' && c.status!=='주의') return '-';
+  const cym=currentYM();
+  const pending=((G.adHocFees||{})[c.id]||[]).filter(f=>!f.collected&&f.ym===cym);
+  const parts=[];
+  if(c.fee)parts.push('<span style="color:#aaa;font-size:10px">기장</span> '+c.fee.toLocaleString());
+  const _singo=c.feeSingo||0;
+  const _jojung=c.adjustFee||c.feeJojung||0;
+  const _seongsi=c.seongsiConfirmFee||c.feeSeongsi||0;
+  if(_singo)parts.push('<span style="color:#aaa;font-size:10px">신고</span> '+_singo.toLocaleString());
+  if(_jojung)parts.push('<span style="color:#aaa;font-size:10px">조정료</span> '+_jojung.toLocaleString());
+  if(_seongsi)parts.push('<span style="color:#aaa;font-size:10px">성실</span> '+_seongsi.toLocaleString());
+  if(pending.length)parts.push('<span style="font-size:10px;color:#e65100">+'+pending.length+'건 미수</span>');
+  return parts.length?parts.join('<br>'):'-';
+}
+
 function renderClients() {
   const list = filteredClients();
   const terminated = G.clients.filter(c=>c.status==='해지'||c.status==='폐업').length;
@@ -2042,7 +2059,7 @@ function renderClients() {
         <td data-label="인격" style="${hc['c_taxType']?'display:none':''}">${em?iSel('taxType',TAX_TYPES.slice(1),c.taxType):badge(c.taxType,c.taxType==='법인'?'blue':'gray')}</td>
         <td data-label="과세유형" style="${hc['c_vatType']?'display:none':''}">${em?iSel('vatType',VAT_TYPES.slice(1),c.vatType):badge(c.vatType,c.vatType==='일반'?'blue':c.vatType==='간이'?'orange':c.vatType==='간세'?'teal':'gray')}</td>
         <td data-label="담당자" style="color:#555;font-size:12px;${hc['c_manager']?'display:none':''}">${em?iSel('manager',MANAGERS.slice(1),getManagers(c)[0]||''):getManagers(c).join(', ')||'-'}</td>
-        <td data-label="수수료" style="font-weight:600;font-size:11px;${hc['c_fee']?'display:none':''}">${em?`<div onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:4px;font-size:10px"><span style="color:#888">기장</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'fee',this.value)" value="${c.fee||0}" class="inline-edit" style="width:70px"></div>`:(c.status==='정상'||c.status==='주의'?(()=>{const cym=currentYM();const pending=((G.adHocFees||{})[c.id]||[]).filter(f=>!f.collected&&f.ym===cym);const parts=[];if(c.fee)parts.push('<span style="color:#aaa;font-size:10px">기장</span> '+c.fee.toLocaleString());const _singo=c.feeSingo||0;const _jojung=c.adjustFee||c.feeJojung||0;const _seongsi=c.seongsiConfirmFee||c.feeSeongsi||0;if(_singo)parts.push('<span style="color:#aaa;font-size:10px">신고</span> '+_singo.toLocaleString());if(_jojung)parts.push('<span style="color:#aaa;font-size:10px">조정료</span> '+_jojung.toLocaleString());if(_seongsi)parts.push('<span style="color:#aaa;font-size:10px">성실</span> '+_seongsi.toLocaleString());if(pending.length)parts.push('<span style="font-size:10px;color:#e65100">+'+pending.length+'건 미수</span>');return parts.length?parts.join('<br>'):'-';})():'-')}</td>
+        <td data-label="수수료" style="font-weight:600;font-size:11px;${hc['c_fee']?'display:none':''}">${em?`<div onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:4px;font-size:10px"><span style="color:#888">기장</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'fee',this.value)" value="${c.fee||0}" class="inline-edit" style="width:70px"></div>`:clientFeeDisplay(c)}</td>
         <td data-label="상태" ${em?`onclick="event.stopPropagation();openStatusModal(${c.id})" style="cursor:pointer;` : `style="opacity:.95;`}${hc['c_status']?'display:none':''}${em?`" title="클릭하여 상태 변경"` : `" title="상태 변경은 수정모드에서 가능합니다"`}>${badge(c.status,statusColor(c.status))}</td>
         <td data-label="CMS" ${em?`onclick="event.stopPropagation();toggleCMS(${c.id})" style="cursor:pointer;` : `style="opacity:.95;`}${hc['c_cms']?'display:none':''}${em?`"` : `" title="CMS 변경은 수정모드에서 가능합니다"`}>${badge(c.cms?'가입':'미가입',c.cms?'green':'gray')}</td>
         <td data-label="등급" style="text-align:center;${hc['c_grade']?'display:none':''}">${gradeBadge(c.grade,c.gradeManual)}</td>
@@ -2095,7 +2112,7 @@ function renderClients() {
           <td data-label="인격" style="${hc['c_taxType']?'display:none':''}">${em?miSel('taxType',TAX_TYPES.slice(1),m.taxType):badge(m.taxType,m.taxType==='법인'?'blue':'gray')}</td>
           <td data-label="과세유형" style="${hc['c_vatType']?'display:none':''}">${em?miSel('vatType',VAT_TYPES.slice(1),m.vatType):badge(m.vatType,m.vatType==='일반'?'blue':m.vatType==='간이'?'orange':m.vatType==='간세'?'teal':'gray')}</td>
           <td data-label="담당자" style="color:#555;font-size:12px;${hc['c_manager']?'display:none':''}">${em?miSel('manager',MANAGERS.slice(1),getManagers(m)[0]||''):getManagers(m).join(', ')||'-'}</td>
-          <td data-label="수수료" style="font-weight:600;font-size:11px;${hc['c_fee']?'display:none':''}">${m.fee?m.fee.toLocaleString()+' <span style="color:#aaa;font-size:10px">기장</span>':'-'}</td>
+          <td data-label="수수료" style="font-weight:600;font-size:11px;${hc['c_fee']?'display:none':''}">${clientFeeDisplay(m)}</td>
           <td data-label="상태" style="opacity:.95;${hc['c_status']?'display:none':''}">${badge(m.status,statusColor(m.status))}</td>
           <td data-label="CMS" style="opacity:.95;${hc['c_cms']?'display:none':''}">${badge(m.cms?'가입':'미가입',m.cms?'green':'gray')}</td>
           <td data-label="등급" style="text-align:center;${hc['c_grade']?'display:none':''}">${gradeBadge(m.grade,m.gradeManual)}</td>
@@ -2149,7 +2166,7 @@ function renderClients() {
           <td data-label="인격" style="${hc['c_taxType']?'display:none':''}">${em?miSel('taxType',TAX_TYPES.slice(1),m.taxType):badge(m.taxType,m.taxType==='법인'?'blue':'gray')}</td>
           <td data-label="과세유형" style="${hc['c_vatType']?'display:none':''}">${em?miSel('vatType',VAT_TYPES.slice(1),m.vatType):badge(m.vatType,m.vatType==='일반'?'blue':m.vatType==='간이'?'orange':m.vatType==='간세'?'teal':'gray')}</td>
           <td data-label="담당자" style="color:#555;font-size:12px;${hc['c_manager']?'display:none':''}">${em?miSel('manager',MANAGERS.slice(1),getManagers(m)[0]||''):getManagers(m).join(', ')||'-'}</td>
-          <td data-label="수수료" style="font-weight:600;font-size:11px;${hc['c_fee']?'display:none':''}">${m.fee?m.fee.toLocaleString()+' <span style="color:#aaa;font-size:10px">기장</span>':'-'}</td>
+          <td data-label="수수료" style="font-weight:600;font-size:11px;${hc['c_fee']?'display:none':''}">${clientFeeDisplay(m)}</td>
           <td data-label="상태" style="opacity:.95;${hc['c_status']?'display:none':''}">${badge(m.status,statusColor(m.status))}</td>
           <td data-label="CMS" style="opacity:.95;${hc['c_cms']?'display:none':''}">${badge(m.cms?'가입':'미가입',m.cms?'green':'gray')}</td>
           <td data-label="등급" style="text-align:center;${hc['c_grade']?'display:none':''}">${gradeBadge(m.grade,m.gradeManual)}</td>
