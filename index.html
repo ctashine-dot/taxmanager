@@ -1454,10 +1454,30 @@ function _renderDashboardInner() {
   const monthlyTotal     = monthlyClients.reduce((a,c)=>a+(c.fee||0),0);
   const monthlyCollected = monthlyClients.filter(c=>G.monthlyFees[c.id]?.[thisYM]).reduce((a,c)=>a+(c.fee||0),0);
 
-  // 신고 수수료 (전체 누계) — 수임된 모든 거래처 기준(수임목록 기준, julgae 엔트리 없어도 기본수수료 포함)
+  // 현재 진행 중인 신고 기간 결정 (마감일 기준 -30일 ~ +60일 이내)
+  const _now2 = new Date();
+  let activePeriods = [];
+  for (const tpl of PERIOD_TEMPLATES) {
+    const dm = tpl.deadline.match(/(\d+)월\s*(\d+)일/);
+    if (!dm) continue;
+    const mo = Number(dm[1])-1, dy = Number(dm[2]);
+    for (const yr of [_now2.getFullYear(), _now2.getFullYear()+1]) {
+      const d = new Date(yr, mo, dy);
+      const diff = Math.round((d - _now2) / 86400000);
+      if (diff >= -30 && diff <= 60) {
+        const yy = String(yr).slice(2);
+        const match = G.periods.find(p => p.reportType===tpl.tpl && (p.label.startsWith(yy+'년')||p.id.endsWith('_'+yr)));
+        if (match && !activePeriods.find(p => p.id === match.id)) activePeriods.push(match);
+      }
+    }
+  }
+  if (!activePeriods.length && G.periods.length) activePeriods = [G.periods[G.periods.length-1]];
+  const activePeriodLabel = activePeriods.length===1 ? activePeriods[0].label : activePeriods.map(p=>p.label).join(', ');
+
+  // 신고 수수료 (현재 진행 중인 기간 기준)
   let filingTotal=0, filingCollected=0;
   const filingUnpaidClients = [];
-  for (const period2 of G.periods) {
+  for (const period2 of activePeriods) {
     const pKey = period2.id;
     const pData = G.julgae[pKey] || {};
     const enrolled = period2.enrolled || [];
@@ -1465,7 +1485,8 @@ function _renderDashboardInner() {
       const cl = G.clients.find(c=>c.id===clientId);
       if (!cl) continue;
       const v = pData[clientId] || {};
-      const fee2 = v.fee || 0;
+      const isSeongsiPeriod = period2.reportType === 'seongsi';
+      const fee2 = (v.fee || 0) + (isSeongsiPeriod ? (v.feeSeongsi || 0) : 0);
       if (!fee2) continue;
       filingTotal += fee2;
       if (v.s) filingCollected += fee2;
@@ -1625,46 +1646,6 @@ function _renderDashboardInner() {
     })()}
   </div>
 
-  ${(G.settings?.dashWidgets?.julgaeCard!==false)?(()=>{
-    const latestPeriod = G.periods.length ? G.periods[G.periods.length-1] : null;
-    if (!latestPeriod) return '';
-    const pKey = latestPeriod.id;
-    const pData = G.julgae[pKey] || {};
-    const getGroupKey2 = buildClientGroupMap(G.clients);
-    const groupCounts2 = {};
-    G.clients.forEach(c=>{ const k=getGroupKey2(c); groupCounts2[k]=(groupCounts2[k]||0)+1; });
-    // 대상 업체 목록 (enrolled 또는 자동)
-    let targets;
-    if (latestPeriod.enrolled && latestPeriod.enrolled.length>0) {
-      targets = G.clients.filter(c=>latestPeriod.enrolled.includes(c.id));
-    } else {
-      targets = applyReportFilter(G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'), latestPeriod);
-    }
-    const total = targets.length;
-    const done  = targets.filter(c=>julgaeVal(pKey,c.id).a).length;
-    const pct   = total ? Math.round(done/total*100) : 0;
-    return `
-    <div style="margin:0 0 14px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <div>
-          <span style="font-size:15px;font-weight:800;color:#1a1a2e">${esc(latestPeriod.label)}</span>
-          <span style="font-size:12px;color:#888;margin-left:8px">결재현황</span>
-        </div>
-        <button class="btn-sm" style="background:#e8f5e9;color:#2e7d32;border:1.5px solid #a5d6a7" onclick="G.julgaePeriodIdx=${G.periods.length-1};switchTab('julgae')">바로가기 →</button>
-      </div>
-      <div class="card" style="margin-bottom:0;padding:12px 14px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <span style="font-size:13px;color:#555">완료 <b style="color:#2e7d32">${done}</b> / 전체 <b>${total}</b></span>
-          <span style="font-size:13px;font-weight:700;color:${pct===100?'#2e7d32':'#1565c0'}">${pct}%</span>
-        </div>
-        <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
-        <div style="display:flex;gap:8px;margin-top:8px;font-size:12px">
-          <span style="color:#e53935">미완료 ${total-done}개</span>
-          <span style="color:#2e7d32">완료 ${done}개</span>
-        </div>
-      </div>
-    </div>`;
-  })():''}
 
   <div style="margin:22px 0 12px;display:flex;justify-content:space-between;align-items:center">
     <h3 style="font-size:18px;font-weight:800">💰 수수료 현황</h3>
@@ -1682,9 +1663,9 @@ function _renderDashboardInner() {
       </div>
     </div>
     <div class="card" style="margin-bottom:0;border-top:3px solid #a259ff">
-      <div class="card-title" style="font-size:13px">신고 수수료 (신고및결재 청구액 합계)</div>
+      <div class="card-title" style="font-size:13px">신고 수수료 <span style="font-size:11px;color:#bbb;font-weight:400">(${esc(activePeriodLabel)})</span></div>
       <div style="font-size:20px;font-weight:800;color:#a259ff;margin-bottom:4px">${filingTotal.toLocaleString()}원</div>
-      <div style="font-size:12px;color:#aaa">청구 ${filingTotal.toLocaleString()}원</div>
+      <div style="font-size:12px;color:#aaa">수금 ${filingCollected.toLocaleString()}원 · 미수 ${(filingTotal-filingCollected).toLocaleString()}원</div>
       <div style="display:flex;gap:6px;margin-top:8px">
         <button onclick="G.dashFilingView=G.dashFilingView==='paid'?null:'paid';renderDashboard()" style="flex:1;padding:5px;border-radius:7px;border:1.5px solid ${G.dashFilingView==='paid'?'#2e7d32':'#e0e0e0'};background:${G.dashFilingView==='paid'?'#e8f5e9':'#fff'};color:${G.dashFilingView==='paid'?'#2e7d32':'#555'};font-size:11px;cursor:pointer;font-family:inherit">✅ 수금 ${filingTotal-grandUnpaid>0?(filingTotal-(filingTotal-filingCollected)).toLocaleString()+'원':'없음'}</button>
         <button onclick="G.dashFilingView=G.dashFilingView==='unpaid'?null:'unpaid';renderDashboard()" style="flex:1;padding:5px;border-radius:7px;border:1.5px solid ${G.dashFilingView==='unpaid'?'#a259ff':'#e0e0e0'};background:${G.dashFilingView==='unpaid'?'#f3e5f5':'#fff'};color:${G.dashFilingView==='unpaid'?'#7b1fa2':'#555'};font-size:11px;cursor:pointer;font-family:inherit">❌ 미수금 ${filingUnpaidClients.length}건</button>
