@@ -3155,7 +3155,7 @@ function toggleSection(key) {
 }
 function _dashCollapsed(key) {
   if (!G.sectionCollapsed) G.sectionCollapsed = {};
-  const _defaultOpen = new Set(['dash-chart12','fees-monthly']);
+  const _defaultOpen = new Set(['fees-monthly']);
   if (!(key in G.sectionCollapsed)) G.sectionCollapsed[key] = !_defaultOpen.has(key);
   return G.sectionCollapsed[key];
 }
