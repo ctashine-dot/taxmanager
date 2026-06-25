@@ -4901,14 +4901,6 @@ function renderJulgae() {
           `<div style="height:3px;border-radius:2px;background:#eee;margin-top:3px"><div style="height:3px;border-radius:2px;background:${s.color};width:${pct2}%"></div></div>`+
         `</div>${arrow}</div>`;
     }).join('')}
-  </div>
-  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
-    ${[
-      {label:'상담완료',count:consulCount,color:'#1565c0'},
-      {label:'기장완료',count:bookCount,color:'#43a047'},
-      {label:'결재완료',count:doneCount,color:'#9c27b0'},
-      {label:'수금완료',count:collectCount,color:'#e65100'},
-    ].map(s=>{const pct2=total?Math.round(s.count/total*100):0;return`<div class="stat-card" style="border-left:3px solid ${s.color}"><div class="stat-label">${s.label}</div><div style="font-size:20px;font-weight:800">${s.count}<span style="font-size:13px;color:#aaa"> / ${total}</span></div><div class="progress-bar" style="margin-top:6px"><div class="progress-fill" style="width:${pct2}%;background:${s.color};height:6px"></div></div></div>`;}).join('')}
   </div>` : ''}
 
   ${prevPeriods1.length > 0 ? (()=>{
