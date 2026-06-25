@@ -694,6 +694,7 @@ function saveToLS() {
     if (G.julgaeSelectedPeriods) localStorage.setItem('tm_julgaeSelectedPeriods', JSON.stringify(G.julgaeSelectedPeriods));
     if (G.julgaeSelectedYears) localStorage.setItem('tm_julgaeSelectedYears', JSON.stringify(G.julgaeSelectedYears));
     if (G.pinnedPeriods) localStorage.setItem('tm_pinnedPeriods', JSON.stringify(G.pinnedPeriods));
+    const _cp = G.periods[G.julgaePeriodIdx]; if (_cp?.id) localStorage.setItem('tm_julgaePeriodId', _cp.id);
   } catch(e) {
     console.error('로컬 저장 실패:', e);
     showSaveError('로컬 저장 공간이 부족합니다');
@@ -11915,6 +11916,11 @@ async function loadFromFirebase() {
   } catch(e) {
     console.error('초기화 오류:', e);
   } finally {
+    const _savedPId = localStorage.getItem('tm_julgaePeriodId');
+    if (_savedPId && G.periods.length) {
+      const _pIdx = G.periods.findIndex(p => p.id === _savedPId);
+      if (_pIdx >= 0) G.julgaePeriodIdx = _pIdx;
+    }
     document.getElementById('loading').style.display = 'none';
     document.getElementById('page-dashboard').style.display = 'block';
     updateSettingsBadge();
