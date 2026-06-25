@@ -8132,7 +8132,7 @@ ${text.slice(0, 5000)}
       if (result) {
         const jm = result.match(/```json\s*([\s\S]*?)\s*```/);
         if (jm) { try { reviewData = JSON.parse(jm[1]); } catch(e){} }
-        reviewText = result.replace(/```json[\s\S]*?```/g,'').trim().slice(0, 300);
+        reviewText = result.replace(/```json[\s\S]*?```/g,'').trim();
       }
     } catch(e) {
       if(statusEl){ statusEl.textContent='AI 오류'; statusEl.style.color='#c62828'; }
@@ -8161,7 +8161,7 @@ ${text.slice(0, 5000)}
         ${reviewData.payTax?`<div>납부세액: <b style="color:#c62828">${fmtN(reviewData.payTax)}</b></div>`:''}
         ${reviewData.feeRecommendation?`<div>추천: <b style="color:#2e7d32">${fmtN(reviewData.feeRecommendation)}</b></div>`:''}
       </div>`:''}
-      ${reviewText ? `<div style="font-size:11px;color:#777;line-height:1.6;margin-bottom:8px;padding:8px;background:#fafafa;border-radius:6px;white-space:pre-wrap;word-break:break-word">${esc(reviewText)}</div>`:''}
+      ${reviewText ? `<div style="font-size:11px;color:#777;line-height:1.6;margin-bottom:8px;padding:8px;background:#fafafa;border-radius:6px;white-space:pre-wrap;word-break:break-word;max-height:260px;overflow-y:auto">${esc(reviewText)}</div>`:''}
       ${!matchedClient ? `<div style="margin-bottom:8px">
         <input type="text" placeholder="거래처 검색 (이름/대표자)..." autocomplete="off"
           style="width:100%;border:1px solid #ffcc80;border-radius:6px;padding:6px 8px;font-size:12px;box-sizing:border-box;font-family:inherit"
@@ -8234,10 +8234,12 @@ function batchRecord(bIdx) {
   if (!item || item.recorded) return;
   if (!item.pKey) { toast('신고기간이 선택되지 않았습니다', 'warning'); return; }
   if (!item.matchedClient?.id) { toast('거래처를 먼저 선택해주세요 (위 검색창에서)', 'warning'); return; }
-  const feeVal = Number((document.getElementById(`bc-fee-${bIdx}`)?.value||'').replace(/,/g,'')) || 0;
-  if (!feeVal) { toast('조정료를 입력해주세요', 'warning'); return; }
+  const _feeRaw = (document.getElementById(`bc-fee-${bIdx}`)?.value||'').replace(/,/g,'').trim();
+  const feeVal = _feeRaw === '' ? null : Number(_feeRaw);
+  if (feeVal === null) { toast('조정료를 입력해주세요 (0도 가능)', 'warning'); return; }
+  const feeNum = feeVal || 0;
   const seongsiVal = Number((document.getElementById(`bc-seongsi-${bIdx}`)?.value||'').replace(/,/g,'')) || 0;
-  window._trrReviewData = {...(item.data||{}), feeRecommendation: feeVal, feeSeongsi: seongsiVal};
+  window._trrReviewData = {...(item.data||{}), feeRecommendation: feeNum, feeSeongsi: seongsiVal};
   doRecordTRRWith(item.matchedClient.id, item.pKey);
   item.recorded = true;
   const card = document.getElementById(`batch-card-${bIdx}`);
