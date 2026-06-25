@@ -1454,20 +1454,23 @@ function _renderDashboardInner() {
   const monthlyTotal     = monthlyClients.reduce((a,c)=>a+(c.fee||0),0);
   const monthlyCollected = monthlyClients.filter(c=>G.monthlyFees[c.id]?.[thisYM]).reduce((a,c)=>a+(c.fee||0),0);
 
-  // 현재 진행 중인 신고 기간 결정 (마감일 기준 -30일 ~ +60일 이내)
+  // 현재 진행 중인 신고 기간 결정: G.periods를 순회해 reportType→템플릿 마감일 역조회
+  // (신고연도 ≠ 마감연도이므로 연도 접미사 매칭 대신 마감일 기준 ±30~60일 체크)
   const _now2 = new Date();
   let activePeriods = [];
-  for (const tpl of PERIOD_TEMPLATES) {
+  for (const p of G.periods) {
+    const rt = p.reportType || p.type || '';
+    const tpl = PERIOD_TEMPLATES.find(t => t.tpl === rt);
+    if (!tpl) continue;
     const dm = tpl.deadline.match(/(\d+)월\s*(\d+)일/);
     if (!dm) continue;
     const mo = Number(dm[1])-1, dy = Number(dm[2]);
-    for (const yr of [_now2.getFullYear(), _now2.getFullYear()+1]) {
+    for (const yr of [_now2.getFullYear()-1, _now2.getFullYear(), _now2.getFullYear()+1]) {
       const d = new Date(yr, mo, dy);
       const diff = Math.round((d - _now2) / 86400000);
       if (diff >= -30 && diff <= 60) {
-        const yy = String(yr).slice(2);
-        const match = G.periods.find(p => p.reportType===tpl.tpl && (p.label.startsWith(yy+'년')||p.id.endsWith('_'+yr)));
-        if (match && !activePeriods.find(p => p.id === match.id)) activePeriods.push(match);
+        if (!activePeriods.find(ap => ap.id === p.id)) activePeriods.push(p);
+        break;
       }
     }
   }
