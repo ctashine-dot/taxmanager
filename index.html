@@ -8407,7 +8407,7 @@ ${text.slice(0, 5000)}
 
   try {
     let charCount = 0;
-    const result = await aiCallStream(null, extractPrompt, 3000, (chunk, full) => {
+    const result = await aiCallStream(null, extractPrompt, 4000, (chunk, full) => {
       charCount += chunk.length;
       const prog = document.getElementById('trr-progress');
       if (prog) prog.textContent = `(${charCount.toLocaleString()}자 생성 중...)`;
@@ -8478,10 +8478,16 @@ ${text.slice(0, 5000)}
     window._trrMatchedClientId = matchedClient?.id || clientId || null;
     window._trrPKey = pKey;
 
+    window._trrReviewPlainText = reviewText;
+    window._trrReviewFileName = `신고서검토_${(reviewData?.companyName||'').replace(/[\\/:*?"<>|]/g,'')||'결과'}_${(reviewData?.period||'').replace(/[\\/:*?"<>|\s]/g,'')}`.replace(/_+$/,'')||'신고서검토';
     const initFee = reviewData?.feeRecommendation || 0;
     resultDiv.innerHTML = `
       ${dataCard}
-      <div class="ai-result" style="font-size:13px;line-height:1.7">${formatted}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-size:13px;font-weight:700;color:#3949ab">📝 검토 의견</div>
+        <button onclick="downloadTRRReview()" style="padding:5px 12px;background:#eef2ff;color:#3949ab;border:1px solid #c5cae9;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">💾 텍스트 저장</button>
+      </div>
+      <div class="ai-result" style="font-size:13px;line-height:1.7;max-height:50vh;overflow-y:auto">${formatted}</div>
       ${reviewData ? `
       <div style="background:#f1f8e9;border:1.5px solid #a5d6a7;border-radius:12px;padding:14px 16px;margin-top:12px">
         <div style="font-size:13px;font-weight:700;color:#2e7d32;margin-bottom:10px">💰 수수료 직접 입력 후 데이터 반영</div>
@@ -8516,6 +8522,35 @@ ${text.slice(0, 5000)}
     resultDiv.innerHTML = `<div style="color:#e53935;padding:12px">AI 검토 오류: ${esc(String(e.message||e))}</div>`;
   }
   if (btn) btn.disabled = false;
+}
+
+function downloadTRRReview() {
+  const txt = window._trrReviewPlainText || '';
+  if (!txt) { toast('저장할 검토 내용이 없습니다', 'warning'); return; }
+  const d = window._trrReviewData || {};
+  const header = [
+    '═══════════════════════════════════════',
+    `신고서 AI 검토 결과`,
+    d.companyName ? `상호: ${d.companyName}` : '',
+    d.bizNo ? `사업자번호: ${d.bizNo}` : '',
+    d.period ? `신고기간: ${d.period}` : '',
+    d.revenue ? `수입금액: ${d.revenue.toLocaleString()}원` : '',
+    d.income ? `소득금액: ${d.income.toLocaleString()}원` : '',
+    d.incomeRatio!=null ? `소득률: ${d.incomeRatio}%` : '',
+    `생성일: ${new Date().toLocaleString('ko-KR')}`,
+    '═══════════════════════════════════════',
+    ''
+  ].filter(Boolean).join('\n');
+  const blob = new Blob([header + '\n' + txt], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (window._trrReviewFileName || '신고서검토') + '.txt';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast('텍스트 파일로 저장했습니다', 'success', 2000);
 }
 
 function applyTRRManualFee() {
