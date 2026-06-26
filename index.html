@@ -4529,6 +4529,7 @@ function renderJulgae() {
   const periods = G.periods;
   const idx = Math.min(G.julgaePeriodIdx, Math.max(0, periods.length - 1));
   const period = periods[idx];
+  try { if (period?.id) localStorage.setItem('tm_julgaePeriodId', period.id); } catch(e){}
   const q = G.julgaeSearch.toLowerCase();
   const mf = G.julgaeManagers || [];
   const pKey = period ? period.id : null;
@@ -11951,11 +11952,6 @@ async function loadFromFirebase() {
   } catch(e) {
     console.error('초기화 오류:', e);
   } finally {
-    const _savedPId = localStorage.getItem('tm_julgaePeriodId');
-    if (_savedPId && G.periods.length) {
-      const _pIdx = G.periods.findIndex(p => p.id === _savedPId);
-      if (_pIdx >= 0) G.julgaePeriodIdx = _pIdx;
-    }
     document.getElementById('loading').style.display = 'none';
     document.getElementById('page-dashboard').style.display = 'block';
     updateSettingsBadge();
@@ -11965,6 +11961,12 @@ async function loadFromFirebase() {
       const yy = String(yr).slice(2);
       const hasThisYear = G.periods.some(p => (p.label||'').startsWith(yy+'년'));
       if (!hasThisYear) autoCreatePeriods(yr);
+    }
+    // 마지막 선택한 신고리스트 복원 (autoCreatePeriods 등 인덱스 변경 이후 적용)
+    const _savedPId = localStorage.getItem('tm_julgaePeriodId');
+    if (_savedPId && G.periods.length) {
+      const _pIdx = G.periods.findIndex(p => p.id === _savedPId);
+      if (_pIdx >= 0) G.julgaePeriodIdx = _pIdx;
     }
   }
 }
