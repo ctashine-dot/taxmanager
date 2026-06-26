@@ -2076,7 +2076,7 @@ function renderClients() {
             ${c.seongsi?`<div>${badge('성실신고','purple')}</div>`:''}
             ${(()=>{const docs=[{k:'contract',l:'수임계약서'},{k:'proxy',l:'위임장'},{k:'bizReg',l:'사업자등록증'},{k:'bank',l:'통장사본'},{k:'seal',l:'인감증명서'}];const dCheck=((G.docChecklist||{})[c.id]||{});return`<div style="flex-basis:100%"><div style="font-size:11px;color:#888;margin-bottom:5px">📋 서류 체크</div><div style="display:flex;flex-wrap:wrap;gap:5px">${docs.map(d=>`<button onclick="event.stopPropagation();toggleDocCheck(${c.id},'${d.k}')" style="padding:4px 10px;border-radius:12px;border:1.5px solid ${dCheck[d.k]?'#43a047':'#e0e0e0'};background:${dCheck[d.k]?'#e8f5e9':'#f5f5f5'};color:${dCheck[d.k]?'#2e7d32':'#888'};font-size:11px;cursor:pointer;font-family:inherit;font-weight:600">${dCheck[d.k]?'✓ ':''} ${d.l}</button>`).join('')}</div></div>`;})()}
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">관계회사 그룹</div>${em?iInput('relatedGroup',c.relatedGroup,'placeholder="그룹명" style="width:140px"'):`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${inGroup?`<div style="font-weight:600;font-size:12px;color:${gc}">👥 ${esc(groupLabel)}</div>`:''}<button onclick="event.stopPropagation();openGroupEditModal(${c.id})" style="padding:2px 10px;border-radius:6px;font-size:11px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;cursor:pointer;font-family:inherit">✏ 그룹 편집</button></div>${c.groupReason?`<div style="font-size:11px;color:#888;margin-top:3px">사유: ${esc(c.groupReason)}</div>`:''}`}</div>
-            ${(()=>{const cJulgae=(G.periods||[]).map(p=>{const pk=p.id+'|'+(p.reportType||p.type);const v=julgaeVal(pk,c.id);if(!v||(!v.d&&!v.b&&!v.a&&!v.fee&&!v.s))return null;return{label:p.label,v};}).filter(Boolean);if(!cJulgae.length)return'';return`<div style="flex-basis:100%"><div style="font-size:11px;color:#888;margin-bottom:4px">신고 현황</div><div style="display:flex;flex-wrap:wrap;gap:4px">${cJulgae.slice(-6).map(x=>`<div style="background:${x.v.a?'#e8f5e9':x.v.s?'#f3e5f5':'#f5f5f5'};border-radius:8px;padding:4px 10px;font-size:11px"><span style="font-weight:600">${esc(x.label)}</span><span style="margin-left:4px">${x.v.d?'📋':''}${x.v.b?'📖':''}${x.v.a?'✅':''}${x.v.s?'💰':''}</span></div>`).join('')}</div></div>`;})()}
+            ${(()=>{const cJulgae=(G.periods||[]).map(p=>{const pk=p.id;const v=julgaeVal(pk,c.id);if(!v||(!v.d&&!v.b&&!v.a&&!v.fee&&!v.s))return null;return{label:p.label,v};}).filter(Boolean);if(!cJulgae.length)return'';return`<div style="flex-basis:100%"><div style="font-size:11px;color:#888;margin-bottom:4px">신고 현황</div><div style="display:flex;flex-wrap:wrap;gap:4px">${cJulgae.slice(-6).map(x=>`<div style="background:${x.v.a?'#e8f5e9':x.v.s?'#f3e5f5':'#f5f5f5'};border-radius:8px;padding:4px 10px;font-size:11px"><span style="font-weight:600">${esc(x.label)}</span><span style="margin-left:4px">${x.v.d?'📋':''}${x.v.b?'📖':''}${x.v.a?'✅':''}${x.v.s?'💰':''}</span></div>`).join('')}</div></div>`;})()}
             ${(()=>{const mHist=(G.managerHistory||{})[c.id];if(!mHist||!mHist.length)return'';return`<div><div style="font-size:11px;color:#888;margin-bottom:3px">담당자 변경 이력</div>${mHist.slice(-3).reverse().map(h=>`<div style="font-size:11px;color:#666;padding:2px 0">${h.date.slice(0,10)} : ${esc(h.from||'(없음)')} → ${esc(h.to||'(없음)')}</div>`).join('')}</div>`;})()}
             <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
               <button class="btn-sm" style="background:#f8f9ff;color:#4f8ef7;border:1px solid #c5cae9" onclick="event.stopPropagation();openClientNotes(${c.id})">📝 메모/이력</button>
@@ -2129,7 +2129,7 @@ function renderClients() {
               ${m.bizCode?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">업종코드</div><div style="font-weight:600;font-family:monospace;font-size:13px">${esc(m.bizCode)}</div></div>`:''}
               ${m.seongsi?`<div>${badge('성실신고','purple')}</div>`:''}
               ${(()=>{const docs=[{k:'contract',l:'수임계약서'},{k:'proxy',l:'위임장'},{k:'bizReg',l:'사업자등록증'},{k:'bank',l:'통장사본'},{k:'seal',l:'인감증명서'}];const dCheck=((G.docChecklist||{})[m.id]||{});return`<div style="flex-basis:100%"><div style="font-size:11px;color:#888;margin-bottom:5px">📋 서류 체크</div><div style="display:flex;flex-wrap:wrap;gap:5px">${docs.map(d=>`<button onclick="event.stopPropagation();toggleDocCheck(${m.id},'${d.k}')" style="padding:4px 10px;border-radius:12px;border:1.5px solid ${dCheck[d.k]?'#43a047':'#e0e0e0'};background:${dCheck[d.k]?'#e8f5e9':'#f5f5f5'};color:${dCheck[d.k]?'#2e7d32':'#888'};font-size:11px;cursor:pointer;font-family:inherit;font-weight:600">${dCheck[d.k]?'✓ ':''} ${d.l}</button>`).join('')}</div></div>`;})()}
-              ${(()=>{const cJulgae=(G.periods||[]).map(p=>{const pk=p.id+'|'+(p.reportType||p.type);const v=julgaeVal(pk,m.id);if(!v||(!v.d&&!v.b&&!v.a&&!v.fee&&!v.s))return null;return{label:p.label,v};}).filter(Boolean);if(!cJulgae.length)return'';return`<div style="flex-basis:100%"><div style="font-size:11px;color:#888;margin-bottom:4px">신고 현황</div><div style="display:flex;flex-wrap:wrap;gap:4px">${cJulgae.slice(-6).map(x=>`<div style="background:${x.v.a?'#e8f5e9':x.v.s?'#f3e5f5':'#f5f5f5'};border-radius:8px;padding:4px 10px;font-size:11px"><span style="font-weight:600">${esc(x.label)}</span><span style="margin-left:4px">${x.v.d?'📋':''}${x.v.b?'📖':''}${x.v.a?'✅':''}${x.v.s?'💰':''}</span></div>`).join('')}</div></div>`;})()}
+              ${(()=>{const cJulgae=(G.periods||[]).map(p=>{const pk=p.id;const v=julgaeVal(pk,m.id);if(!v||(!v.d&&!v.b&&!v.a&&!v.fee&&!v.s))return null;return{label:p.label,v};}).filter(Boolean);if(!cJulgae.length)return'';return`<div style="flex-basis:100%"><div style="font-size:11px;color:#888;margin-bottom:4px">신고 현황</div><div style="display:flex;flex-wrap:wrap;gap:4px">${cJulgae.slice(-6).map(x=>`<div style="background:${x.v.a?'#e8f5e9':x.v.s?'#f3e5f5':'#f5f5f5'};border-radius:8px;padding:4px 10px;font-size:11px"><span style="font-weight:600">${esc(x.label)}</span><span style="margin-left:4px">${x.v.d?'📋':''}${x.v.b?'📖':''}${x.v.a?'✅':''}${x.v.s?'💰':''}</span></div>`).join('')}</div></div>`;})()}
               <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
                 <button class="btn-sm" style="background:#f8f9ff;color:#4f8ef7;border:1px solid #c5cae9" onclick="event.stopPropagation();openClientNotes(${m.id})">📝 메모/이력</button>
                 <button class="btn-sm" style="background:#f0f4ff;color:#4f8ef7" onclick="event.stopPropagation();openForm(${m.id})">✏ 수정</button>
@@ -2182,7 +2182,7 @@ function renderClients() {
               ${m.bizCode?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">업종코드</div><div style="font-weight:600;font-family:monospace;font-size:13px">${esc(m.bizCode)}</div></div>`:''}
               ${m.seongsi?`<div>${badge('성실신고','purple')}</div>`:''}
               ${(()=>{const docs=[{k:'contract',l:'수임계약서'},{k:'proxy',l:'위임장'},{k:'bizReg',l:'사업자등록증'},{k:'bank',l:'통장사본'},{k:'seal',l:'인감증명서'}];const dCheck=((G.docChecklist||{})[m.id]||{});return`<div style="flex-basis:100%"><div style="font-size:11px;color:#888;margin-bottom:5px">📋 서류 체크</div><div style="display:flex;flex-wrap:wrap;gap:5px">${docs.map(d=>`<button onclick="event.stopPropagation();toggleDocCheck(${m.id},'${d.k}')" style="padding:4px 10px;border-radius:12px;border:1.5px solid ${dCheck[d.k]?'#43a047':'#e0e0e0'};background:${dCheck[d.k]?'#e8f5e9':'#f5f5f5'};color:${dCheck[d.k]?'#2e7d32':'#888'};font-size:11px;cursor:pointer;font-family:inherit;font-weight:600">${dCheck[d.k]?'✓ ':''} ${d.l}</button>`).join('')}</div></div>`;})()}
-              ${(()=>{const cJulgae=(G.periods||[]).map(p=>{const pk=p.id+'|'+(p.reportType||p.type);const v=julgaeVal(pk,m.id);if(!v||(!v.d&&!v.b&&!v.a&&!v.fee&&!v.s))return null;return{label:p.label,v};}).filter(Boolean);if(!cJulgae.length)return'';return`<div style="flex-basis:100%"><div style="font-size:11px;color:#888;margin-bottom:4px">신고 현황</div><div style="display:flex;flex-wrap:wrap;gap:4px">${cJulgae.slice(-6).map(x=>`<div style="background:${x.v.a?'#e8f5e9':x.v.s?'#f3e5f5':'#f5f5f5'};border-radius:8px;padding:4px 10px;font-size:11px"><span style="font-weight:600">${esc(x.label)}</span><span style="margin-left:4px">${x.v.d?'📋':''}${x.v.b?'📖':''}${x.v.a?'✅':''}${x.v.s?'💰':''}</span></div>`).join('')}</div></div>`;})()}
+              ${(()=>{const cJulgae=(G.periods||[]).map(p=>{const pk=p.id;const v=julgaeVal(pk,m.id);if(!v||(!v.d&&!v.b&&!v.a&&!v.fee&&!v.s))return null;return{label:p.label,v};}).filter(Boolean);if(!cJulgae.length)return'';return`<div style="flex-basis:100%"><div style="font-size:11px;color:#888;margin-bottom:4px">신고 현황</div><div style="display:flex;flex-wrap:wrap;gap:4px">${cJulgae.slice(-6).map(x=>`<div style="background:${x.v.a?'#e8f5e9':x.v.s?'#f3e5f5':'#f5f5f5'};border-radius:8px;padding:4px 10px;font-size:11px"><span style="font-weight:600">${esc(x.label)}</span><span style="margin-left:4px">${x.v.d?'📋':''}${x.v.b?'📖':''}${x.v.a?'✅':''}${x.v.s?'💰':''}</span></div>`).join('')}</div></div>`;})()}
               <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
                 <button class="btn-sm" style="background:#f8f9ff;color:#4f8ef7;border:1px solid #c5cae9" onclick="event.stopPropagation();openClientNotes(${m.id})">📝 메모/이력</button>
                 <button class="btn-sm" style="background:#f0f4ff;color:#4f8ef7" onclick="event.stopPropagation();openForm(${m.id})">✏ 수정</button>
@@ -2281,28 +2281,30 @@ function saveCurrentFilterPreset() {
   if (!G.filterPresets) G.filterPresets = [];
   G.filterPresets.push({
     name,
-    filterManagers: G.filterManagers,
-    filterTaxType: G.filterTaxType,
-    filterVatType: G.filterVatType,
-    filterDealType: G.filterDealType,
-    filterStatus: G.filterStatus,
-    filterFeeStatus: G.filterFeeStatus,
+    filterManagers: [...(G.filterManagers||[])],
+    filterTaxTypes: [...(G.filterTaxTypes||[])],
+    filterVatTypes: [...(G.filterVatTypes||[])],
+    filterDealTypes: [...(G.filterDealTypes||[])],
+    filterFeeStatuses: [...(G.filterFeeStatuses||[])],
+    filterCMS: [...(G.filterCMS||[])],
     filterTags: [...(G.filterTags||[])],
     filterRisk: G.filterRisk||'',
+    filterGrade: G.filterGrade||'',
   });
   saveToLS(); renderClients();
 }
 function applyFilterPreset(idx) {
   const p = (G.filterPresets||[])[idx];
   if (!p) return;
-  if (p.filterManagers !== undefined) G.filterManagers = p.filterManagers;
-  if (p.filterTaxType !== undefined) G.filterTaxType = p.filterTaxType;
-  if (p.filterVatType !== undefined) G.filterVatType = p.filterVatType;
-  if (p.filterDealType !== undefined) G.filterDealType = p.filterDealType;
-  if (p.filterStatus !== undefined) G.filterStatus = p.filterStatus;
-  if (p.filterFeeStatus !== undefined) G.filterFeeStatus = p.filterFeeStatus;
+  if (p.filterManagers !== undefined) G.filterManagers = [...p.filterManagers];
+  if (p.filterTaxTypes !== undefined) G.filterTaxTypes = [...p.filterTaxTypes];
+  if (p.filterVatTypes !== undefined) G.filterVatTypes = [...p.filterVatTypes];
+  if (p.filterDealTypes !== undefined) G.filterDealTypes = [...p.filterDealTypes];
+  if (p.filterFeeStatuses !== undefined) G.filterFeeStatuses = [...p.filterFeeStatuses];
+  if (p.filterCMS !== undefined) G.filterCMS = [...p.filterCMS];
   if (p.filterTags !== undefined) G.filterTags = [...p.filterTags];
   if (p.filterRisk !== undefined) G.filterRisk = p.filterRisk;
+  if (p.filterGrade !== undefined) G.filterGrade = p.filterGrade;
   G.clientPage = 0; renderClients();
 }
 function openTagFilterDropdown(btn) {
@@ -4425,8 +4427,8 @@ function renderClosure() {
       <td style="font-size:12px;color:#666;${hc['cl_terminationDate']?'display:none':''}">${esc(c.terminationDate||'-')}</td>
       <td style="font-size:12px;${hc['cl_reason']?'display:none':''}">${rLabel(c.terminationReason)}</td>
       <td style="font-size:12px;${hc['cl_closureYear']?'display:none':''}">${c.status==='폐업'?(c.closureYear?c.closureYear+'년':'-'):'-'}</td>
-      <td style="${hc['cl_filed']?'display:none':''}" onclick="event.stopPropagation();c.status==='폐업'&&toggleField(${c.id},'closureTaxFiled')&&renderClosure()">${c.status==='폐업'?chk(c.closureTaxFiled):'<span style="color:#ccc;font-size:12px">-</span>'}</td>
-      <td style="${hc['cl_approved']?'display:none':''}" onclick="event.stopPropagation();c.status==='폐업'&&toggleField(${c.id},'closureTaxApproved')&&renderClosure()">${c.status==='폐업'?chk(c.closureTaxApproved):'<span style="color:#ccc;font-size:12px">-</span>'}</td>
+      <td style="${hc['cl_filed']?'display:none':''}" ${c.status==='폐업'?`onclick="event.stopPropagation();toggleField(${c.id},'closureTaxFiled');renderClosure()"`:''}>${c.status==='폐업'?chk(c.closureTaxFiled):'<span style="color:#ccc;font-size:12px">-</span>'}</td>
+      <td style="${hc['cl_approved']?'display:none':''}" ${c.status==='폐업'?`onclick="event.stopPropagation();toggleField(${c.id},'closureTaxApproved');renderClosure()"`:''}>${c.status==='폐업'?chk(c.closureTaxApproved):'<span style="color:#ccc;font-size:12px">-</span>'}</td>
       <td style="color:#555;font-size:12px;${hc['cl_manager']?'display:none':''}">${getManagers(c).join(', ')||'-'}</td>
     </tr><tr style="background:#fffde7"><td colspan="11" style="padding:6px 14px">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -4682,6 +4684,7 @@ function renderJulgae() {
     _applyNF('fee24', c => { const v=julgaeVal(pKey2,c.id); return v.fee24||0; });
     _applyNF('fee23', c => { const v=julgaeVal(pKey2,c.id); return v.fee23||0; });
   }
+  window._julgaeVisible = clients;  // 일괄 선택용 현재 표시 목록
 
   // 구분선 삽입 헬퍼 (taxType·manager 정렬 시)
   const _needsSep = _jSort === 'taxType' || _jSort === 'manager';
@@ -5035,7 +5038,7 @@ function renderJulgae() {
   <div class="tbl-wrap" style="${(G.sectionCollapsed||{})['julgae-list']?'display:none':''}">
   <table>
     <thead><tr>
-      ${G.julgaeBulkMode?'<th style="width:32px"><input type="checkbox" onclick="if(this.checked){G.julgaeBulkSelected=clients.map(c=>c.id)}else{G.julgaeBulkSelected=[]};renderJulgae()"></th>':''}
+      ${G.julgaeBulkMode?'<th style="width:32px"><input type="checkbox" onclick="if(this.checked){G.julgaeBulkSelected=(window._julgaeVisible||[]).map(c=>c.id)}else{G.julgaeBulkSelected=[]};renderJulgae()"></th>':''}
       <th style="width:28px;position:sticky;left:${_numLeft}px;z-index:3;background:#f8f9ff">번</th>
       <th class="j-sname" style="padding:4px 6px;width:130px;left:${_nameLeft}px;background:#f8f9ff">${(()=>{const a=G.julgaeSearch;return`<button onclick="openJulgaeNameSearch(this)" style="width:100%;padding:4px 7px;border-radius:7px;font-size:11px;cursor:pointer;font-family:inherit;border:1.5px solid ${a?'#4f8ef7':'#ddd'};background:${a?'#e8f0fe':'#fff'};color:${a?'#1565c0':'#555'};display:flex;justify-content:space-between;align-items:center;gap:4px;"><span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a?esc(a):'거래처명'}</span><span style="font-size:9px;opacity:.5;flex-shrink:0">🔍</span></button>`;})()}</th>
       <th style="width:80px;padding:3px 4px;${_hcStyle('j_rep')}">${(()=>{const a=G.julgaeRepSearch;return`<div style="display:flex;align-items:center"><button onclick="openJulgaeRepSearch(this)" style="flex:1;padding:4px 6px;border-radius:7px;font-size:11px;cursor:pointer;font-family:inherit;border:1.5px solid ${a?'#4f8ef7':'#ddd'};background:${a?'#e8f0fe':'#fff'};color:${a?'#1565c0':'#555'};display:flex;justify-content:space-between;align-items:center;gap:3px;"><span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a?esc(a):'대표자'}</span><span style="font-size:9px;opacity:.5;flex-shrink:0">🔍</span></button>${_hcBtn('j_rep')}</div>`;})()}</th>
@@ -6611,8 +6614,8 @@ function copyPeriod(pKey) {
   if (period.enrolled) newPeriod.enrolled = [...period.enrolled];
   G.periods.push(newPeriod);
   // Copy julgae data but reset completion status
-  const pk = pKey+'|'+(period.reportType||period.type);
-  const newPk = newId+'|'+(period.reportType||period.type);
+  const pk = pKey;
+  const newPk = newId;
   if (G.julgae[pk]) {
     G.julgae[newPk] = JSON.parse(JSON.stringify(G.julgae[pk]));
     Object.keys(G.julgae[newPk]).forEach(cid=>{
@@ -9308,7 +9311,7 @@ function openManagerAnalysis() {
     let jDone=0,jTotal=0;
     (G.periods||[]).forEach(p=>{
       allC.forEach(c=>{
-        const v=julgaeVal(p.id+'|'+(p.reportType||p.type),c.id);
+        const v=julgaeVal(p.id,c.id);
         if(v&&(v.a!==undefined||v.d!==undefined)){jTotal++;if(v.a)jDone++;}
       });
     });
@@ -9518,7 +9521,7 @@ function brCopyAll() {
 function printJulgaeList() {
   const period=(G.periods||[])[G.julgaePeriodIdx||0];
   if(!period){toast('신고 기간을 먼저 선택해주세요','warning');return;}
-  const pKey2=period.id+'|'+(period.reportType||period.type);
+  const pKey2=period.id;
   const allClients = period.enrolled?.length
     ? period.enrolled.map(id=>G.clients.find(c=>c.id===id)).filter(Boolean)
     : applyReportFilter(G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'), period);
@@ -9889,7 +9892,7 @@ function exportExcel() {
   // Sheet 2: 신고 현황
   const rows2 = [];
   (G.periods||[]).forEach(p=>{
-    const pk = p.id+'|'+(p.reportType||p.type);
+    const pk = p.id;
     const clients2 = p.enrolled && p.enrolled.length
       ? p.enrolled.map(id=>G.clients.find(c=>c.id===id)).filter(Boolean)
       : G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업');
@@ -10816,7 +10819,7 @@ function showNoDataModal() {
   });
   const rows = Object.entries(byManager).sort(([a],[b])=>a.localeCompare(b,'ko')).map(([mgr,cs])=>`
     <tr style="background:#f5f5f5"><td colspan="3" style="padding:5px 10px;font-size:12px;font-weight:700;color:#555">담당: ${esc(mgr)} (${cs.length}개)</td></tr>
-    ${cs.map(c=>`<tr onclick="closeModal();switchTab('clients');G.searchText='${esc(c.name).replace(/'/g,"\'")}';renderClients()" style="cursor:pointer;border-bottom:1px solid #f5f5f5" onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background=''">
+    ${cs.map(c=>`<tr onclick="closeModal();switchTab('clients');G.searchText='${esc(c.name).replace(/'/g,"\\'")}';renderClients()" style="cursor:pointer;border-bottom:1px solid #f5f5f5" onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background=''">
       <td style="padding:5px 10px;font-size:13px;font-weight:600">${esc(c.name)}</td>
       <td style="padding:5px 10px;font-size:12px;color:#666">${esc(c.rep||'-')}</td>
       <td style="padding:5px 10px;font-size:12px;color:#888">${esc(c.contractDate||'-')}</td>
@@ -11008,7 +11011,6 @@ function bulkSetJulgaeAll(value) {
 function bulkSetJulgae(field, value, skipSave) {
   const period = G.periods[G.julgaePeriodIdx];
   if (!period) return;
-  const pKey3 = period.id+'|'+(period.reportType||period.type);
   const pKeySimple = period.id;
   (G.julgaeBulkSelected||[]).forEach(id => {
     if (!G.julgae[pKeySimple]) G.julgae[pKeySimple] = {};
@@ -11603,7 +11605,7 @@ function showNameRepDuplicates() {
           <span style="color:#888">${esc(c.rep)||'-'}</span>
           <span style="color:#aaa">${c.bizNo||'사업자번호없음'}</span>
           <span style="color:#aaa">${c.dealType||''}</span>
-          <button onclick="openClient(${c.id});this.closest('.overlay').remove()" style="margin-left:auto;font-size:11px;padding:2px 8px;border-radius:5px;border:1px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;cursor:pointer;font-family:inherit">보기</button>
+          <button onclick="this.closest('.overlay').remove();openClientNotes(${c.id})" style="margin-left:auto;font-size:11px;padding:2px 8px;border-radius:5px;border:1px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;cursor:pointer;font-family:inherit">보기</button>
         </div>`).join('')}
       </div>`).join('')}
     </div>
