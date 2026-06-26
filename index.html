@@ -694,6 +694,7 @@ function saveToLS() {
     if (G.julgaeSelectedPeriods) localStorage.setItem('tm_julgaeSelectedPeriods', JSON.stringify(G.julgaeSelectedPeriods));
     if (G.julgaeSelectedYears) localStorage.setItem('tm_julgaeSelectedYears', JSON.stringify(G.julgaeSelectedYears));
     if (G.pinnedPeriods) localStorage.setItem('tm_pinnedPeriods', JSON.stringify(G.pinnedPeriods));
+    const _cp = G.periods[G.julgaePeriodIdx]; if (_cp?.id) localStorage.setItem('tm_julgaePeriodId', _cp.id);
   } catch(e) {
     console.error('로컬 저장 실패:', e);
     showSaveError('로컬 저장 공간이 부족합니다');
@@ -725,6 +726,9 @@ function saveToLS() {
       julgaeAdhoc: JSON.stringify(G.julgaeAdhoc||{}),
       julgaeSelectedPeriods: JSON.stringify(G.julgaeSelectedPeriods||[]),
       julgaeSelectedYears: JSON.stringify(G.julgaeSelectedYears||[]),
+      invoiceHistory: JSON.stringify(G.invoiceHistory||[]),
+      income26Unmatched: JSON.stringify(G.income26Unmatched||[]),
+      pinnedPeriods: JSON.stringify(G.pinnedPeriods||[]),
     }).catch(e => {
       console.error('Firebase 저장 실패:', e);
       showSaveError('클라우드 저장 실패 — 로컬에만 저장됨');
@@ -1454,20 +1458,23 @@ function _renderDashboardInner() {
   const monthlyTotal     = monthlyClients.reduce((a,c)=>a+(c.fee||0),0);
   const monthlyCollected = monthlyClients.filter(c=>G.monthlyFees[c.id]?.[thisYM]).reduce((a,c)=>a+(c.fee||0),0);
 
-  // 현재 진행 중인 신고 기간 결정 (마감일 기준 -30일 ~ +60일 이내)
+  // 현재 진행 중인 신고 기간 결정: G.periods를 순회해 reportType→템플릿 마감일 역조회
+  // (신고연도 ≠ 마감연도이므로 연도 접미사 매칭 대신 마감일 기준 ±30~60일 체크)
   const _now2 = new Date();
   let activePeriods = [];
-  for (const tpl of PERIOD_TEMPLATES) {
+  for (const p of G.periods) {
+    const rt = p.reportType || p.type || '';
+    const tpl = PERIOD_TEMPLATES.find(t => t.tpl === rt);
+    if (!tpl) continue;
     const dm = tpl.deadline.match(/(\d+)월\s*(\d+)일/);
     if (!dm) continue;
     const mo = Number(dm[1])-1, dy = Number(dm[2]);
-    for (const yr of [_now2.getFullYear(), _now2.getFullYear()+1]) {
+    for (const yr of [_now2.getFullYear()-1, _now2.getFullYear(), _now2.getFullYear()+1]) {
       const d = new Date(yr, mo, dy);
       const diff = Math.round((d - _now2) / 86400000);
       if (diff >= -30 && diff <= 60) {
-        const yy = String(yr).slice(2);
-        const match = G.periods.find(p => p.reportType===tpl.tpl && (p.label.startsWith(yy+'년')||p.id.endsWith('_'+yr)));
-        if (match && !activePeriods.find(p => p.id === match.id)) activePeriods.push(match);
+        if (!activePeriods.find(ap => ap.id === p.id)) activePeriods.push(p);
+        break;
       }
     }
   }
@@ -2069,7 +2076,7 @@ function renderClients() {
             ${c.seongsi?`<div>${badge('성실신고','purple')}</div>`:''}
             ${(()=>{const docs=[{k:'contract',l:'수임계약서'},{k:'proxy',l:'위임장'},{k:'bizReg',l:'사업자등록증'},{k:'bank',l:'통장사본'},{k:'seal',l:'인감증명서'}];const dCheck=((G.docChecklist||{})[c.id]||{});return`<div style="flex-basis:100%"><div style="font-size:11px;color:#888;margin-bottom:5px">📋 서류 체크</div><div style="display:flex;flex-wrap:wrap;gap:5px">${docs.map(d=>`<button onclick="event.stopPropagation();toggleDocCheck(${c.id},'${d.k}')" style="padding:4px 10px;border-radius:12px;border:1.5px solid ${dCheck[d.k]?'#43a047':'#e0e0e0'};background:${dCheck[d.k]?'#e8f5e9':'#f5f5f5'};color:${dCheck[d.k]?'#2e7d32':'#888'};font-size:11px;cursor:pointer;font-family:inherit;font-weight:600">${dCheck[d.k]?'✓ ':''} ${d.l}</button>`).join('')}</div></div>`;})()}
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">관계회사 그룹</div>${em?iInput('relatedGroup',c.relatedGroup,'placeholder="그룹명" style="width:140px"'):`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${inGroup?`<div style="font-weight:600;font-size:12px;color:${gc}">👥 ${esc(groupLabel)}</div>`:''}<button onclick="event.stopPropagation();openGroupEditModal(${c.id})" style="padding:2px 10px;border-radius:6px;font-size:11px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;cursor:pointer;font-family:inherit">✏ 그룹 편집</button></div>${c.groupReason?`<div style="font-size:11px;color:#888;margin-top:3px">사유: ${esc(c.groupReason)}</div>`:''}`}</div>
-            ${(()=>{const cJulgae=(G.periods||[]).map(p=>{const pk=p.id+'|'+(p.reportType||p.type);const v=julgaeVal(pk,c.id);if(!v||(!v.d&&!v.b&&!v.a&&!v.fee&&!v.s))return null;return{label:p.label,v};}).filter(Boolean);if(!cJulgae.length)return'';return`<div style="flex-basis:100%"><div style="font-size:11px;color:#888;margin-bottom:4px">신고 현황</div><div style="display:flex;flex-wrap:wrap;gap:4px">${cJulgae.slice(-6).map(x=>`<div style="background:${x.v.a?'#e8f5e9':x.v.s?'#f3e5f5':'#f5f5f5'};border-radius:8px;padding:4px 10px;font-size:11px"><span style="font-weight:600">${esc(x.label)}</span><span style="margin-left:4px">${x.v.d?'📋':''}${x.v.b?'📖':''}${x.v.a?'✅':''}${x.v.s?'💰':''}</span></div>`).join('')}</div></div>`;})()}
+            ${(()=>{const cJulgae=(G.periods||[]).map(p=>{const pk=p.id;const v=julgaeVal(pk,c.id);if(!v||(!v.d&&!v.b&&!v.a&&!v.fee&&!v.s))return null;return{label:p.label,v};}).filter(Boolean);if(!cJulgae.length)return'';return`<div style="flex-basis:100%"><div style="font-size:11px;color:#888;margin-bottom:4px">신고 현황</div><div style="display:flex;flex-wrap:wrap;gap:4px">${cJulgae.slice(-6).map(x=>`<div style="background:${x.v.a?'#e8f5e9':x.v.s?'#f3e5f5':'#f5f5f5'};border-radius:8px;padding:4px 10px;font-size:11px"><span style="font-weight:600">${esc(x.label)}</span><span style="margin-left:4px">${x.v.d?'📋':''}${x.v.b?'📖':''}${x.v.a?'✅':''}${x.v.s?'💰':''}</span></div>`).join('')}</div></div>`;})()}
             ${(()=>{const mHist=(G.managerHistory||{})[c.id];if(!mHist||!mHist.length)return'';return`<div><div style="font-size:11px;color:#888;margin-bottom:3px">담당자 변경 이력</div>${mHist.slice(-3).reverse().map(h=>`<div style="font-size:11px;color:#666;padding:2px 0">${h.date.slice(0,10)} : ${esc(h.from||'(없음)')} → ${esc(h.to||'(없음)')}</div>`).join('')}</div>`;})()}
             <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
               <button class="btn-sm" style="background:#f8f9ff;color:#4f8ef7;border:1px solid #c5cae9" onclick="event.stopPropagation();openClientNotes(${c.id})">📝 메모/이력</button>
@@ -2122,7 +2129,7 @@ function renderClients() {
               ${m.bizCode?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">업종코드</div><div style="font-weight:600;font-family:monospace;font-size:13px">${esc(m.bizCode)}</div></div>`:''}
               ${m.seongsi?`<div>${badge('성실신고','purple')}</div>`:''}
               ${(()=>{const docs=[{k:'contract',l:'수임계약서'},{k:'proxy',l:'위임장'},{k:'bizReg',l:'사업자등록증'},{k:'bank',l:'통장사본'},{k:'seal',l:'인감증명서'}];const dCheck=((G.docChecklist||{})[m.id]||{});return`<div style="flex-basis:100%"><div style="font-size:11px;color:#888;margin-bottom:5px">📋 서류 체크</div><div style="display:flex;flex-wrap:wrap;gap:5px">${docs.map(d=>`<button onclick="event.stopPropagation();toggleDocCheck(${m.id},'${d.k}')" style="padding:4px 10px;border-radius:12px;border:1.5px solid ${dCheck[d.k]?'#43a047':'#e0e0e0'};background:${dCheck[d.k]?'#e8f5e9':'#f5f5f5'};color:${dCheck[d.k]?'#2e7d32':'#888'};font-size:11px;cursor:pointer;font-family:inherit;font-weight:600">${dCheck[d.k]?'✓ ':''} ${d.l}</button>`).join('')}</div></div>`;})()}
-              ${(()=>{const cJulgae=(G.periods||[]).map(p=>{const pk=p.id+'|'+(p.reportType||p.type);const v=julgaeVal(pk,m.id);if(!v||(!v.d&&!v.b&&!v.a&&!v.fee&&!v.s))return null;return{label:p.label,v};}).filter(Boolean);if(!cJulgae.length)return'';return`<div style="flex-basis:100%"><div style="font-size:11px;color:#888;margin-bottom:4px">신고 현황</div><div style="display:flex;flex-wrap:wrap;gap:4px">${cJulgae.slice(-6).map(x=>`<div style="background:${x.v.a?'#e8f5e9':x.v.s?'#f3e5f5':'#f5f5f5'};border-radius:8px;padding:4px 10px;font-size:11px"><span style="font-weight:600">${esc(x.label)}</span><span style="margin-left:4px">${x.v.d?'📋':''}${x.v.b?'📖':''}${x.v.a?'✅':''}${x.v.s?'💰':''}</span></div>`).join('')}</div></div>`;})()}
+              ${(()=>{const cJulgae=(G.periods||[]).map(p=>{const pk=p.id;const v=julgaeVal(pk,m.id);if(!v||(!v.d&&!v.b&&!v.a&&!v.fee&&!v.s))return null;return{label:p.label,v};}).filter(Boolean);if(!cJulgae.length)return'';return`<div style="flex-basis:100%"><div style="font-size:11px;color:#888;margin-bottom:4px">신고 현황</div><div style="display:flex;flex-wrap:wrap;gap:4px">${cJulgae.slice(-6).map(x=>`<div style="background:${x.v.a?'#e8f5e9':x.v.s?'#f3e5f5':'#f5f5f5'};border-radius:8px;padding:4px 10px;font-size:11px"><span style="font-weight:600">${esc(x.label)}</span><span style="margin-left:4px">${x.v.d?'📋':''}${x.v.b?'📖':''}${x.v.a?'✅':''}${x.v.s?'💰':''}</span></div>`).join('')}</div></div>`;})()}
               <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
                 <button class="btn-sm" style="background:#f8f9ff;color:#4f8ef7;border:1px solid #c5cae9" onclick="event.stopPropagation();openClientNotes(${m.id})">📝 메모/이력</button>
                 <button class="btn-sm" style="background:#f0f4ff;color:#4f8ef7" onclick="event.stopPropagation();openForm(${m.id})">✏ 수정</button>
@@ -2175,7 +2182,7 @@ function renderClients() {
               ${m.bizCode?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">업종코드</div><div style="font-weight:600;font-family:monospace;font-size:13px">${esc(m.bizCode)}</div></div>`:''}
               ${m.seongsi?`<div>${badge('성실신고','purple')}</div>`:''}
               ${(()=>{const docs=[{k:'contract',l:'수임계약서'},{k:'proxy',l:'위임장'},{k:'bizReg',l:'사업자등록증'},{k:'bank',l:'통장사본'},{k:'seal',l:'인감증명서'}];const dCheck=((G.docChecklist||{})[m.id]||{});return`<div style="flex-basis:100%"><div style="font-size:11px;color:#888;margin-bottom:5px">📋 서류 체크</div><div style="display:flex;flex-wrap:wrap;gap:5px">${docs.map(d=>`<button onclick="event.stopPropagation();toggleDocCheck(${m.id},'${d.k}')" style="padding:4px 10px;border-radius:12px;border:1.5px solid ${dCheck[d.k]?'#43a047':'#e0e0e0'};background:${dCheck[d.k]?'#e8f5e9':'#f5f5f5'};color:${dCheck[d.k]?'#2e7d32':'#888'};font-size:11px;cursor:pointer;font-family:inherit;font-weight:600">${dCheck[d.k]?'✓ ':''} ${d.l}</button>`).join('')}</div></div>`;})()}
-              ${(()=>{const cJulgae=(G.periods||[]).map(p=>{const pk=p.id+'|'+(p.reportType||p.type);const v=julgaeVal(pk,m.id);if(!v||(!v.d&&!v.b&&!v.a&&!v.fee&&!v.s))return null;return{label:p.label,v};}).filter(Boolean);if(!cJulgae.length)return'';return`<div style="flex-basis:100%"><div style="font-size:11px;color:#888;margin-bottom:4px">신고 현황</div><div style="display:flex;flex-wrap:wrap;gap:4px">${cJulgae.slice(-6).map(x=>`<div style="background:${x.v.a?'#e8f5e9':x.v.s?'#f3e5f5':'#f5f5f5'};border-radius:8px;padding:4px 10px;font-size:11px"><span style="font-weight:600">${esc(x.label)}</span><span style="margin-left:4px">${x.v.d?'📋':''}${x.v.b?'📖':''}${x.v.a?'✅':''}${x.v.s?'💰':''}</span></div>`).join('')}</div></div>`;})()}
+              ${(()=>{const cJulgae=(G.periods||[]).map(p=>{const pk=p.id;const v=julgaeVal(pk,m.id);if(!v||(!v.d&&!v.b&&!v.a&&!v.fee&&!v.s))return null;return{label:p.label,v};}).filter(Boolean);if(!cJulgae.length)return'';return`<div style="flex-basis:100%"><div style="font-size:11px;color:#888;margin-bottom:4px">신고 현황</div><div style="display:flex;flex-wrap:wrap;gap:4px">${cJulgae.slice(-6).map(x=>`<div style="background:${x.v.a?'#e8f5e9':x.v.s?'#f3e5f5':'#f5f5f5'};border-radius:8px;padding:4px 10px;font-size:11px"><span style="font-weight:600">${esc(x.label)}</span><span style="margin-left:4px">${x.v.d?'📋':''}${x.v.b?'📖':''}${x.v.a?'✅':''}${x.v.s?'💰':''}</span></div>`).join('')}</div></div>`;})()}
               <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
                 <button class="btn-sm" style="background:#f8f9ff;color:#4f8ef7;border:1px solid #c5cae9" onclick="event.stopPropagation();openClientNotes(${m.id})">📝 메모/이력</button>
                 <button class="btn-sm" style="background:#f0f4ff;color:#4f8ef7" onclick="event.stopPropagation();openForm(${m.id})">✏ 수정</button>
@@ -2274,28 +2281,30 @@ function saveCurrentFilterPreset() {
   if (!G.filterPresets) G.filterPresets = [];
   G.filterPresets.push({
     name,
-    filterManagers: G.filterManagers,
-    filterTaxType: G.filterTaxType,
-    filterVatType: G.filterVatType,
-    filterDealType: G.filterDealType,
-    filterStatus: G.filterStatus,
-    filterFeeStatus: G.filterFeeStatus,
+    filterManagers: [...(G.filterManagers||[])],
+    filterTaxTypes: [...(G.filterTaxTypes||[])],
+    filterVatTypes: [...(G.filterVatTypes||[])],
+    filterDealTypes: [...(G.filterDealTypes||[])],
+    filterFeeStatuses: [...(G.filterFeeStatuses||[])],
+    filterCMS: [...(G.filterCMS||[])],
     filterTags: [...(G.filterTags||[])],
     filterRisk: G.filterRisk||'',
+    filterGrade: G.filterGrade||'',
   });
   saveToLS(); renderClients();
 }
 function applyFilterPreset(idx) {
   const p = (G.filterPresets||[])[idx];
   if (!p) return;
-  if (p.filterManagers !== undefined) G.filterManagers = p.filterManagers;
-  if (p.filterTaxType !== undefined) G.filterTaxType = p.filterTaxType;
-  if (p.filterVatType !== undefined) G.filterVatType = p.filterVatType;
-  if (p.filterDealType !== undefined) G.filterDealType = p.filterDealType;
-  if (p.filterStatus !== undefined) G.filterStatus = p.filterStatus;
-  if (p.filterFeeStatus !== undefined) G.filterFeeStatus = p.filterFeeStatus;
+  if (p.filterManagers !== undefined) G.filterManagers = [...p.filterManagers];
+  if (p.filterTaxTypes !== undefined) G.filterTaxTypes = [...p.filterTaxTypes];
+  if (p.filterVatTypes !== undefined) G.filterVatTypes = [...p.filterVatTypes];
+  if (p.filterDealTypes !== undefined) G.filterDealTypes = [...p.filterDealTypes];
+  if (p.filterFeeStatuses !== undefined) G.filterFeeStatuses = [...p.filterFeeStatuses];
+  if (p.filterCMS !== undefined) G.filterCMS = [...p.filterCMS];
   if (p.filterTags !== undefined) G.filterTags = [...p.filterTags];
   if (p.filterRisk !== undefined) G.filterRisk = p.filterRisk;
+  if (p.filterGrade !== undefined) G.filterGrade = p.filterGrade;
   G.clientPage = 0; renderClients();
 }
 function openTagFilterDropdown(btn) {
@@ -4418,8 +4427,8 @@ function renderClosure() {
       <td style="font-size:12px;color:#666;${hc['cl_terminationDate']?'display:none':''}">${esc(c.terminationDate||'-')}</td>
       <td style="font-size:12px;${hc['cl_reason']?'display:none':''}">${rLabel(c.terminationReason)}</td>
       <td style="font-size:12px;${hc['cl_closureYear']?'display:none':''}">${c.status==='폐업'?(c.closureYear?c.closureYear+'년':'-'):'-'}</td>
-      <td style="${hc['cl_filed']?'display:none':''}" onclick="event.stopPropagation();c.status==='폐업'&&toggleField(${c.id},'closureTaxFiled')&&renderClosure()">${c.status==='폐업'?chk(c.closureTaxFiled):'<span style="color:#ccc;font-size:12px">-</span>'}</td>
-      <td style="${hc['cl_approved']?'display:none':''}" onclick="event.stopPropagation();c.status==='폐업'&&toggleField(${c.id},'closureTaxApproved')&&renderClosure()">${c.status==='폐업'?chk(c.closureTaxApproved):'<span style="color:#ccc;font-size:12px">-</span>'}</td>
+      <td style="${hc['cl_filed']?'display:none':''}" ${c.status==='폐업'?`onclick="event.stopPropagation();toggleField(${c.id},'closureTaxFiled');renderClosure()"`:''}>${c.status==='폐업'?chk(c.closureTaxFiled):'<span style="color:#ccc;font-size:12px">-</span>'}</td>
+      <td style="${hc['cl_approved']?'display:none':''}" ${c.status==='폐업'?`onclick="event.stopPropagation();toggleField(${c.id},'closureTaxApproved');renderClosure()"`:''}>${c.status==='폐업'?chk(c.closureTaxApproved):'<span style="color:#ccc;font-size:12px">-</span>'}</td>
       <td style="color:#555;font-size:12px;${hc['cl_manager']?'display:none':''}">${getManagers(c).join(', ')||'-'}</td>
     </tr><tr style="background:#fffde7"><td colspan="11" style="padding:6px 14px">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -4525,6 +4534,7 @@ function renderJulgae() {
   const periods = G.periods;
   const idx = Math.min(G.julgaePeriodIdx, Math.max(0, periods.length - 1));
   const period = periods[idx];
+  try { if (period?.id) localStorage.setItem('tm_julgaePeriodId', period.id); } catch(e){}
   const q = G.julgaeSearch.toLowerCase();
   const mf = G.julgaeManagers || [];
   const pKey = period ? period.id : null;
@@ -4674,6 +4684,7 @@ function renderJulgae() {
     _applyNF('fee24', c => { const v=julgaeVal(pKey2,c.id); return v.fee24||0; });
     _applyNF('fee23', c => { const v=julgaeVal(pKey2,c.id); return v.fee23||0; });
   }
+  window._julgaeVisible = clients;  // 일괄 선택용 현재 표시 목록
 
   // 구분선 삽입 헬퍼 (taxType·manager 정렬 시)
   const _needsSep = _jSort === 'taxType' || _jSort === 'manager';
@@ -4898,14 +4909,6 @@ function renderJulgae() {
           `<div style="height:3px;border-radius:2px;background:#eee;margin-top:3px"><div style="height:3px;border-radius:2px;background:${s.color};width:${pct2}%"></div></div>`+
         `</div>${arrow}</div>`;
     }).join('')}
-  </div>
-  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
-    ${[
-      {label:'상담완료',count:consulCount,color:'#1565c0'},
-      {label:'기장완료',count:bookCount,color:'#43a047'},
-      {label:'결재완료',count:doneCount,color:'#9c27b0'},
-      {label:'수금완료',count:collectCount,color:'#e65100'},
-    ].map(s=>{const pct2=total?Math.round(s.count/total*100):0;return`<div class="stat-card" style="border-left:3px solid ${s.color}"><div class="stat-label">${s.label}</div><div style="font-size:20px;font-weight:800">${s.count}<span style="font-size:13px;color:#aaa"> / ${total}</span></div><div class="progress-bar" style="margin-top:6px"><div class="progress-fill" style="width:${pct2}%;background:${s.color};height:6px"></div></div></div>`;}).join('')}
   </div>` : ''}
 
   ${prevPeriods1.length > 0 ? (()=>{
@@ -5035,7 +5038,7 @@ function renderJulgae() {
   <div class="tbl-wrap" style="${(G.sectionCollapsed||{})['julgae-list']?'display:none':''}">
   <table>
     <thead><tr>
-      ${G.julgaeBulkMode?'<th style="width:32px"><input type="checkbox" onclick="if(this.checked){G.julgaeBulkSelected=clients.map(c=>c.id)}else{G.julgaeBulkSelected=[]};renderJulgae()"></th>':''}
+      ${G.julgaeBulkMode?'<th style="width:32px"><input type="checkbox" onclick="if(this.checked){G.julgaeBulkSelected=(window._julgaeVisible||[]).map(c=>c.id)}else{G.julgaeBulkSelected=[]};renderJulgae()"></th>':''}
       <th style="width:28px;position:sticky;left:${_numLeft}px;z-index:3;background:#f8f9ff">번</th>
       <th class="j-sname" style="padding:4px 6px;width:130px;left:${_nameLeft}px;background:#f8f9ff">${(()=>{const a=G.julgaeSearch;return`<button onclick="openJulgaeNameSearch(this)" style="width:100%;padding:4px 7px;border-radius:7px;font-size:11px;cursor:pointer;font-family:inherit;border:1.5px solid ${a?'#4f8ef7':'#ddd'};background:${a?'#e8f0fe':'#fff'};color:${a?'#1565c0':'#555'};display:flex;justify-content:space-between;align-items:center;gap:4px;"><span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a?esc(a):'거래처명'}</span><span style="font-size:9px;opacity:.5;flex-shrink:0">🔍</span></button>`;})()}</th>
       <th style="width:80px;padding:3px 4px;${_hcStyle('j_rep')}">${(()=>{const a=G.julgaeRepSearch;return`<div style="display:flex;align-items:center"><button onclick="openJulgaeRepSearch(this)" style="flex:1;padding:4px 6px;border-radius:7px;font-size:11px;cursor:pointer;font-family:inherit;border:1.5px solid ${a?'#4f8ef7':'#ddd'};background:${a?'#e8f0fe':'#fff'};color:${a?'#1565c0':'#555'};display:flex;justify-content:space-between;align-items:center;gap:3px;"><span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a?esc(a):'대표자'}</span><span style="font-size:9px;opacity:.5;flex-shrink:0">🔍</span></button>${_hcBtn('j_rep')}</div>`;})()}</th>
@@ -6611,8 +6614,8 @@ function copyPeriod(pKey) {
   if (period.enrolled) newPeriod.enrolled = [...period.enrolled];
   G.periods.push(newPeriod);
   // Copy julgae data but reset completion status
-  const pk = pKey+'|'+(period.reportType||period.type);
-  const newPk = newId+'|'+(period.reportType||period.type);
+  const pk = pKey;
+  const newPk = newId;
   if (G.julgae[pk]) {
     G.julgae[newPk] = JSON.parse(JSON.stringify(G.julgae[pk]));
     Object.keys(G.julgae[newPk]).forEach(cid=>{
@@ -8054,7 +8057,7 @@ async function startBatchReview(type) {
       text = await parsePDFToText(f);
     } catch(e) {
       if(statusEl){ statusEl.textContent='PDF 오류'; statusEl.style.color='#c62828'; }
-      allResults.push({file:f.name, error:'PDF 추출 실패: '+e.message, data:null});
+      _batchResults.push({file:f.name, error:'PDF 추출 실패: '+e.message, data:null});
       continue;
     }
     if(statusEl){ statusEl.textContent='AI 분석 중...'; statusEl.style.color='#1565c0'; }
@@ -8064,10 +8067,50 @@ async function startBatchReview(type) {
     const bn = bizMatch ? bizMatch[1].replace(/[-–]/g,'') : '';
     const matchedClient = bn ? G.clients.find(c=>(c.bizNo||'').replace(/\D/g,'')===bn) : null;
 
-    const extractPrompt = `아래는 ${typeLabel} 신고서 PDF에서 추출한 텍스트입니다. 다음 두 가지를 수행해주세요.
+    // 전년도 비교 데이터 및 업종 컨텍스트 구성
+    let _clientCtx = '';
+    if (matchedClient) {
+      const _rts = type==='corp'?['corp']:type==='income'?['income','seongsi']:type==='seongsi'?['seongsi','income']:[];
+      const _pp = G.periods
+        .filter(p=>_rts.includes(p.reportType||p.type||'')&&(G.julgae[p.id]||{})[matchedClient.id])
+        .sort((a,b)=>Number(((b.label||'').match(/^(\d{2})년/)||['','0'])[1])-Number(((a.label||'').match(/^(\d{2})년/)||['','0'])[1]))[0];
+      _clientCtx = `\n\n【거래처 정보】 ${matchedClient.name} / 담당: ${matchedClient.manager||'-'}`;
+      if(matchedClient.bizType) _clientCtx+=` / 업종: ${matchedClient.bizType}`;
+      if(matchedClient.bizCode) _clientCtx+=` (${matchedClient.bizCode})`;
+      if (_pp) {
+        const pd=(G.julgae[_pp.id]||{})[matchedClient.id]||{};
+        const pR=pd.revenue||0,pI=pd.income||0,pF=pd.fee||0,pT=pd.totalTax||0;
+        _clientCtx+=`\n【전년도 신고 데이터 (${_pp.label})】`;
+        if(pR)_clientCtx+=`\n- 수입금액: ${(pR/100000000).toFixed(2)}억원`;
+        if(pI)_clientCtx+=`\n- 소득금액: ${(pI/100000000).toFixed(2)}억원${pR?` (소득률 ${(pI/pR*100).toFixed(1)}%)`:''}`;
+        if(pF)_clientCtx+=`\n- 수수료: ${pF.toLocaleString()}원`;
+        if(pT)_clientCtx+=`\n- 결정세액: ${pT.toLocaleString()}원`;
+      }
+    }
+
+    const extractPrompt = `당신은 대한민국 세무법인의 숙련된 세무사입니다. 아래 ${typeLabel} 신고서를 전문가 수준으로 검토하십시오.${_clientCtx}
+
+【업종별 소득률 기준 (국세청 기준경비율 기반)】
+제조업 5~15% | 건설업 8~18% | 도소매업 3~12% | 서비스·전문직 20~50%
+음식숙박업 15~30% | 운수업 10~20% | 부동산임대업 30~60% | IT·소프트웨어 25~55%
+
+【세액공제·감면 전문 검토 규칙 (각 항목 누락 여부 반드시 확인)】
+▶ 법인세·소득세 공통
+ ①중소기업특별세액감면(조특§7): 소기업-제조등 20%/기타 10%, 중기업-제조등 10%/기타 5% (수도권과밀 제외)
+ ②연구인력개발비 세액공제(조특§10): 중소기업 MAX(당기×25%, 증가분×50%) — 연구소·전담부서 보유 시 적용
+ ③통합투자세액공제(조특§24): 중소기업 투자액×10%+증가분×3% — 기계장치·시설투자 시 확인
+ ④고용증대 세액공제(조특§29의7): 청년정규직 1,100~1,200만원/인, 일반 770만원/인 (3년공제, 감소시 추징)
+ ⑤사회보험료 세액공제(조특§30의4): 신규취업자 사용자부담분×50~100%
+ ⑥이월결손금: 중소기업 소득100%/일반법인 80% 한도 — 잔여 이월결손금 공제 여부
+▶ 종합소득세 추가
+ ⑦기장세액공제: 산출세액×20%, 연100만원 한도 (복식부기의무자) — 표준세액공제(12만원)와 비교 유리한 것 선택
+ ⑧전자신고 세액공제: 2만원
+▶ 부가가치세 추가
+ ⑨신용카드매출전표 발행세액공제: 발행액×1.3%, 연1,000만원 한도 (법인·매출10억초과개인 제외)
+ ⑩전자신고 세액공제: 1만원 / ⑪대손세액공제: 대손금액×10/110 (6개월경과 채권)
 
 [신고서 텍스트]
-${text.slice(0, 6000)}
+${text.slice(0, 5000)}
 
 ---
 【1단계】 핵심 데이터 추출 — 아래 JSON을 반드시 \`\`\`json ... \`\`\` 블록으로 출력:
@@ -8081,12 +8124,14 @@ ${text.slice(0, 6000)}
   "taxBase": 과세표준(숫자, 없으면 0),
   "totalTax": 결정세액(숫자, 없으면 0),
   "payTax": 신고서상납부할총세액(숫자, 없으면 0),
-  "feeRecommendation": 추천수수료(숫자),
-  "feeReason": "수수료 추천 근거 (한 줄)"
+  "incomeRatio": 소득률(소득÷수입×100 소수점1자리, 없으면 null),
+  "taxCreditIssues": ["누락·검토필요 세액공제·감면 항목 (예: '중소기업특별세액감면 미적용 의심'). 없으면 빈배열"],
+  "feeRecommendation": 추천수수료(숫자, 한국 세무사 보수표 기준),
+  "feeReason": "수수료 추천 근거 및 전년 대비 변동 사유 (한 줄)"
 }
 ※ totalTax(결정세액) = 산출세액 - 세액감면·공제 + 가산세 = 최종 확정된 세액
 ※ payTax(납부할총세액) = 결정세액 - 중간예납·원천징수 등 기납부세액 = 실제로 납부해야 할 금액
-【2단계】 검토 의견 (주요 확인사항만 간략히):`;
+【2단계】 전문가 핵심 이슈 (절세 누락·세무조정 이상·전년 대비 특이사항 위주, 3~5줄):`;
 
     let reviewData = null;
     let reviewText = '';
@@ -8095,11 +8140,11 @@ ${text.slice(0, 6000)}
       if (result) {
         const jm = result.match(/```json\s*([\s\S]*?)\s*```/);
         if (jm) { try { reviewData = JSON.parse(jm[1]); } catch(e){} }
-        reviewText = result.replace(/```json[\s\S]*?```/g,'').trim().slice(0, 300);
+        reviewText = result.replace(/```json[\s\S]*?```/g,'').trim();
       }
     } catch(e) {
       if(statusEl){ statusEl.textContent='AI 오류'; statusEl.style.color='#c62828'; }
-      allResults.push({file:f.name, error:'AI 오류: '+e.message, data:null});
+      _batchResults.push({file:f.name, error:'AI 오류: '+e.message, data:null});
       continue;
     }
     if(statusEl){ statusEl.textContent='완료 ✓'; statusEl.style.color='#2e7d32'; }
@@ -8124,7 +8169,7 @@ ${text.slice(0, 6000)}
         ${reviewData.payTax?`<div>납부세액: <b style="color:#c62828">${fmtN(reviewData.payTax)}</b></div>`:''}
         ${reviewData.feeRecommendation?`<div>추천: <b style="color:#2e7d32">${fmtN(reviewData.feeRecommendation)}</b></div>`:''}
       </div>`:''}
-      ${reviewText ? `<div style="font-size:11px;color:#777;line-height:1.6;margin-bottom:8px;padding:8px;background:#fafafa;border-radius:6px;white-space:pre-wrap;word-break:break-word">${esc(reviewText)}</div>`:''}
+      ${reviewText ? `<div style="font-size:11px;color:#777;line-height:1.6;margin-bottom:8px;padding:8px;background:#fafafa;border-radius:6px;white-space:pre-wrap;word-break:break-word;max-height:260px;overflow-y:auto">${esc(reviewText)}</div>`:''}
       ${!matchedClient ? `<div style="margin-bottom:8px">
         <input type="text" placeholder="거래처 검색 (이름/대표자)..." autocomplete="off"
           style="width:100%;border:1px solid #ffcc80;border-radius:6px;padding:6px 8px;font-size:12px;box-sizing:border-box;font-family:inherit"
@@ -8197,10 +8242,12 @@ function batchRecord(bIdx) {
   if (!item || item.recorded) return;
   if (!item.pKey) { toast('신고기간이 선택되지 않았습니다', 'warning'); return; }
   if (!item.matchedClient?.id) { toast('거래처를 먼저 선택해주세요 (위 검색창에서)', 'warning'); return; }
-  const feeVal = Number((document.getElementById(`bc-fee-${bIdx}`)?.value||'').replace(/,/g,'')) || 0;
-  if (!feeVal) { toast('조정료를 입력해주세요', 'warning'); return; }
+  const _feeRaw = (document.getElementById(`bc-fee-${bIdx}`)?.value||'').replace(/,/g,'').trim();
+  const feeVal = _feeRaw === '' ? null : Number(_feeRaw);
+  if (feeVal === null) { toast('조정료를 입력해주세요 (0도 가능)', 'warning'); return; }
+  const feeNum = feeVal || 0;
   const seongsiVal = Number((document.getElementById(`bc-seongsi-${bIdx}`)?.value||'').replace(/,/g,'')) || 0;
-  window._trrReviewData = {...(item.data||{}), feeRecommendation: feeVal, feeSeongsi: seongsiVal};
+  window._trrReviewData = {...(item.data||{}), feeRecommendation: feeNum, feeSeongsi: seongsiVal};
   doRecordTRRWith(item.matchedClient.id, item.pKey);
   item.recorded = true;
   const card = document.getElementById(`batch-card-${bIdx}`);
@@ -8233,10 +8280,76 @@ async function runTaxReturnReview(type) {
   resultDiv.innerHTML = `<div style="text-align:center;padding:24px;color:#888">${spinnerHTML} AI 분석 중... <span id="trr-progress" style="font-size:11px;color:#bbb"></span></div>`;
 
   const typeLabel = { vat:'부가가치세', corp:'법인세', income:'종합소득세' }[type] || type;
-  const extractPrompt = `아래는 ${typeLabel} 신고서 PDF에서 추출한 텍스트입니다. 다음 두 가지를 수행해주세요.
+
+  // 선택된 거래처 전년도 데이터 조회 (프롬프트에 컨텍스트로 주입)
+  const _selClientId = Number(document.getElementById('trr-client-sel')?.value) || 0;
+  const _selClient = _selClientId ? G.clients.find(c=>c.id===_selClientId) : null;
+  let _singleCtx = '';
+  if (_selClient) {
+    const _rts = type==='corp'?['corp']:type==='income'?['income','seongsi']:type==='seongsi'?['seongsi','income']:[];
+    const _pp2 = G.periods
+      .filter(p=>_rts.includes(p.reportType||p.type||'')&&(G.julgae[p.id]||{})[_selClient.id])
+      .sort((a,b)=>Number(((b.label||'').match(/^(\d{2})년/)||['','0'])[1])-Number(((a.label||'').match(/^(\d{2})년/)||['','0'])[1]))[0];
+    _singleCtx = `\n\n【거래처 정보】 ${_selClient.name} / 대표: ${_selClient.rep||'-'} / 담당: ${_selClient.manager||'-'}`;
+    if(_selClient.bizType) _singleCtx+=` / 업종: ${_selClient.bizType}`;
+    if(_selClient.bizCode) _singleCtx+=` (${_selClient.bizCode})`;
+    if (_pp2) {
+      const pd2=(G.julgae[_pp2.id]||{})[_selClient.id]||{};
+      const pR=pd2.revenue||0,pI=pd2.income||0,pF=pd2.fee||0,pT=pd2.totalTax||0;
+      _singleCtx+=`\n【전년도 신고 데이터 (${_pp2.label})】`;
+      if(pR)_singleCtx+=`\n- 수입금액: ${(pR/100000000).toFixed(2)}억원`;
+      if(pI)_singleCtx+=`\n- 소득금액: ${(pI/100000000).toFixed(2)}억원${pR?` (소득률 ${(pI/pR*100).toFixed(1)}%)`:''}`;
+      if(pF)_singleCtx+=`\n- 수수료: ${pF.toLocaleString()}원`;
+      if(pT)_singleCtx+=`\n- 결정세액: ${pT.toLocaleString()}원`;
+    }
+  }
+
+  const extractPrompt = `당신은 대한민국 세무법인의 숙련된 세무사입니다. 아래 ${typeLabel} 신고서를 전문가 수준으로 검토하십시오.${_singleCtx}
+
+【업종별 소득률 기준 (국세청 기준경비율 기반 — 이 기준 대비 차이 시 반드시 언급)】
+제조업 5~15% | 건설업 8~18% | 도소매업 3~12% | 서비스·전문직 20~50%
+음식숙박업 15~30% | 운수업 10~20% | 부동산임대업 30~60% | IT·소프트웨어 25~55%
+소득률 = 소득금액 ÷ 수입금액 × 100
+
+【성실신고확인 의무 수입금액 기준】
+농·임·어업·광업·도소매업·부동산매매업: 15억원 이상
+제조업·건설업·운수업·음식숙박업: 7.5억원 이상
+부동산임대업·서비스업(전문직 포함): 5억원 이상
+
+【세액공제·감면 전문 검토 규칙 (반드시 각 항목을 신고서에서 확인할 것)】
+▶ 법인세·소득세 공통 세액감면·공제
+① 중소기업 특별세액감면 (조특법 §7)
+   소기업: 제조·건설·물류·음식숙박·수도사업 20% / 나머지 업종 10%
+   중기업: 제조·건설·물류·음식숙박·수도사업 10% / 나머지 업종 5%
+   ※ 수도권 과밀억제권역 내 사업장은 적용 불가 — 신고서 감면명세서 첨부 여부 확인
+② 연구인력개발비 세액공제 (조특법 §10)
+   중소기업: MAX(당기지출액×25%, 전년대비증가분×50%)
+   ※ 연구소 또는 전담부서 보유 시 적용 가능 — 연구개발 활동 있으면 누락 여부 확인
+③ 통합투자세액공제 (조특법 §24)
+   중소기업: 투자금액×10%(기본) + 증가분×3%(추가)
+   ※ 기계장치·시설장치 투자 내역이 있으면 반드시 확인
+④ 고용증대 세액공제 (조특법 §29의7) — 1인당 연간 공제액
+   청년 정규직: 수도권 1,100만원 / 비수도권 1,200만원
+   장애인·60세이상·경력단절: 수도권 1,300만원 / 비수도권 1,300만원
+   일반 정규직: 수도권 770만원 / 비수도권 770만원
+   ※ 3년 공제, 고용 감소 시 추징 — 전년 공제 후 추징 여부도 확인
+⑤ 사회보험료 세액공제 (조특법 §30의4)
+   신규취업자 사용자 부담 사회보험료 × 50~100%
+⑥ 이월결손금 공제
+   중소기업: 각 사업연도 소득의 100%까지 / 일반법인: 80%까지
+   ※ 잔여 이월결손금이 있는지 반드시 확인
+▶ 종합소득세 추가 적용 항목
+⑦ 기장세액공제: 산출세액×20%, 연간 한도 100만원 (복식부기 의무자)
+⑧ 전자신고 세액공제: 2만원 (신고기한 내 전자신고)
+⑨ 표준세액공제: 12만원 — 기장세액공제와 반드시 비교 후 유리한 것 선택
+▶ 부가가치세 추가 적용 항목
+⑩ 신용카드매출전표 등 발행세액공제: 발행금액×1.3%, 연 1,000만원 한도
+   ※ 법인사업자 또는 직전연도 공급가액 10억 초과 개인사업자는 적용 불가
+⑪ 전자신고 세액공제: 1만원
+⑫ 대손세액공제: 대손금액×10/110 (6개월 이상 경과 채권, 회수 불능 확정 요건)
 
 [신고서 텍스트]
-${text.slice(0, 6000)}
+${text.slice(0, 5000)}
 
 ---
 【1단계】 핵심 데이터 추출 — 아래 JSON을 반드시 \`\`\`json ... \`\`\` 블록으로 출력:
@@ -8250,21 +8363,37 @@ ${text.slice(0, 6000)}
   "taxBase": 과세표준(숫자, 없으면 0),
   "totalTax": 결정세액(숫자, 없으면 0),
   "payTax": 신고서상납부할총세액(숫자, 없으면 0),
-  "feeRecommendation": 추천수수료(숫자, 수입금액 기준 한국 세무사 보수표 적용),
-  "feeReason": "수수료 추천 근거 (한 줄)"
+  "incomeRatio": 소득률(소득÷수입×100 소수점1자리, 없으면 null),
+  "taxCreditIssues": ["누락되었거나 검토 필요한 세액공제·감면 항목 목록 (예: '중소기업특별세액감면 미적용 의심', '연구개발비 세액공제 확인 필요'). 없으면 빈배열"],
+  "feeRecommendation": 추천수수료(숫자, 수입금액 기준 한국 세무사 보수표 + 업무 복잡도 반영),
+  "feeReason": "수수료 추천 근거 및 전년 대비 변동 사유 (한 줄)"
 }
 ※ totalTax(결정세액) = 산출세액 - 세액감면·공제 + 가산세 = 최종 확정된 세액
 ※ payTax(납부할총세액) = 결정세액 - 중간예납·원천징수 등 기납부세액 = 실제로 납부해야 할 금액
 
-【2단계】 검토 의견 — JSON 블록 출력 후 아래 형식으로 작성:
+【2단계】 전문가 검토 의견 — JSON 블록 출력 후 아래 형식으로 작성:
 ## 검토 결과
 **[${typeLabel} 신고서 검토]**
+
+📈 **전년도 비교 분석** (전년 데이터가 있는 경우에만 작성)
+- 수입금액 전년 대비 증감: (금액 및 %)
+- 소득률 변화: 전년 ?% → 당기 ?% (업종 기준 ?~?% 대비 평가)
+- 결정세액 증감 및 주요 원인
+- 수수료 전년 대비 조정 필요 여부 및 근거
+
+🔑 **절세항목 검토 (세액공제·감면)**
+- 중소기업 특별세액감면 (조특§7): (신고서 반영 여부, 감면금액, 수도권 과밀억제 해당 여부)
+- 연구인력개발비 세액공제 (조특§10): (적용 여부 또는 해당 없음 사유)
+- 통합투자세액공제 (조특§24): (투자 내역 있을 경우 적용 확인)
+- 고용증대 세액공제 (조특§29의7): (당기 고용 증감 현황, 적용 여부)
+- 이월결손금 공제: (잔여 이월결손금 공제 여부)
+- 기타 누락 의심 항목: (①~⑫ 중 미적용·미확인 항목 구체적으로 명시)
 
 ✅ **정상 확인 항목**
 - (정상으로 확인된 항목)
 
 ⚠️ **확인 필요 항목**
-- (이상하거나 주의가 필요한 항목)
+- (이상하거나 주의가 필요한 항목 — 소득률 이상, 세무조정 오류, 절세 누락 등)
 
 📋 **세무조정 검토사항**
 - 접대비: 한도 초과 여부 확인 (중소기업 기준 적용)
@@ -8274,8 +8403,8 @@ ${text.slice(0, 6000)}
 - 이월결손금: 공제 가능 금액 반영 여부
 - 그 외 신고서에서 확인되는 세무조정 특이사항
 
-📌 **누락 가능 공제·감면**
-- (적용 가능한데 누락된 것으로 보이는 항목)
+🏢 **성실신고 검토** (업종 기준 수입금액 초과 시)
+- 성실신고확인 의무 해당 여부 및 주요 확인 사항
 
 💰 **수수료 추천**: {feeRecommendation}원
 - {feeReason}
@@ -8285,7 +8414,7 @@ ${text.slice(0, 6000)}
 
   try {
     let charCount = 0;
-    const result = await aiCallStream(null, extractPrompt, 2000, (chunk, full) => {
+    const result = await aiCallStream(null, extractPrompt, 4000, (chunk, full) => {
       charCount += chunk.length;
       const prog = document.getElementById('trr-progress');
       if (prog) prog.textContent = `(${charCount.toLocaleString()}자 생성 중...)`;
@@ -8320,10 +8449,15 @@ ${text.slice(0, 6000)}
           ${reviewData.taxBase?`<div><span style="color:#888">과세표준:</span> <b>${fmtN(reviewData.taxBase)}</b></div>`:''}
           ${reviewData.totalTax?`<div><span style="color:#888">결정세액:</span> <b>${fmtN(reviewData.totalTax)}</b></div>`:''}
           ${reviewData.payTax?`<div><span style="color:#888">납부세액:</span> <b style="color:#c62828">${fmtN(reviewData.payTax)}</b></div>`:''}
+          ${reviewData.incomeRatio!=null?`<div><span style="color:#888">소득률:</span> <b style="color:${reviewData.incomeRatio<3||reviewData.incomeRatio>60?'#e65100':'#2e7d32'}">${reviewData.incomeRatio}%</b></div>`:''}
         </div>
         ${reviewData.feeRecommendation?`<div style="margin-top:10px;padding:8px 12px;background:#e8f5e9;border-radius:8px;font-size:13px">
           <span style="color:#2e7d32;font-weight:700">💰 추천 수수료: ${fmtN(reviewData.feeRecommendation)}</span>
           <span style="color:#555;margin-left:6px;font-size:12px">${esc(reviewData.feeReason||'')}</span>
+        </div>`:''}
+        ${reviewData.taxCreditIssues?.length?`<div style="margin-top:8px;padding:8px 12px;background:#fff8e1;border-radius:8px;border:1px solid #ffe082">
+          <div style="font-size:11px;font-weight:700;color:#f57f17;margin-bottom:4px">🔑 절세항목 검토 필요</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px">${reviewData.taxCreditIssues.map(t=>`<span style="font-size:11px;background:#fff3cd;border:1px solid #ffc107;border-radius:10px;padding:2px 8px;color:#795548">${esc(t)}</span>`).join('')}</div>
         </div>`:''}
         <div style="margin-top:8px;font-size:12px">
           <span id="trr-matched-label" style="color:${matchedClient?'#2e7d32':'#e65100'}">${matchedClient?`✓ 거래처 감지: <b>${esc(matchedClient.name)}</b>`:'⚠ 거래처 미매칭'}</span>
@@ -8339,10 +8473,10 @@ ${text.slice(0, 6000)}
     }
 
     const reviewText = result.replace(/```json[\s\S]*?```/g,'').trim();
-    const formatted = reviewText
+    const formatted = esc(reviewText)
       .replace(/^## (.+)$/gm,'<h3 style="font-size:14px;font-weight:800;color:#333;margin:14px 0 6px">$1</h3>')
       .replace(/^\*\*(.+?)\*\*$/gm,'<div style="font-weight:700;color:#555;margin:8px 0 4px">$1</div>')
-      .replace(/^(✅|⚠️|📌|💰) \*\*(.+?)\*\*/gm,'<div style="font-weight:700;margin:10px 0 4px">$1 $2</div>')
+      .replace(/^(✅|⚠️|📌|💰|📈|📋|🏢|🔑) \*\*(.+?)\*\*/gm,'<div style="font-weight:700;margin:10px 0 4px">$1 $2</div>')
       .replace(/^- (.+)$/gm,'<div style="padding:3px 0 3px 14px;border-left:3px solid #e0e0e0;margin:2px 0;font-size:13px">$1</div>')
       .replace(/\n\n/g,'<br>')
       .replace(/\n/g,'');
@@ -8351,10 +8485,16 @@ ${text.slice(0, 6000)}
     window._trrMatchedClientId = matchedClient?.id || clientId || null;
     window._trrPKey = pKey;
 
+    window._trrReviewPlainText = reviewText;
+    window._trrReviewFileName = `신고서검토_${(reviewData?.companyName||'').replace(/[\\/:*?"<>|]/g,'')||'결과'}_${(reviewData?.period||'').replace(/[\\/:*?"<>|\s]/g,'')}`.replace(/_+$/,'')||'신고서검토';
     const initFee = reviewData?.feeRecommendation || 0;
     resultDiv.innerHTML = `
       ${dataCard}
-      <div class="ai-result" style="font-size:13px;line-height:1.7">${formatted}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-size:13px;font-weight:700;color:#3949ab">📝 검토 의견</div>
+        <button onclick="downloadTRRReview()" style="padding:5px 12px;background:#eef2ff;color:#3949ab;border:1px solid #c5cae9;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">💾 텍스트 저장</button>
+      </div>
+      <div class="ai-result" style="font-size:13px;line-height:1.7;max-height:50vh;overflow-y:auto">${formatted}</div>
       ${reviewData ? `
       <div style="background:#f1f8e9;border:1.5px solid #a5d6a7;border-radius:12px;padding:14px 16px;margin-top:12px">
         <div style="font-size:13px;font-weight:700;color:#2e7d32;margin-bottom:10px">💰 수수료 직접 입력 후 데이터 반영</div>
@@ -8381,7 +8521,7 @@ ${text.slice(0, 6000)}
           style="flex:1;padding:10px;background:#b0bec5;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:not-allowed;font-family:inherit;opacity:0.7">
           📋 ↑ 수수료 입력 후 데이터 반영 필요
         </button>
-        <button onclick="copyText(document.getElementById('trr-result').innerText)" style="padding:10px 16px;background:#f5f5f5;color:#555;border:1px solid #e0e0e0;border-radius:10px;font-size:13px;cursor:pointer;font-family:inherit">📋 복사</button>
+        <button onclick="navigator.clipboard.writeText(document.getElementById('trr-result').innerText);this.textContent='✓ 복사됨'" style="padding:10px 16px;background:#f5f5f5;color:#555;border:1px solid #e0e0e0;border-radius:10px;font-size:13px;cursor:pointer;font-family:inherit">📋 복사</button>
       </div>` : ''}`;
     window._trrSavedResults = window._trrSavedResults || {};
     window._trrSavedResults[type] = { html: resultDiv.innerHTML, reviewData: window._trrReviewData };
@@ -8389,6 +8529,35 @@ ${text.slice(0, 6000)}
     resultDiv.innerHTML = `<div style="color:#e53935;padding:12px">AI 검토 오류: ${esc(String(e.message||e))}</div>`;
   }
   if (btn) btn.disabled = false;
+}
+
+function downloadTRRReview() {
+  const txt = window._trrReviewPlainText || '';
+  if (!txt) { toast('저장할 검토 내용이 없습니다', 'warning'); return; }
+  const d = window._trrReviewData || {};
+  const header = [
+    '═══════════════════════════════════════',
+    `신고서 AI 검토 결과`,
+    d.companyName ? `상호: ${d.companyName}` : '',
+    d.bizNo ? `사업자번호: ${d.bizNo}` : '',
+    d.period ? `신고기간: ${d.period}` : '',
+    d.revenue ? `수입금액: ${d.revenue.toLocaleString()}원` : '',
+    d.income ? `소득금액: ${d.income.toLocaleString()}원` : '',
+    d.incomeRatio!=null ? `소득률: ${d.incomeRatio}%` : '',
+    `생성일: ${new Date().toLocaleString('ko-KR')}`,
+    '═══════════════════════════════════════',
+    ''
+  ].filter(Boolean).join('\n');
+  const blob = new Blob([header + '\n' + txt], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (window._trrReviewFileName || '신고서검토') + '.txt';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast('텍스트 파일로 저장했습니다', 'success', 2000);
 }
 
 function applyTRRManualFee() {
@@ -9142,7 +9311,7 @@ function openManagerAnalysis() {
     let jDone=0,jTotal=0;
     (G.periods||[]).forEach(p=>{
       allC.forEach(c=>{
-        const v=julgaeVal(p.id+'|'+(p.reportType||p.type),c.id);
+        const v=julgaeVal(p.id,c.id);
         if(v&&(v.a!==undefined||v.d!==undefined)){jTotal++;if(v.a)jDone++;}
       });
     });
@@ -9352,7 +9521,7 @@ function brCopyAll() {
 function printJulgaeList() {
   const period=(G.periods||[])[G.julgaePeriodIdx||0];
   if(!period){toast('신고 기간을 먼저 선택해주세요','warning');return;}
-  const pKey2=period.id+'|'+(period.reportType||period.type);
+  const pKey2=period.id;
   const allClients = period.enrolled?.length
     ? period.enrolled.map(id=>G.clients.find(c=>c.id===id)).filter(Boolean)
     : applyReportFilter(G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'), period);
@@ -9723,7 +9892,7 @@ function exportExcel() {
   // Sheet 2: 신고 현황
   const rows2 = [];
   (G.periods||[]).forEach(p=>{
-    const pk = p.id+'|'+(p.reportType||p.type);
+    const pk = p.id;
     const clients2 = p.enrolled && p.enrolled.length
       ? p.enrolled.map(id=>G.clients.find(c=>c.id===id)).filter(Boolean)
       : G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업');
@@ -10650,7 +10819,7 @@ function showNoDataModal() {
   });
   const rows = Object.entries(byManager).sort(([a],[b])=>a.localeCompare(b,'ko')).map(([mgr,cs])=>`
     <tr style="background:#f5f5f5"><td colspan="3" style="padding:5px 10px;font-size:12px;font-weight:700;color:#555">담당: ${esc(mgr)} (${cs.length}개)</td></tr>
-    ${cs.map(c=>`<tr onclick="closeModal();switchTab('clients');G.searchText='${esc(c.name).replace(/'/g,"\'")}';renderClients()" style="cursor:pointer;border-bottom:1px solid #f5f5f5" onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background=''">
+    ${cs.map(c=>`<tr onclick="closeModal();switchTab('clients');G.searchText='${esc(c.name).replace(/'/g,"\\'")}';renderClients()" style="cursor:pointer;border-bottom:1px solid #f5f5f5" onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background=''">
       <td style="padding:5px 10px;font-size:13px;font-weight:600">${esc(c.name)}</td>
       <td style="padding:5px 10px;font-size:12px;color:#666">${esc(c.rep||'-')}</td>
       <td style="padding:5px 10px;font-size:12px;color:#888">${esc(c.contractDate||'-')}</td>
@@ -10842,7 +11011,6 @@ function bulkSetJulgaeAll(value) {
 function bulkSetJulgae(field, value, skipSave) {
   const period = G.periods[G.julgaePeriodIdx];
   if (!period) return;
-  const pKey3 = period.id+'|'+(period.reportType||period.type);
   const pKeySimple = period.id;
   (G.julgaeBulkSelected||[]).forEach(id => {
     if (!G.julgae[pKeySimple]) G.julgae[pKeySimple] = {};
@@ -11437,7 +11605,7 @@ function showNameRepDuplicates() {
           <span style="color:#888">${esc(c.rep)||'-'}</span>
           <span style="color:#aaa">${c.bizNo||'사업자번호없음'}</span>
           <span style="color:#aaa">${c.dealType||''}</span>
-          <button onclick="openClient(${c.id});this.closest('.overlay').remove()" style="margin-left:auto;font-size:11px;padding:2px 8px;border-radius:5px;border:1px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;cursor:pointer;font-family:inherit">보기</button>
+          <button onclick="this.closest('.overlay').remove();openClientNotes(${c.id})" style="margin-left:auto;font-size:11px;padding:2px 8px;border-radius:5px;border:1px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;cursor:pointer;font-family:inherit">보기</button>
         </div>`).join('')}
       </div>`).join('')}
     </div>
@@ -11675,7 +11843,8 @@ async function loadFromFirebase() {
       G.contactLogs = data.contactLogs ? JSON.parse(data.contactLogs) : {};
       G.adHocFees = data.adHocFees ? JSON.parse(data.adHocFees) : {};
       G.julgaeAdhoc = data.julgaeAdhoc ? JSON.parse(data.julgaeAdhoc) : {};
-        G.income26Unmatched = JSON.parse(localStorage.getItem('tm_income26Unmatched')||'[]');
+      G.income26Unmatched = data.income26Unmatched ? JSON.parse(data.income26Unmatched) : JSON.parse(localStorage.getItem('tm_income26Unmatched')||'[]');
+      if (data.pinnedPeriods) G.pinnedPeriods = JSON.parse(data.pinnedPeriods);
       if (data.julgaeSelectedPeriods) G.julgaeSelectedPeriods = JSON.parse(data.julgaeSelectedPeriods);
       if (data.julgaeSelectedYears) G.julgaeSelectedYears = JSON.parse(data.julgaeSelectedYears);
     } else {
@@ -11798,6 +11967,12 @@ async function loadFromFirebase() {
       const yy = String(yr).slice(2);
       const hasThisYear = G.periods.some(p => (p.label||'').startsWith(yy+'년'));
       if (!hasThisYear) autoCreatePeriods(yr);
+    }
+    // 마지막 선택한 신고리스트 복원 (autoCreatePeriods 등 인덱스 변경 이후 적용)
+    const _savedPId = localStorage.getItem('tm_julgaePeriodId');
+    if (_savedPId && G.periods.length) {
+      const _pIdx = G.periods.findIndex(p => p.id === _savedPId);
+      if (_pIdx >= 0) G.julgaePeriodIdx = _pIdx;
     }
   }
 }
