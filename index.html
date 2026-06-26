@@ -4877,39 +4877,37 @@ function renderJulgae() {
   })()}
 
   ${period ? `
-  <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px">
-    <div class="stat-card" style="border-left:3px solid #4f8ef7">
-      <div class="stat-label">대상 업체</div>
-      <div style="font-size:20px;font-weight:800">${total}<span style="font-size:13px;color:#aaa;font-weight:400"> 개</span></div>
-      <div class="stat-sub">${(reportLabel[period.reportType]||'전체')} · ${hasEnroll?'수동 선택':'자동 분류'}</div>
+  <div style="display:flex;align-items:stretch;gap:8px;margin-bottom:12px;overflow-x:auto">
+    <div class="stat-card" style="border-left:3px solid #4f8ef7;flex:0 0 auto;min-width:130px;padding:8px 12px">
+      <div class="stat-label" style="font-size:11px">대상 업체</div>
+      <div style="font-size:18px;font-weight:800">${total}<span style="font-size:12px;color:#aaa;font-weight:400"> 개</span></div>
+      <div class="stat-sub" style="font-size:10px">${(reportLabel[period.reportType]||'전체')} · ${hasEnroll?'수동':'자동'}</div>
     </div>
-    <div class="stat-card" style="border-left:3px solid #7b1fa2">
-      <div class="stat-label">수수료 청구</div>
-      <div style="font-size:20px;font-weight:800;color:#7b1fa2">${feeTotal.toLocaleString()}원</div>
-      <div class="stat-sub">수금 ${feeCollected.toLocaleString()}원 · 미수금 ${(feeTotal-feeCollected).toLocaleString()}원</div>
+    <div class="stat-card" style="border-left:3px solid #7b1fa2;flex:0 0 auto;min-width:170px;padding:8px 12px">
+      <div class="stat-label" style="font-size:11px">수수료 청구</div>
+      <div style="font-size:16px;font-weight:800;color:#7b1fa2">${feeTotal.toLocaleString()}원</div>
+      <div class="stat-sub" style="font-size:10px">수금 ${feeCollected.toLocaleString()} · 미수금 ${(feeTotal-feeCollected).toLocaleString()}</div>
     </div>
+    ${total > 0 ? `<div style="display:flex;align-items:center;gap:0;flex:1;background:#f8f9ff;border-radius:12px;padding:8px 10px;min-width:0">
+      ${[
+        {label:'전체',count:total,color:'#607d8b',icon:'👥'},
+        {label:'상담',count:consulCount,color:'#1565c0',icon:'💬'},
+        {label:'기장',count:bookCount,color:'#43a047',icon:'📒'},
+        {label:'결재',count:doneCount,color:'#9c27b0',icon:'✅'},
+        {label:'수금',count:collectCount,color:'#e65100',icon:'💰'},
+      ].map((s,i)=>{
+        const pct2=total?Math.round(s.count/total*100):0;
+        const arrow=i<4?`<div style="color:#ccc;font-size:16px;margin:0 3px;flex-shrink:0">›</div>`:'';
+        return `<div style="display:flex;align-items:center;flex:1;min-width:0">`+
+          `<div style="text-align:center;width:100%;padding:3px 4px;border-radius:8px;background:#fff;border:1.5px solid ${s.color}20">`+
+            `<div style="font-size:12px">${s.icon}</div>`+
+            `<div style="font-size:15px;font-weight:800;color:${s.color}">${s.count}</div>`+
+            `<div style="font-size:9px;color:#888">${s.label} ${pct2}%</div>`+
+            `<div style="height:3px;border-radius:2px;background:#eee;margin-top:2px"><div style="height:3px;border-radius:2px;background:${s.color};width:${pct2}%"></div></div>`+
+          `</div>${arrow}</div>`;
+      }).join('')}
+    </div>` : ''}
   </div>
-
-  ${period && total > 0 ? `
-  <div style="background:#f8f9ff;border-radius:12px;padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:0;overflow-x:auto">
-    ${[
-      {label:'전체',count:total,color:'#607d8b',icon:'👥'},
-      {label:'상담',count:consulCount,color:'#1565c0',icon:'💬'},
-      {label:'기장',count:bookCount,color:'#43a047',icon:'📒'},
-      {label:'결재',count:doneCount,color:'#9c27b0',icon:'✅'},
-      {label:'수금',count:collectCount,color:'#e65100',icon:'💰'},
-    ].map((s,i)=>{
-      const pct2=total?Math.round(s.count/total*100):0;
-      const arrow=i<4?`<div style="color:#ccc;font-size:18px;margin:0 4px;flex-shrink:0">›</div>`:'';
-      return `<div style="display:flex;align-items:center">`+
-        `<div style="text-align:center;min-width:64px;padding:4px 6px;border-radius:10px;background:#fff;border:1.5px solid ${s.color}20">`+
-          `<div style="font-size:13px">${s.icon}</div>`+
-          `<div style="font-size:16px;font-weight:800;color:${s.color}">${s.count}</div>`+
-          `<div style="font-size:9px;color:#888">${s.label} ${pct2}%</div>`+
-          `<div style="height:3px;border-radius:2px;background:#eee;margin-top:3px"><div style="height:3px;border-radius:2px;background:${s.color};width:${pct2}%"></div></div>`+
-        `</div>${arrow}</div>`;
-    }).join('')}
-  </div>` : ''}
 
   ${prevPeriods1.length > 0 ? (()=>{
     const open = G._yrCompareOpen !== false;
