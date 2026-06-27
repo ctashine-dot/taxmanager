@@ -658,6 +658,42 @@ function julgaeVal(pKey, clientId) {
   return {...def, ...v};
 }
 
+// 신고 기간이 커버하는 '귀속연도' — 소득세류·면세 사업장현황·부가세 확정2기는 신고연도 직전해
+function periodIncomeYear(period) {
+  const m = (period && period.label || '').match(/^(\d{2})년/);
+  if (!m) return 0;
+  const filingYear = 2000 + Number(m[1]);
+  const rt = (period && period.reportType) || '';
+  if (['corp','income','seongsi','sajup','vat_hak_2'].includes(rt)) return filingYear - 1;
+  return filingYear; // vat_hak_1, vat_yej 등 당해연도 활동분
+}
+function clientCloseYear(c) {
+  if (c.closureYear) return Number(c.closureYear) || 0;
+  const d = c.closeDate || c.terminationDate || '';
+  const m = String(d).match(/(\d{4})/);
+  return m ? Number(m[1]) : 0;
+}
+function periodHasClientData(period, c) {
+  const v = G.julgae[period && period.id]?.[c.id];
+  if (!v) return false;
+  if (v === true) return true;
+  if (typeof v === 'object') return !!(v.d||v.b||v.a||v.c||v.s||v.revenue||v.salesAmount||v.income||v.taxBase||v.totalTax||v.payTax||v.fee||v.feeSeongsi||v.paid);
+  return false;
+}
+// 폐업/해지 거래처라도 '해당 신고 대상'이면 신고리스트에 포함해야 함.
+// 예) 26년 성실신고는 25년 귀속 → 26년에 폐업했어도 25년 영업분은 신고 대상이므로 표시.
+// 또한 이미 입력된 신고 데이터가 있으면 어떤 경우에도 숨기지 않는다(작업 내역 손실 방지).
+function clientInFilingPeriod(c, period) {
+  if (c.status !== '해지' && c.status !== '폐업') return true;
+  if (periodHasClientData(period, c)) return true;
+  if (c.status === '폐업') {
+    const iy = periodIncomeYear(period);
+    const cy = clientCloseYear(c);
+    if (iy && cy && cy >= iy) return true;
+  }
+  return false;
+}
+
 const DEFAULT_PERIODS = PERIOD_TEMPLATES.map(t => ({
   id: t.tpl + '_' + new Date().getFullYear(),
   label: String(new Date().getFullYear()).slice(2) + '년 ' + t.label,
@@ -4539,7 +4575,7 @@ function renderJulgae() {
   const mf = G.julgaeManagers || [];
   const pKey = period ? period.id : null;
 
-  let baseClients = G.clients.filter(c => c.status !== '해지' && c.status !== '폐업');
+  let baseClients = G.clients.filter(c => clientInFilingPeriod(c, period));
   const hasEnroll = period && period.enrolled && period.enrolled.length > 0;
   if (hasEnroll) {
     baseClients = baseClients.filter(c => period.enrolled.includes(c.id));
@@ -4825,7 +4861,7 @@ function renderJulgae() {
       if (p.enrolled?.length > 0) {
         targets = G.clients.filter(c => p.enrolled.includes(c.id));
       } else {
-        targets = applyReportFilter(G.clients.filter(c => c.status!=='해지'&&c.status!=='폐업'), p);
+        targets = applyReportFilter(G.clients.filter(c => clientInFilingPeriod(c, p)), p);
       }
       const total = targets.length;
       const done = targets.filter(c => julgaeVal(pKey, c.id).a).length;
@@ -5137,6 +5173,7 @@ function renderJulgae() {
       const _memoTitle = _lastMemo ? esc(_lastMemo.slice(0,120)) : '';
       const _revChg = (v.revenue&&v.prevRevenue) ? Math.round((v.revenue-v.prevRevenue)/v.prevRevenue*100) : null;
       const _revBadge = _revChg!==null ? `<span style="font-size:9px;padding:1px 4px;border-radius:4px;background:${_revChg>0?'#e8f5e9':'#fdecea'};color:${_revChg>0?'#2e7d32':'#c62828'};margin-left:3px;flex-shrink:0">${_revChg>0?'↑':'↓'}${Math.abs(_revChg)}%</span>` : '';
+      const _closedBadge = (c.status==='폐업'||c.status==='해지') ? `<span style="font-size:9px;padding:1px 5px;border-radius:4px;background:#fdecea;color:#c62828;margin-left:3px;flex-shrink:0;font-weight:700" title="${c.status} (귀속연도 영업분 신고대상)">${c.status}${clientCloseYear(c)?` ${String(clientCloseYear(c)).slice(2)}`:''}</span>` : '';
       return `<tr id="jr-${pKey2}-${c.id}" style="background:${rowBg}">
         ${G.julgaeBulkMode?`<td style="text-align:center;width:32px" onclick="event.stopPropagation();toggleJulgaeSelect(${c.id})"><input type="checkbox" ${(G.julgaeBulkSelected||[]).includes(c.id)?'checked':''} style="width:16px;height:16px;cursor:pointer" onclick="event.stopPropagation();toggleJulgaeSelect(${c.id})"></td>`:''}
         <td style="color:#aaa;font-size:11px;position:sticky;left:${_numLeft}px;z-index:1;background:${rowBg}">${++_rowN}</td>
@@ -5144,7 +5181,7 @@ function renderJulgae() {
           ?`<div class="td-name" style="display:flex;align-items:center;gap:4px;min-width:0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font-size:${julgaeName(c.name).length>12?'10px':julgaeName(c.name).length>8?'11px':'12px'}">${esc(julgaeName(c.name))}</span><span style="background:#7b1fa2;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;white-space:nowrap;flex-shrink:0">+${item.groupClients.length-1} ${item.expanded?'▲':'▼'}</span>${_noteIcon}</div>`
           :item.isGroupChild
             ?`<div style="display:flex;align-items:center;gap:4px;padding-left:18px;min-width:0"><span style="color:#ccc;font-size:11px;flex-shrink:0">└</span><div class="td-name" style="font-size:${julgaeName(c.name).length>12?'10px':julgaeName(c.name).length>8?'11px':'12px'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${esc(julgaeName(c.name))}</div>${_revBadge}${_noteIcon}</div>`
-            :`<div class="td-name" style="display:flex;align-items:center;gap:3px;min-width:0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font-size:${julgaeName(c.name).length>12?'10px':julgaeName(c.name).length>8?'11px':'12px'}">${esc(julgaeName(c.name))}</span>${c._julgaeAdhoc?`<span style="background:#ff8f00;color:#fff;font-size:9px;border-radius:3px;padding:1px 4px;white-space:nowrap;flex-shrink:0">미등록</span>`:_revBadge}${c._julgaeAdhoc?`<button onclick="event.stopPropagation();deleteJulgaeAdhocEntry('${pKey2}',${c.id})" style="background:none;border:none;color:#ccc;cursor:pointer;font-size:12px;padding:0 2px;flex-shrink:0" title="리스트에서 제거">✕</button>`:_noteIcon}</div>`
+            :`<div class="td-name" style="display:flex;align-items:center;gap:3px;min-width:0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font-size:${julgaeName(c.name).length>12?'10px':julgaeName(c.name).length>8?'11px':'12px'}">${esc(julgaeName(c.name))}</span>${_closedBadge}${c._julgaeAdhoc?`<span style="background:#ff8f00;color:#fff;font-size:9px;border-radius:3px;padding:1px 4px;white-space:nowrap;flex-shrink:0">미등록</span>`:_revBadge}${c._julgaeAdhoc?`<button onclick="event.stopPropagation();deleteJulgaeAdhocEntry('${pKey2}',${c.id})" style="background:none;border:none;color:#ccc;cursor:pointer;font-size:12px;padding:0 2px;flex-shrink:0" title="리스트에서 제거">✕</button>`:_noteIcon}</div>`
         }</td>
         <td style="font-size:12px;color:#444;${hc['j_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
         <td style="color:#555;font-size:12px;${hc['j_manager']?'display:none':''}">${getManagers(c).length?getManagers(c).join(', '):'<span style="color:#ff7043;font-size:11px">⚠ 미지정</span>'}</td>
@@ -6806,7 +6843,7 @@ function renderChecklistClientList() {
   if (!p) return;
   const targets = p.enrolled?.length > 0
     ? G.clients.filter(c => p.enrolled.includes(c.id))
-    : applyReportFilter(G.clients.filter(c => c.status!=='해지'&&c.status!=='폐업'), p);
+    : applyReportFilter(G.clients.filter(c => clientInFilingPeriod(c, p)), p);
   const listEl = document.getElementById('cl-client-list');
   if (!listEl) return;
   listEl.innerHTML = targets.slice(0,50).map(c=>`
@@ -9582,7 +9619,7 @@ function printJulgaeList() {
   const pKey2=period.id;
   const allClients = period.enrolled?.length
     ? period.enrolled.map(id=>G.clients.find(c=>c.id===id)).filter(Boolean)
-    : applyReportFilter(G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'), period);
+    : applyReportFilter(G.clients.filter(c=>clientInFilingPeriod(c, period)), period);
   const clients = allClients;
   const s=G.settings||{};
   const rows=clients.map((c,i)=>{
@@ -9953,7 +9990,7 @@ function exportExcel() {
     const pk = p.id;
     const clients2 = p.enrolled && p.enrolled.length
       ? p.enrolled.map(id=>G.clients.find(c=>c.id===id)).filter(Boolean)
-      : G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업');
+      : G.clients.filter(c=>clientInFilingPeriod(c, p));
     clients2.forEach(c=>{
       const v = julgaeVal(pk, c.id);
       if (!v||(!v.d&&!v.b&&!v.a&&!v.fee&&!v.s)) return;
