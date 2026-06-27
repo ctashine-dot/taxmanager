@@ -740,7 +740,7 @@ function saveToLS() {
       clients:     JSON.stringify(G.clients),
       periods:     JSON.stringify(G.periods),
       julgae:      JSON.stringify(G.julgae),
-      settings:    JSON.stringify(G.settings),
+      settings:    JSON.stringify({...G.settings, aiKey: undefined}), // API 키는 클라우드에 저장하지 않음(유출 방지)
       monthlyFees: JSON.stringify(G.monthlyFees),
       invoiceData: JSON.stringify(G.invoiceData||{}),
       clientNotes: JSON.stringify(G.clientNotes||{}),
@@ -1229,7 +1229,7 @@ function julgaeName(name) {
   return n.replace(/㈜/g, '(주)');
 }
 function esc(s) {
-  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/`/g,'&#96;');
 }
 function debounce(fn, ms) {
   let t;
@@ -7895,6 +7895,29 @@ function buildReviewContent(promptText, images) {
   return content;
 }
 
+// AI 응답에서 JSON 추출 — 닫힌 블록 → 잘린 블록 → 첫 '{' 순으로 시도하고, 잘린 경우 괄호 균형을 맞춰 best-effort 복구
+function parseAIJson(result) {
+  if (!result) return null;
+  let m = result.match(/```json\s*([\s\S]*?)\s*```/);
+  let raw = m ? m[1] : null;
+  if (!raw) { m = result.match(/```json\s*([\s\S]*)$/); if (m) raw = m[1]; }
+  if (!raw) { const i = result.indexOf('{'); if (i >= 0) raw = result.slice(i); }
+  if (!raw) return null;
+  raw = raw.trim().replace(/```\s*$/, '').trim();
+  try { return JSON.parse(raw); } catch(e) {}
+  // 잘린 JSON 복구 시도
+  try {
+    let s = raw;
+    if (((s.match(/"/g) || []).length) % 2 !== 0) s = s.slice(0, s.lastIndexOf('"')); // 열린 따옴표 정리
+    s = s.replace(/,\s*$/, '').replace(/:\s*$/, '').replace(/,\s*"[^"]*$/, '');        // 매달린 키/콤마 제거
+    const stack = [];
+    for (const ch of s) { if (ch === '{') stack.push('}'); else if (ch === '[') stack.push(']'); else if (ch === '}' || ch === ']') stack.pop(); }
+    while (stack.length) s += stack.pop();
+    return JSON.parse(s);
+  } catch(e) {}
+  return null;
+}
+
 function openTaxReturnReviewer(type) {
   const typeInfo = {
     vat:    { label: '부가가치세', icon: '🔍', color: '#e65100', bg: '#fff3e0' },
@@ -8139,8 +8162,7 @@ async function startBatchReview(type) {
     if(statusEl){ statusEl.textContent='AI 분석 중...'; statusEl.style.color='#1565c0'; }
 
     // 거래처 자동 매칭
-    const bizMatch = text.match(/(\d{3}[-–]\d{2}[-–]\d{5})/);
-    const bn = bizMatch ? bizMatch[1].replace(/[-–]/g,'') : '';
+    const bn = extractBizNo(text);
     const matchedClient = bn ? G.clients.find(c=>(c.bizNo||'').replace(/\D/g,'')===bn) : null;
 
     // 전년도 비교 데이터 및 업종 컨텍스트 구성
@@ -8190,6 +8212,7 @@ ${text.slice(0, 12000)}
 
 ---
 【중요】 위 페이지 이미지에 데이터가 보이면 절대 "페이지 누락/공란"이라고 판단하지 말 것. 이미지의 표·숫자를 직접 읽어 추출하십시오.
+【금액 단위 — 필수】 표 머리글에 '단위: 천원' 또는 '(천원)' 표기가 있으면 그 표의 숫자에 1,000을 곱해 '원' 단위로 변환할 것. 모든 금액 필드(revenue/income/taxBase/totalTax/payTax)는 콤마·억·만 없는 순수 정수(원)로만 출력.
 
 【1단계】 핵심 데이터 추출 — 아래 JSON을 반드시 \`\`\`json ... \`\`\` 블록으로 출력:
 {
@@ -8218,11 +8241,10 @@ ${text.slice(0, 12000)}
     let reviewData = null;
     let reviewText = '';
     try {
-      const result = await aiCallStream(null, buildReviewContent(extractPrompt, pdfImages), 2500, null, 'claude-opus-4-8');
+      const result = await aiCallStream(null, buildReviewContent(extractPrompt, pdfImages), 3000, null, 'claude-opus-4-8');
       if (result) {
-        const jm = result.match(/```json\s*([\s\S]*?)\s*```/);
-        if (jm) { try { reviewData = JSON.parse(jm[1]); } catch(e){} }
-        reviewText = result.replace(/```json[\s\S]*?```/g,'').trim();
+        reviewData = parseAIJson(result);
+        reviewText = result.replace(/```json[\s\S]*?```/g,'').replace(/```json[\s\S]*$/,'').trim();
       }
     } catch(e) {
       if(statusEl){ statusEl.textContent='AI 오류'; statusEl.style.color='#c62828'; }
@@ -8341,11 +8363,20 @@ function batchRecord(bIdx) {
   }
 }
 
+// 신고서 텍스트에서 사업자번호 추출 — 구분자 없음/공백/전각숫자 모두 대응, 주민번호(13자리)는 제외
+function extractBizNo(text) {
+  if (!text) return '';
+  // 전각 숫자 → 반각
+  const t = String(text).replace(/[０-９]/g, d => String.fromCharCode(d.charCodeAt(0) - 0xFEE0));
+  // 000-00-00000 (구분자 -, –, 공백, 또는 없음)
+  const m = t.match(/(\d{3})[-–\s]?(\d{2})[-–\s]?(\d{5})(?!\d)/);
+  if (!m) return '';
+  return m[1] + m[2] + m[3];
+}
+
 function autoMatchTRRClient(text) {
-  // 사업자번호 패턴으로 자동 매칭
-  const bizMatch = text.match(/(\d{3}[-–]\d{2}[-–]\d{5})/);
-  if (!bizMatch) return;
-  const bn = bizMatch[1].replace(/[-–]/g, '');
+  const bn = extractBizNo(text);
+  if (!bn) return;
   const matched = G.clients.find(c => (c.bizNo||'').replace(/\D/g,'') === bn);
   if (matched) {
     const sel = document.getElementById('trr-client-sel');
@@ -8447,6 +8478,7 @@ ${text.slice(0, 14000)}
 
 ---
 【중요】 위 페이지 이미지에 데이터가 보이면 절대 "페이지 누락/공란/확인 불가"라고 판단하지 말 것. 이미지의 표·숫자를 직접 읽어 추출하십시오. 보조 텍스트가 비어 있어도 이미지가 있으면 이미지를 근거로 검토합니다.
+【금액 단위 — 필수】 표 머리글에 '단위: 천원' 또는 '(천원)' 표기가 있으면 그 표의 숫자에 1,000을 곱해 '원' 단위로 변환할 것. 모든 금액 필드(revenue/income/taxBase/totalTax/payTax)는 콤마·억·만 없는 순수 정수(원)로만 출력.
 
 【출력 형식】 오직 하나의 \`\`\`json ... \`\`\` 블록만 출력하십시오. 블록 밖에는 아무 글자도 쓰지 마십시오. 자유 서술·서론·결론·별표(**)·마크다운 제목(#) 금지. 모든 검토 의견은 아래 findings 배열에 담으십시오.
 
@@ -8489,19 +8521,34 @@ ${text.slice(0, 14000)}
     }, 'claude-opus-4-8');
     if (!result) { resultDiv.innerHTML = ''; if(btn) btn.disabled=false; return; }
 
-    // JSON 추출
-    let reviewData = null;
-    const jsonMatch = result.match(/```json\s*([\s\S]*?)\s*```/);
-    if (jsonMatch) {
-      try { reviewData = JSON.parse(jsonMatch[1]); } catch(e) {}
+    // JSON 추출 (잘린 응답 복구 포함)
+    let reviewData = parseAIJson(result);
+    if (!reviewData) {
+      resultDiv.innerHTML = `<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:10px;padding:14px;font-size:13px;color:#795548">
+        ⚠️ AI 응답을 분석하지 못했습니다(형식 오류 또는 응답 잘림). 다시 시도해 주세요.
+        <button onclick="runTaxReturnReview('${type}')" style="display:block;margin-top:10px;padding:8px 14px;background:#f57f17;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">🔄 다시 시도</button>
+      </div>`;
+      if(btn) btn.disabled=false;
+      return;
     }
 
     // 결과 UI 구성
     const clientId = Number(document.getElementById('trr-client-sel')?.value) || 0;
     const pKey = document.getElementById('trr-period-sel')?.value || '';
     const clientName = reviewData?.companyName || '';
-    const matchedClient = clientId ? G.clients.find(c=>c.id===clientId) :
-      (clientName ? G.clients.find(c=>c.name.includes(clientName)||clientName.includes(c.name)) : null);
+    // 매칭 우선순위: 수동선택 → 사업자번호 정확일치 → 상호 정확일치 → 유일한 부분일치(3자 이상)
+    const _bnNorm = (reviewData?.bizNo||'').replace(/\D/g,'');
+    const _nameNorm = s => String(s||'').replace(/\s+/g,'');
+    let matchedClient = clientId ? G.clients.find(c=>c.id===clientId) : null;
+    if (!matchedClient && _bnNorm.length===10) matchedClient = G.clients.find(c=>(c.bizNo||'').replace(/\D/g,'')===_bnNorm) || null;
+    if (!matchedClient && clientName) {
+      const tgt = _nameNorm(clientName);
+      matchedClient = G.clients.find(c=>_nameNorm(c.name)===tgt) || null;
+      if (!matchedClient && tgt.length>=3) {
+        const cand = G.clients.filter(c=>{const n=_nameNorm(c.name); return n && (n.includes(tgt)||tgt.includes(n));});
+        if (cand.length===1) matchedClient = cand[0];
+      }
+    }
 
     let dataCard = '';
     if (reviewData) {
@@ -8948,7 +8995,7 @@ function doRecordTRRNew() {
   const newId = Date.now();
   const newClient = {
     id: newId, name, rep, bizNo, jumin:'', relatedGroup:'', phone:'', email:'',
-    taxType:'개인', vatType:'일반', bizType:'', taxOffice:'',
+    taxType:(window._trrCurrentType==='corp'?'법인':'개인'), vatType:'일반', bizType:'', taxOffice:'',
     manager: (G.settings?.managers?.[0]||''), managers:[],
     fee: data?.feeRecommendation||0, feeSingo:0, feeJojung:0, feeSeongsi:0,
     feeStatus:'청구완료', dealType: deal, dealTypes:[deal],
@@ -8977,7 +9024,7 @@ function openFormFromTRR() {
     name: data?.companyName || '',
     bizNo: data?.bizNo || '',
     rep: data?.representative || '',
-    taxType: data?.taxType || '개인',
+    taxType: data?.taxType || (window._trrCurrentType==='corp'?'법인':'개인'),
     vatType: '일반',
     dealType: '신고대리',
   };
@@ -10100,7 +10147,7 @@ function openSettings() {
         <input class="finput" id="set-aiKey" type="password" value="${esc(s.aiKey||'')}" placeholder="sk-ant-..." style="padding-right:60px">
         <button type="button" onclick="(()=>{const el=document.getElementById('set-aiKey');el.type=el.type==='password'?'text':'password';this.textContent=el.type==='password'?'표시':'숨김'})()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);border:none;background:none;color:#888;font-size:11px;cursor:pointer;font-family:inherit">표시</button>
       </div>
-      <div style="font-size:11px;color:#aaa;margin-top:3px">Anthropic Console에서 발급 — 로컬에만 저장되며 서버로 전송되지 않습니다</div>
+      <div style="font-size:11px;color:#aaa;margin-top:3px">Anthropic Console에서 발급 — 이 기기(브라우저)에만 저장됩니다. AI 검토 시 신고서 데이터는 분석을 위해 Anthropic 서버로 전송됩니다.</div>
     </div>
     <div style="border:1px solid #e0e0e0;border-radius:10px;padding:14px;background:#f8f9ff">
       <div style="font-weight:700;font-size:13px;margin-bottom:10px">⚙ 신고기간 관리</div>
@@ -11918,6 +11965,8 @@ async function loadFromFirebase() {
       G.periods     = data.periods     ? JSON.parse(data.periods)     : JSON.parse(JSON.stringify(DEFAULT_PERIODS));
       G.julgae      = data.julgae      ? JSON.parse(data.julgae)      : {};
       G.settings    = data.settings    ? JSON.parse(data.settings)    : G.settings;
+      // API 키는 클라우드에 저장하지 않으므로 로컬에 저장된 값으로 복원
+      try { const _lk = JSON.parse(localStorage.getItem('tm_settings')||'{}'); if (_lk.aiKey && !G.settings.aiKey) G.settings.aiKey = _lk.aiKey; } catch(e){}
       G.monthlyFees = data.monthlyFees ? JSON.parse(data.monthlyFees) : {};
       G.invoiceData = data.invoiceData ? JSON.parse(data.invoiceData) : {};
       G.clientNotes = data.clientNotes ? JSON.parse(data.clientNotes) : {};
