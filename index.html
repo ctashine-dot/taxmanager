@@ -1523,10 +1523,8 @@ function _renderDashboardInner() {
   const thisYM = (()=>{const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');})();
   const feeActive = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업');
 
-  // 월정 수수료 (이달 기준) — 수수료 탭과 동일 기준(getFeeForYM, 미래 수임/0원 제외)
-  const monthlyClients = feeActive.filter(c=>getDealTypes(c).some(d=>['기장','고문','성실'].includes(d)))
-    .filter(c=>!c.contractDate || c.contractDate.slice(0,7) <= thisYM)
-    .filter(c=>getFeeForYM(c,thisYM) > 0);
+  // 월정 수수료 (이달 기준) — 수임일자~휴업/해지/폐업일자 기간 기준
+  const monthlyClients = G.clients.filter(c=>isMonthlyBillable(c, thisYM));
   const monthlyTotal     = monthlyClients.reduce((a,c)=>a+getFeeForYM(c,thisYM),0);
   const monthlyCollected = monthlyClients.filter(c=>G.monthlyFees[c.id]?.[thisYM]).reduce((a,c)=>a+getFeeForYM(c,thisYM),0);
 
@@ -1583,7 +1581,7 @@ function _renderDashboardInner() {
 
   const feeByManager = MANAGERS.slice(1).map(m=>{
     const allMC = G.clients.filter(c=>getManagers(c).includes(m)&&c.status!=='해지'&&c.status!=='폐업');
-    const mc = allMC.filter(c=>getDealTypes(c).some(d=>['기장','고문','성실'].includes(d)));
+    const mc = G.clients.filter(c=>getManagers(c).includes(m)&&isMonthlyBillable(c, thisYM));
     const t = mc.reduce((a,c)=>a+getFeeForYM(c,thisYM),0);
     const col = mc.filter(c=>G.monthlyFees[c.id]?.[thisYM]).reduce((a,c)=>a+getFeeForYM(c,thisYM),0);
     const p = t>0?Math.round(col/t*100):0;
@@ -1834,7 +1832,7 @@ function _renderDashboardInner() {
     const now2 = new Date();
     const months12 = Array.from({length:12},(_,i)=>{const d=new Date(now2.getFullYear(),now2.getMonth()-11+i,1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');});
     const mStats = months12.map(ym=>{
-      const act=G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&getDealTypes(c).some(d=>['기장','고문','성실'].includes(d))&&(!c.contractDate||c.contractDate.slice(0,7)<=ym));
+      const act=G.clients.filter(c=>isMonthlyBillable(c, ym));
       const total=act.reduce((a,c)=>a+getFeeForYM(c,ym),0);
       const collected=act.filter(c=>G.monthlyFees[c.id]?.[ym]).reduce((a,c)=>a+getFeeForYM(c,ym),0);
       return {ym,total,collected};
@@ -1904,7 +1902,7 @@ function _renderDashboardInner() {
     const now4 = new Date();
     const months12 = Array.from({length:12},(_,i)=>{const d=new Date(now4.getFullYear(),now4.getMonth()-11+i,1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');});
     const collected12 = months12.map(ym=>{
-      const act=G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&getDealTypes(c).some(d=>['기장','고문','성실'].includes(d))&&(!c.contractDate||c.contractDate.slice(0,7)<=ym));
+      const act=G.clients.filter(c=>isMonthlyBillable(c, ym));
       return act.filter(c=>G.monthlyFees[c.id]?.[ym]).reduce((a,c)=>a+getFeeForYM(c,ym),0);
     });
     const maxC = Math.max(...collected12, 1);
@@ -6169,6 +6167,26 @@ function getFeeForYM(c, ym) {
   return earliest ? earliest.amount : (c.fee || 0);
 }
 
+// 월정 청구 종료월(YYYY-MM): 휴업/해지/폐업 일자 기준. 진행중이면 null, 종료상태인데 일자 미상이면 ''
+function clientEndYM(c) {
+  if (c.status==='휴업' || c.status==='해지' || c.status==='폐업') {
+    const d = c.terminationDate || c.closeDate || (c.closureYear ? c.closureYear+'-12' : '');
+    if (!d) return '';
+    const m = String(d).match(/(\d{4})-?(\d{2})?/);
+    return m ? (m[1] + '-' + (m[2] || '12')) : '';
+  }
+  return null;
+}
+// 해당 월(ym)에 월정(기장·고문·성실) 청구 대상인지 — 수임일자(시작)~휴업/해지/폐업일자(종료) 기간 기준
+function isMonthlyBillable(c, ym) {
+  if (!getDealTypes(c).some(d => ['기장','고문','성실'].includes(d))) return false;
+  if (c.contractDate && c.contractDate.slice(0,7) > ym) return false; // 수임 전
+  const end = clientEndYM(c);
+  if (end === '') return false;          // 종료상태인데 일자 미상 → 청구 안 함(안전)
+  if (end && ym > end) return false;     // 종료월 이후 → 청구 종료
+  return getFeeForYM(c, ym) > 0;
+}
+
 // 월정/기장료 변경 — effectiveYM(적용 시작월)부터 반영. feeChanges가 단일 진실원천.
 // 신고리스트·수수료탭·대시보드가 모두 getFeeForYM/c.fee를 통해 같은 값을 표시.
 function setMonthlyFee(clientId, newAmount, effectiveYM) {
@@ -6368,19 +6386,9 @@ function renderFees() {
   if (!G.sectionCollapsed) G.sectionCollapsed = {};
   ['fees-monthly','fees-filing','fees-adhoc'].forEach(k=>{ if(!(k in G.sectionCollapsed)) G.sectionCollapsed[k]=true; });
 
-  // 월정 수수료 대상: 기장/고문/성실 활성 거래처
-  const monthlyClients = G.clients.filter(c =>
-    c.status !== '해지' && c.status !== '폐업' &&
-    getDealTypes(c).some(d => ['기장','고문','성실'].includes(d))
-  );
-
-  // 이 달 수임 이후인 거래처만 + 수수료 0원 제외 (해당 월 기준 기장료 사용)
-  const feeClients = monthlyClients.filter(c => {
-    if (!getFeeForYM(c, ym)) return false; // 수수료 0원 제외
-    if (!c.contractDate) return true;
-    const s = c.contractDate.slice(0,7);
-    return s <= ym;
-  });
+  // 월정 수수료 대상: 수임일자~휴업/해지/폐업일자 기간 내 기장·고문·성실
+  const monthlyClients = G.clients.filter(c => getDealTypes(c).some(d => ['기장','고문','성실'].includes(d)));
+  const feeClients = G.clients.filter(c => isMonthlyBillable(c, ym));
 
   const mFeeTotal     = feeClients.reduce((a,c)=>a+getFeeForYM(c,ym),0);
   const mFeeCollected = feeClients.filter(c=>isMonthCollected(c.id,ym)).reduce((a,c)=>a+getFeeForYM(c,ym),0);
@@ -6535,13 +6543,12 @@ function renderFees() {
       return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
     };
     const aging = {m1:{count:0,total:0,items:[]}, m23:{count:0,total:0,items:[]}, m4p:{count:0,total:0,items:[]}};
-    const activeClients = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&c.fee&&getDealTypes(c).some(d=>['기장','고문','성실'].includes(d)));
+    const activeClients = G.clients.filter(c=>getDealTypes(c).some(d=>['기장','고문','성실'].includes(d)));
     activeClients.forEach(c=>{
-      const months = clientMonths(c);
       for (let i=1; i<=6; i++) {
         const checkYM = adjYM2(curYM, -i);
         if (checkYM < '2026-01') continue;
-        if (!months.includes(checkYM)) continue;
+        if (!isMonthlyBillable(c, checkYM)) continue; // 수임~휴업/해지/폐업 기간 내만
         if (G.monthlyFees[c.id]?.[checkYM]) continue; // already collected
         const amt = getFeeForYM(c, checkYM) || c.fee || 0;
         const entry = {id:c.id, name:c.name, manager:getManagers(c).join(','), ym:checkYM, amount:amt};
@@ -9697,7 +9704,7 @@ function openManagerAnalysis() {
   const thisYM = (()=>{const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');})();
   const rows = managers.map(m=>{
     const allC=G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&getManagers(c).includes(m));
-    const monthlyC=allC.filter(c=>getDealTypes(c).some(d=>['기장','고문','성실'].includes(d))&&(!c.contractDate||c.contractDate.slice(0,7)<=thisYM)&&getFeeForYM(c,thisYM)>0);
+    const monthlyC=allC.filter(c=>isMonthlyBillable(c, thisYM));
     const monthlyFee=monthlyC.reduce((a,c)=>a+getFeeForYM(c,thisYM),0);
     const collected=monthlyC.filter(c=>(G.monthlyFees[c.id]||{})[thisYM]).reduce((a,c)=>a+getFeeForYM(c,thisYM),0);
     const collPct=monthlyFee>0?Math.round(collected/monthlyFee*100):0;
@@ -9802,14 +9809,11 @@ function openBulkReminder() {
     return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
   });
 
-  const feeTargets = G.clients.filter(c=>
-    c.status!=='해지'&&c.status!=='폐업'&&
-    (c.fee||0)>0&&
-    getDealTypes(c).some(d=>['기장','고문','성실'].includes(d))
-  );
+  const feeTargets = G.clients.filter(c=>getDealTypes(c).some(d=>['기장','고문','성실'].includes(d)));
 
   const unpaidByClient = feeTargets.map(c=>{
-    const unpaidMonths = [thisYM,...prevYMs].filter(ym=>!(G.monthlyFees[c.id]||{})[ym]);
+    // 청구 대상월(수임~휴업/해지/폐업) 중 미수금만
+    const unpaidMonths = [thisYM,...prevYMs].filter(ym=>isMonthlyBillable(c, ym) && !(G.monthlyFees[c.id]||{})[ym]);
     const total = unpaidMonths.reduce((s,ym)=>s+getFeeForYM(c,ym),0);
     return {...c, unpaidMonths, total};
   }).filter(c=>c.unpaidMonths.length>0);
@@ -10065,8 +10069,8 @@ function openAnnualFeeStatement() {
   let selYr = yr;
   const genHTML = (y) => {
     const months = Array.from({length:12},(_,i)=>String(i+1).padStart(2,'0')).map(m=>`${y}-${m}`);
-    const feeClients = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&getDealTypes(c).some(d=>['기장','고문','성실'].includes(d)));
-    const rows = feeClients.filter(c=>months.some(ym=>getFeeForYM(c,ym)>0)).map(c=>{
+    const feeClients = G.clients.filter(c=>getDealTypes(c).some(d=>['기장','고문','성실'].includes(d)));
+    const rows = feeClients.filter(c=>months.some(ym=>isMonthlyBillable(c,ym)) || months.some(ym=>G.monthlyFees[c.id]?.[ym])).map(c=>{
       const cells = months.map(ym=>G.monthlyFees[c.id]?.[ym]?`<td style="text-align:center;background:#e8f5e9;color:#2e7d32;font-size:11px">${(G.feePayments?.[c.id]?.[ym]?.method||'✓')}</td>`:`<td style="text-align:center;color:#ddd;font-size:11px">-</td>`);
       const paid = months.filter(ym=>G.monthlyFees[c.id]?.[ym]).length;
       const cTotal = months.filter(ym=>G.monthlyFees[c.id]?.[ym]).reduce((a,ym)=>a+getFeeForYM(c,ym),0);
