@@ -4700,7 +4700,6 @@ function renderJulgae() {
   else if (G.julgaeDoneFilter==='미완료') clients = clients.filter(c=>!julgaeVal(pKey2,c.id).a);
   if (G.julgaeConsulFilter==='완료') clients = clients.filter(c=>julgaeVal(pKey2,c.id).c);
   else if (G.julgaeConsulFilter==='미완료') clients = clients.filter(c=>!julgaeVal(pKey2,c.id).c);
-  clients = applyTabFilters(clients, 'julgae'); // 공통 추가필터(인격·과세·수임·태그·위험도·등급·CMS·수금상태)
 
   const consulCount    = clients.filter(c => julgaeVal(pKey2, c.id).c).length;
   const bookCount     = clients.filter(c => julgaeVal(pKey2, c.id).b).length;
@@ -5092,10 +5091,11 @@ function renderJulgae() {
   })() : ''}
 
   <div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap">
-    <button class="btn-sm" onclick="G.julgaeToolsOpen=!G.julgaeToolsOpen;renderJulgae()" style="background:#f0f2f7;color:#555;border:1px solid #d8dbe0;font-weight:600">${G.julgaeToolsOpen?'▾ 도구·컬럼 접기':'▸ 도구·컬럼 펼치기'}</button>
-    <button class="btn-sm" style="background:#fce4ec;color:#880e4f;border:1.5px solid #f48fb1" onclick="showNameRepDuplicates()">🔎 중복검색</button>
+    <button class="btn-sm" onclick="G.julgaeToolsOpen=!G.julgaeToolsOpen;renderJulgae()" style="background:#f0f2f7;color:#555;border:1px solid #d8dbe0;font-weight:600">${G.julgaeToolsOpen?'▾ 도구 접기':'▸ 도구 펼치기'}</button>
+    <button class="btn-sm" onclick="G.julgaeColsOpen=!G.julgaeColsOpen;renderJulgae()" style="background:#f0f2f7;color:#555;border:1px solid #d8dbe0;font-weight:600">${G.julgaeColsOpen?'▾ 컬럼추가 접기':'▸ 컬럼추가 펼치기'}</button>
   </div>
   ${G.julgaeToolsOpen?`<div class="filter-bar">
+    <button class="btn-sm" style="background:#fce4ec;color:#880e4f;border:1.5px solid #f48fb1" onclick="showNameRepDuplicates()">🔎 중복검색</button>
     <button class="btn-sm" style="background:#e3f2fd;color:#1565c0;border:1.5px solid #90caf9" onclick="openEnrollModal('${pKey}')">
       ☑ 업체 선택${hasEnroll?` (${period.enrolled.length})`:' (자동)'}
     </button>
@@ -5115,8 +5115,7 @@ function renderJulgae() {
   ${(G.periodNotes||{})[pKey]?`<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:8px;padding:8px 14px;margin-bottom:10px;font-size:13px;color:#5d4037;display:flex;align-items:flex-start;gap:8px"><span style="font-size:15px;flex-shrink:0">📝</span><span style="flex:1">${esc((G.periodNotes||{})[pKey])}</span><button onclick="openPeriodNote('${pKey}')" style="font-size:11px;padding:2px 8px;border-radius:6px;border:1px solid #ffe082;background:#fff;color:#e65100;cursor:pointer;font-family:inherit;flex-shrink:0">수정</button></div>`:''}
   ${prevPeriods.length>0?`<div style="font-size:12px;color:#888;background:#fffde7;padding:6px 12px;border-radius:8px;margin-bottom:10px">💡 과거 동기(${prevPeriods.map(p=>esc(p.label)).join(', ')}) 수입금액·수수료청구액이 참고로 표시됩니다. (전년·전전년)</div>`:''}
 
-  ${G.julgaeToolsOpen && jChips?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">${jChips}</div>`:''}
-  ${tabFilterBar('julgae')}
+  ${G.julgaeColsOpen && jChips?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">${jChips}</div>`:''}
 
   ${G.julgaeKanban && period ? `
   <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:14px">
