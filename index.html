@@ -436,7 +436,7 @@ async function decompressB64(b64) {
 
 function expandClients(mini) {
   return mini.map(m => ({
-    id: m.i, name: m.n, rep: m.r, bizNo: m.bn || '', jumin: m.crn || m.idn || '', relatedGroup: '', groupMain: false, phone: m.p || '', email: '',
+    id: m.i, name: m.n || '', rep: m.r || '', bizNo: m.bn || '', jumin: m.crn || m.idn || '', relatedGroup: '', groupMain: false, phone: m.p || '', email: '',
     taxType: m.t, vatType: m.v, bizType: m.b || '', taxOffice: m.o || '',
     manager: m.m || '', fee: m.f || 0, feeSingo: m.fs || 0, feeJojung: m.fj || 0, feeSeongsi: m.fse || 0,
     feeStatus: '청구완료', cms: m.cms || false, contracts: m.c || [],
@@ -569,7 +569,7 @@ const REPORT_TYPE_FILTERS = {
   vat_yej:  c => c.taxType === '법인' && c.vatType === '일반',
   corp:     c => c.taxType === '법인',
   income:   c => c.taxType === '개인' && !getDealTypes(c).includes('성실'),
-  seongsi:  c => getDealTypes(c).includes('성실'),
+  seongsi:  c => c.taxType === '개인' && getDealTypes(c).includes('성실'),
   sajup:    c => c.vatType === '면세',
 };
 
@@ -730,6 +730,7 @@ function saveToLS() {
     localStorage.setItem('tm_contactLogs', JSON.stringify(G.contactLogs||{}));
     localStorage.setItem('tm_adHocFees', JSON.stringify(G.adHocFees||{}));
     localStorage.setItem('tm_julgaeAdhoc', JSON.stringify(G.julgaeAdhoc||{}));
+    localStorage.setItem('tm_income26Unmatched', JSON.stringify(G.income26Unmatched||[]));
     if (G.julgaeSelectedPeriods) localStorage.setItem('tm_julgaeSelectedPeriods', JSON.stringify(G.julgaeSelectedPeriods));
     if (G.julgaeSelectedYears) localStorage.setItem('tm_julgaeSelectedYears', JSON.stringify(G.julgaeSelectedYears));
     if (G.pinnedPeriods) localStorage.setItem('tm_pinnedPeriods', JSON.stringify(G.pinnedPeriods));
@@ -739,7 +740,7 @@ function saveToLS() {
     showSaveError('로컬 저장 공간이 부족합니다');
   }
   if (G.user) {
-    fbDb.ref('taxmanager/' + G.user.uid).set({
+    return fbDb.ref('taxmanager/' + G.user.uid).set({
       clients:     JSON.stringify(G.clients),
       periods:     JSON.stringify(G.periods),
       julgae:      JSON.stringify(G.julgae),
@@ -768,9 +769,10 @@ function saveToLS() {
       invoiceHistory: JSON.stringify(G.invoiceHistory||[]),
       income26Unmatched: JSON.stringify(G.income26Unmatched||[]),
       pinnedPeriods: JSON.stringify(G.pinnedPeriods||[]),
-    }).catch(e => {
+    }).then(() => true).catch(e => {
       console.error('Firebase 저장 실패:', e);
       showSaveError('클라우드 저장 실패 — 로컬에만 저장됨');
+      return false;
     });
   }
 }
@@ -891,8 +893,8 @@ function getStats() {
     noData: active.filter(c => !c.dataReceived).length,
     pending: active.filter(c => c.dataReceived && !c.bookkeeping).length,
     unpaid: active.filter(c => c.feeStatus === '미수금').length,
-    totalFee: active.reduce((s,c) => s+c.fee, 0),
-    collected: active.filter(c => c.feeStatus==='수금완료').reduce((s,c)=>s+c.fee,0),
+    totalFee: active.reduce((s,c) => s+(c.fee||0), 0),
+    collected: active.filter(c => c.feeStatus==='수금완료').reduce((s,c)=>s+(c.fee||0),0),
     terminated: G.clients.filter(c=>c.status==='해지').length,
     closure: G.clients.filter(c=>c.status==='폐업').length,
     closurePending: G.clients.filter(c=>c.status==='폐업'&&!c.closureTaxApproved).length,
@@ -1118,7 +1120,7 @@ function filteredClients() {
   const getGroupKey = buildClientGroupMap(G.clients);
   let list = G.clients.filter(c => {
     if (!G.showTerminated && (c.status==='해지'||c.status==='폐업')) return false;
-    if (G.searchText && !c.name.replace(/\s+/g,'').includes(G.searchText.replace(/\s+/g,''))) return false;
+    if (G.searchText && !(c.name||'').replace(/\s+/g,'').includes(G.searchText.replace(/\s+/g,''))) return false;
     if (G.clientRepSearch && !(c.rep||'').replace(/\s+/g,'').includes(G.clientRepSearch.replace(/\s+/g,''))) return false;
     if (G.filterManagers.length > 0) {
       const hasNone = G.filterManagers.includes('(없음)');
@@ -3368,7 +3370,7 @@ function applyStatusChange(id) {
     const dateVal = document.getElementById('status-event-date')?.value;
     if (!dateVal) { alert('사유발생일을 입력해주세요'); return; }
     c.terminationDate = dateVal;
-    if (newStatus==='폐업') c.closureYear = dateVal.slice(0,4);
+    if (newStatus==='폐업') { c.closureYear = dateVal.slice(0,4); c.closeDate = dateVal; }
   }
   c.status = newStatus;
   saveToLS(); closeModal(); renderClients();
@@ -3604,6 +3606,7 @@ function openForm(id) {
     closureYear:'',closureTaxFiled:false,closureTaxApproved:false,
     jointBiz:false,openDate:'',closeDate:''
   };
+  if (isEdit && !c) { toast('거래처를 찾을 수 없습니다 (이미 삭제되었을 수 있습니다)', 'warning'); return; }
 
   window._formData = {...c, dealTypes: getDealTypes(c), managers: getManagers(c)};
   window._formDataSnapshot = JSON.stringify(window._formData);
@@ -4073,7 +4076,7 @@ function renderSchedule() {
   // 검색 필터 적용
   const schSrch = (G.scheduleSearch||'').trim();
   const schMgr  = G.scheduleManagerFilter||[];
-  if (schSrch) active = active.filter(c=>c.name.replace(/\s+/g,'').includes(schSrch.replace(/\s+/g,''))||(c.rep||'').replace(/\s+/g,'').includes(schSrch.replace(/\s+/g,'')));
+  if (schSrch) active = active.filter(c=>(c.name||'').replace(/\s+/g,'').includes(schSrch.replace(/\s+/g,''))||(c.rep||'').replace(/\s+/g,'').includes(schSrch.replace(/\s+/g,'')));
   if (schMgr.length>0) active = active.filter(c=>{const ms=getManagers(c);return schMgr.some(m=>m==='(없음)'?ms.length===0:ms.includes(m));});
   const today = new Date();
   const nowM = today.getMonth()+1;
@@ -4353,7 +4356,7 @@ function openScheduleClientList(ck, label) {
   window._sclSearch = '';
   function doRender() {
     const s = (window._sclSearch||'').trim();
-    const filtered = s ? allClients.filter(c=>c.name.replace(/\s+/g,'').includes((s||'').replace(/\s+/g,''))||(c.rep||'').replace(/\s+/g,'').includes((s||'').replace(/\s+/g,''))) : allClients;
+    const filtered = s ? allClients.filter(c=>(c.name||'').replace(/\s+/g,'').includes((s||'').replace(/\s+/g,''))||(c.rep||'').replace(/\s+/g,'').includes((s||'').replace(/\s+/g,''))) : allClients;
     const body = document.getElementById('scl-modal-body');
     if (!body) return;
     body.innerHTML = `
@@ -4392,7 +4395,7 @@ function renderClosure() {
 
   // 필터 적용
   let terminated = all;
-  if (G.closureNameSearch) terminated = terminated.filter(c=>c.name.replace(/\s+/g,'').includes(G.closureNameSearch.replace(/\s+/g,'')));
+  if (G.closureNameSearch) terminated = terminated.filter(c=>(c.name||'').replace(/\s+/g,'').includes(G.closureNameSearch.replace(/\s+/g,'')));
   if (G.closureRepSearch)  terminated = terminated.filter(c=>(c.rep||'').includes(G.closureRepSearch));
   if ((G.closureManagerFilter||[]).length>0) terminated = terminated.filter(c=>{const ms=getManagers(c);return G.closureManagerFilter.some(m=>m==='(없음)'?ms.length===0:ms.includes(m));});
   if (G.closureStatusFilter==='해지') terminated = terminated.filter(c=>c.status==='해지');
@@ -4596,7 +4599,7 @@ function renderJulgae() {
     const hasNone = mf.includes('(없음)');
     clients = clients.filter(c => (hasNone && getManagers(c).length===0) || getManagers(c).some(m=>mf.includes(m)));
   }
-  if (q) clients = clients.filter(c => c.name.toLowerCase().replace(/\s+/g,'').includes(q.replace(/\s+/g,'')));
+  if (q) clients = clients.filter(c => (c.name||'').toLowerCase().replace(/\s+/g,'').includes(q.replace(/\s+/g,'')));
   const rq = G.julgaeRepSearch.toLowerCase();
   if (rq) clients = clients.filter(c => (c.rep||'').toLowerCase().replace(/\s+/g,'').includes(rq.replace(/\s+/g,'')));
 
@@ -4830,7 +4833,7 @@ function renderJulgae() {
     // Build year map
     const byYear = {}; const yearOrder = [];
     periods.forEach(p => {
-      const m = p.label.match(/^(\d{2})년/);
+      const m = (p.label||'').match(/^(\d{2})년/);
       const yr = m ? (2000+Number(m[1])) : 'other';
       if (!byYear[yr]) { byYear[yr]=[]; yearOrder.push(yr); }
       byYear[yr].push(p);
@@ -5434,7 +5437,8 @@ function openUnpaidSMSBuilder() {
     const pData = G.julgae[p.id] || {};
     for (const c of G.clients) {
       const v = pData[c.id] || {};
-      if (v.fee && !v.s) unpaid.push({ client: c, fee: v.fee, paid: v.paid||0, period: p });
+      const totFee = (v.fee||0) + (p.reportType==='seongsi' ? (v.feeSeongsi||0) : 0);
+      if (totFee && !v.s) unpaid.push({ client: c, fee: totFee, paid: v.paid||0, period: p });
     }
   }
   if (!unpaid.length) { toast('미수금 내역이 없습니다', 'info'); return; }
@@ -5466,9 +5470,9 @@ function openPeriodSummaryPDF() {
   const total = clients.length;
   const rows = clients.map(c => {
     const v = G.julgae[pKey]?.[c.id] || {};
-    const fee = v.fee || 0;
+    const fee = (v.fee || 0) + (period.reportType==='seongsi' ? (v.feeSeongsi||0) : 0);
     const paid = v.paid || 0;
-    const unpaid = fee - paid;
+    const unpaid = Math.max(0, fee - paid);
     return { c, v, fee, paid, unpaid };
   });
   const totalFee = rows.reduce((a,r)=>a+r.fee,0);
@@ -5480,15 +5484,15 @@ function openPeriodSummaryPDF() {
   const tableRows = rows.map((r,i) => `
     <tr style="border-bottom:1px solid #e0e0e0">
       <td style="padding:5px 8px;text-align:center;color:#999">${i+1}</td>
-      <td style="padding:5px 8px">${r.c.name}</td>
-      <td style="padding:5px 8px">${r.c.rep||'-'}</td>
+      <td style="padding:5px 8px">${esc(r.c.name)}</td>
+      <td style="padding:5px 8px">${esc(r.c.rep||'-')}</td>
       <td style="padding:5px 8px;text-align:center">${r.v.b?'✓':''}</td>
       <td style="padding:5px 8px;text-align:center">${r.v.a?'✓':''}</td>
       <td style="padding:5px 8px;text-align:right">${r.fee?r.fee.toLocaleString():'-'}</td>
       <td style="padding:5px 8px;text-align:right">${r.paid?r.paid.toLocaleString():'-'}</td>
       <td style="padding:5px 8px;text-align:right;color:${r.unpaid>0?'#e53935':'#2e7d32'}">${r.unpaid?r.unpaid.toLocaleString():'-'}</td>
       <td style="padding:5px 8px;text-align:center">${r.v.s?'💰 수금':'<span style="color:#e53935">미수금</span>'}</td>
-      <td style="padding:5px 8px;font-size:11px;color:#666;max-width:150px;word-break:break-all">${(r.v.note||'').slice(0,40)}</td>
+      <td style="padding:5px 8px;font-size:11px;color:#666;max-width:150px;word-break:break-all">${esc((r.v.note||'').slice(0,40))}</td>
     </tr>`).join('');
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
@@ -5633,7 +5637,7 @@ function openJulgaeYearPicker(btnEl) {
   if (existing) { existing.remove(); return; }
   const byYear = {}; const yearOrder = [];
   G.periods.forEach(p => {
-    const m = p.label.match(/^(\d{2})년/);
+    const m = (p.label||'').match(/^(\d{2})년/);
     const yr = m ? (2000+Number(m[1])) : 'other';
     if (!byYear[yr]) { byYear[yr]=[]; yearOrder.push(yr); }
     byYear[yr].push(p);
@@ -5688,7 +5692,7 @@ function openJulgaeListPicker(btnEl) {
   const selYearNums = new Set((G.julgaeSelectedYears||[]).map(y=>y==='other'?'other':Number(y)));
   const allPeriods = G.periods;
   const periods = selYearNums.size > 0 ? allPeriods.filter(p => {
-    const m = p.label.match(/^(\d{2})년/);
+    const m = (p.label||'').match(/^(\d{2})년/);
     const yr = m ? (2000+Number(m[1])) : 'other';
     return selYearNums.has(yr);
   }) : allPeriods;
@@ -6205,7 +6209,7 @@ function renderFees() {
 
   // 필터 적용 (월정)
   let filteredFeeClients = feeClients;
-  if (G.feesSearch) filteredFeeClients = filteredFeeClients.filter(c=>c.name.replace(/\s+/g,'').includes(G.feesSearch.replace(/\s+/g,'')));
+  if (G.feesSearch) filteredFeeClients = filteredFeeClients.filter(c=>(c.name||'').replace(/\s+/g,'').includes(G.feesSearch.replace(/\s+/g,'')));
   if (G.feesRepSearch) filteredFeeClients = filteredFeeClients.filter(c=>(c.rep||'').includes(G.feesRepSearch));
   if ((G.feesDealFilter||[]).length>0) filteredFeeClients = filteredFeeClients.filter(c=>getDealTypes(c).some(d=>G.feesDealFilter.includes(d)));
   if ((G.feesManagerFilter||[]).length>0) filteredFeeClients = filteredFeeClients.filter(c=>{const ms=getManagers(c);return G.feesManagerFilter.some(m=>m==='(없음)'?ms.length===0:ms.includes(m));});
@@ -6663,7 +6667,7 @@ function copyPeriod(pKey) {
     G.julgae[newPk] = JSON.parse(JSON.stringify(G.julgae[pk]));
     Object.keys(G.julgae[newPk]).forEach(cid=>{
       const v = G.julgae[newPk][cid];
-      if (v && typeof v === 'object') { v.d=false; v.b=false; v.a=false; v.s=false; }
+      if (v && typeof v === 'object') { v.d=false; v.b=false; v.a=false; v.s=false; v.c=false; }
     });
   }
   G.julgaePeriodIdx = G.periods.length - 1;
@@ -6992,7 +6996,7 @@ function printEngagementLetter() {
   const text = window._elText;
   const c = window._elClient;
   if (!text || !c) return;
-  const w = window.open('','_blank');
+  const w = window.open('','_blank'); if(!w){toast('팝업이 차단되었습니다. 브라우저에서 팝업을 허용한 뒤 다시 시도하세요.','warning');return;}
   w.document.write(`<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>수임계약서_${esc(c.name)}</title>
   <style>@page{size:A4;margin:25mm}body{font-family:'Malgun Gothic',sans-serif;font-size:12pt;line-height:1.8;color:#111}
   h1{text-align:center;font-size:16pt;letter-spacing:6px;margin-bottom:20px}
@@ -7567,7 +7571,7 @@ function printInvoice() {
   const officeName = document.getElementById('inv-office')?.value||G.settings.name;
   const s = G.settings;
 
-  const w = window.open('','_blank');
+  const w = window.open('','_blank'); if(!w){toast('팝업이 차단되었습니다. 브라우저에서 팝업을 허용한 뒤 다시 시도하세요.','warning');return;}
   w.document.write(`<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>청구서_${esc(c.name)}</title>
   <style>@page{size:A4;margin:20mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Malgun Gothic',sans-serif;color:#111;font-size:13px}
   .h1{text-align:center;font-size:26px;letter-spacing:10px;color:#1a1a2e;margin-bottom:6px}.sub{text-align:center;font-size:13px;color:#555;margin-bottom:20px}
@@ -8330,7 +8334,7 @@ function filterBatchClientSearch(q, bIdx) {
   const kw = q.trim().toLowerCase();
   if (!kw) { listEl.style.display='none'; return; }
   const matches = G.clients.filter(c => c.status!=='해지' && c.status!=='폐업' &&
-    (c.name.toLowerCase().includes(kw) || (c.rep||'').toLowerCase().includes(kw))
+    ((c.name||'').toLowerCase().includes(kw) || (c.rep||'').toLowerCase().includes(kw))
   ).slice(0,10);
   if (!matches.length) { listEl.innerHTML='<div style="padding:8px;font-size:12px;color:#aaa;text-align:center">검색 결과 없음</div>'; listEl.style.display='block'; return; }
   listEl.innerHTML = matches.map(c=>`
@@ -8945,7 +8949,7 @@ function filterTRRClientSearch(q) {
   const kw = q.trim().toLowerCase();
   if (!kw) { list.style.display='none'; if(hidden) hidden.value=''; return; }
   const matches = G.clients.filter(c => c.status!=='해지' && c.status!=='폐업' &&
-    (c.name.toLowerCase().includes(kw) || (c.rep||'').toLowerCase().includes(kw) || (c.bizNo||'').includes(kw))
+    ((c.name||'').toLowerCase().includes(kw) || (c.rep||'').toLowerCase().includes(kw) || (c.bizNo||'').includes(kw))
   ).slice(0,20);
   if (!matches.length) {
     list.innerHTML = `<div style="padding:10px;font-size:12px;color:#aaa;text-align:center">검색 결과 없음</div>`;
@@ -9391,12 +9395,14 @@ function openPeriodComparison() {
     const pData = G.julgae[p.id] || {};
     const enrolled = p.enrolled || [];
     const total = enrolled.length;
-    const feeSum = enrolled.reduce((s, cid) => s + (pData[cid]?.fee || 0), 0);
+    const _ss = p.reportType==='seongsi';
+    const _cf = v => (v.fee||0) + (_ss ? (v.feeSeongsi||0) : 0);
+    const feeSum = enrolled.reduce((s, cid) => s + _cf(pData[cid]||{}), 0);
     const paidSum = enrolled.reduce((s, cid) => {
       const v = pData[cid] || {};
-      return s + (v.s ? (v.paid || v.fee || 0) : 0);
+      return s + (v.s ? (v.paid || _cf(v) || 0) : 0);
     }, 0);
-    const unpaid = feeSum - paidSum;
+    const unpaid = Math.max(0, feeSum - paidSum);
     const pct = feeSum ? Math.round(paidSum / feeSum * 100) : 0;
     return { p, total, feeSum, paidSum, unpaid, pct };
   });
@@ -9541,7 +9547,7 @@ function doBulkInvoice() {
     </div>
     <div style="margin-top:32px;text-align:right;font-size:13px;color:#555">${new Date().toLocaleDateString('ko-KR')}<br><br>${esc(s.name||'')} 드림</div>
   </div>`).join('');
-  const w=window.open('','_blank');
+  const w=window.open('','_blank'); if(!w){toast('팝업이 차단되었습니다. 브라우저에서 팝업을 허용한 뒤 다시 시도하세요.','warning');return;}
   w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>일괄청구서_${ymFmt}</title><style>@media print{.no-print{display:none!important}}</style></head><body>
     <div class="no-print" style="position:fixed;top:0;left:0;right:0;background:#1a1a2e;color:#fff;padding:8px 16px;display:flex;gap:10px;align-items:center;z-index:999">
       <button onclick="window.print()" style="padding:7px 18px;background:#4f8ef7;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">🖨 인쇄</button>
@@ -9690,12 +9696,12 @@ function printJulgaeList() {
       <td style="text-align:center">${v.d?'✓':''}</td>
       <td style="text-align:center">${v.b?'✓':''}</td>
       <td style="text-align:center">${v.a?'✓':''}</td>
-      <td style="text-align:right">${(v.fee||0).toLocaleString()}</td>
+      <td style="text-align:right">${((v.fee||0)+(period.reportType==='seongsi'?(v.feeSeongsi||0):0)).toLocaleString()}</td>
       <td style="text-align:center">${v.s?'✓':''}</td>
     </tr>`;
   }).join('');
   const doneCount=clients.filter(c=>julgaeVal(pKey2,c.id).a).length;
-  const w=window.open('','_blank');
+  const w=window.open('','_blank'); if(!w){toast('팝업이 차단되었습니다. 브라우저에서 팝업을 허용한 뒤 다시 시도하세요.','warning');return;}
   w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(period.label)} 신고목록</title>
   <style>body{font-family:'Malgun Gothic',sans-serif;font-size:12px;margin:24px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:5px 8px}th{background:#f0f0f0;font-weight:700;text-align:center}tr:nth-child(even){background:#fafafa}@media print{.no-print{display:none!important}}</style>
   </head><body>
@@ -9858,7 +9864,7 @@ function openAnnualFeeStatement() {
 }
 function printAnnualStmt() {
   const body = document.getElementById('annual-stmt-body')?.innerHTML||'';
-  const w = window.open('','_blank');
+  const w = window.open('','_blank'); if(!w){toast('팝업이 차단되었습니다. 브라우저에서 팝업을 허용한 뒤 다시 시도하세요.','warning');return;}
   w.document.write(`<html><head><title>연간 수수료 명세서</title><style>table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:4px 6px;font-size:11px}th{background:#f0f4ff}@media print{body{margin:0}}</style></head><body>${body}</body></html>`);
   w.document.close(); w.print();
 }
@@ -10007,7 +10013,8 @@ function importBackup(input) {
         input.value = '';
         return;
       }
-      G.clients  = data.clients;
+      // 손상된 백업이 빈 탭/크래시를 유발하지 않도록 필수 필드 보정
+      G.clients  = data.clients.filter(c=>c&&typeof c==='object').map(c=>({...c, name:c.name||'', id:(c.id!=null?c.id:Date.now()+Math.floor(Math.random()*1000))}));
       G.periods  = data.periods  || G.periods;
       G.julgae   = data.julgae   || G.julgae;
       G.settings = data.settings || G.settings;
@@ -10051,8 +10058,9 @@ function exportExcel() {
       : G.clients.filter(c=>clientInFilingPeriod(c, p));
     clients2.forEach(c=>{
       const v = julgaeVal(pk, c.id);
-      if (!v||(!v.d&&!v.b&&!v.a&&!v.fee&&!v.s)) return;
-      rows2.push({'신고기간':p.label,'거래처명':c.name,'대표자':c.rep||'','담당자':getManagers(c).join(','),'자료수령':v.d?'Y':'','기장완료':v.b?'Y':'','결재완료':v.a?'Y':'','수수료청구':v.fee||0,'수금완료':v.s?'Y':''});
+      if (!v||(!v.d&&!v.b&&!v.a&&!v.fee&&!v.feeSeongsi&&!v.s)) return;
+      const _feeTot=(v.fee||0)+(p.reportType==='seongsi'?(v.feeSeongsi||0):0);
+      rows2.push({'신고기간':p.label,'거래처명':c.name,'대표자':c.rep||'','담당자':getManagers(c).join(','),'자료수령':v.d?'Y':'','기장완료':v.b?'Y':'','결재완료':v.a?'Y':'','수수료청구':_feeTot,'수금완료':v.s?'Y':''});
     });
   });
   if (rows2.length) {
@@ -10721,7 +10729,7 @@ function printFeeInvoice(clientId) {
     <div class="note">* 이 청구서는 세무사무소 업무관리 시스템에서 자동 생성되었습니다.</div>
     <div class="stamp">직 인</div>
   </body></html>`;
-  const w = window.open('','_blank','width=700,height=900');
+  const w = window.open('','_blank','width=700,height=900'); if(!w){toast('팝업이 차단되었습니다. 브라우저에서 팝업을 허용한 뒤 다시 시도하세요.','warning');return;}
   w.document.write(html); w.document.close();
   setTimeout(()=>w.print(), 600);
 }
@@ -10851,75 +10859,19 @@ async function manualSave() {
   const toastEl = document.getElementById('save-toast');
   if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; btn.textContent = '⏳ 저장 중...'; }
   try {
-    // localStorage 저장 (동기)
-    try {
-      localStorage.setItem('tm_clients', JSON.stringify(G.clients));
-      localStorage.setItem('tm_periods', JSON.stringify(G.periods));
-      localStorage.setItem('tm_julgae', JSON.stringify(G.julgae));
-      localStorage.setItem('tm_settings', JSON.stringify(G.settings));
-      localStorage.setItem('tm_monthlyFees', JSON.stringify(G.monthlyFees));
-      localStorage.setItem('tm_invoiceData', JSON.stringify(G.invoiceData||{}));
-      localStorage.setItem('tm_clientNotes', JSON.stringify(G.clientNotes||{}));
-      localStorage.setItem('tm_taxInvoice', JSON.stringify(G.taxInvoice||{}));
-      localStorage.setItem('tm_favorites', JSON.stringify(G.favorites||[]));
-      localStorage.setItem('tm_feeHistory', JSON.stringify(G.feeHistory||{}));
-      localStorage.setItem('tm_managerHistory', JSON.stringify(G.managerHistory||{}));
-      localStorage.setItem('tm_feeChangeHistory', JSON.stringify(G.feeChangeHistory||{}));
-      localStorage.setItem('tm_clientTags', JSON.stringify(G.clientTags||{}));
-      localStorage.setItem('tm_docChecklist', JSON.stringify(G.docChecklist||{}));
-      localStorage.setItem('tm_closureChecklist', JSON.stringify(G.closureChecklist||{}));
-      localStorage.setItem('tm_withholding', JSON.stringify(G.withholding||{}));
-      localStorage.setItem('tm_invoiceHistory', JSON.stringify(G.invoiceHistory||[]));
-      localStorage.setItem('tm_periodNotes', JSON.stringify(G.periodNotes||{}));
-      localStorage.setItem('tm_julgaeLinks', JSON.stringify(G.julgaeLinks||{}));
-      localStorage.setItem('tm_feePayments', JSON.stringify(G.feePayments||{}));
-      localStorage.setItem('tm_filterPresets', JSON.stringify(G.filterPresets||[]));
-      localStorage.setItem('tm_contactLogs', JSON.stringify(G.contactLogs||{}));
-      localStorage.setItem('tm_adHocFees', JSON.stringify(G.adHocFees||{}));
-      if (G.julgaeSelectedPeriods) localStorage.setItem('tm_julgaeSelectedPeriods', JSON.stringify(G.julgaeSelectedPeriods));
-      if (G.julgaeSelectedYears) localStorage.setItem('tm_julgaeSelectedYears', JSON.stringify(G.julgaeSelectedYears));
-    } catch(e) {
-      showSaveError('로컬 저장 공간 부족 — 일부 데이터가 저장되지 않았습니다');
-      return;
+    // 단일 저장 경로(saveToLS)에 위임 — payload 누락으로 클라우드 데이터가 삭제되던 문제 방지
+    const ok = await saveToLS();
+    if (toastEl) {
+      if (!G.user) toastEl.textContent = '✔ 로컬 저장됨 (로그인 시 클라우드 동기화)';
+      else if (ok === false) toastEl.textContent = '⚠ 로컬 저장됨 (클라우드 동기화 실패)';
+      else toastEl.textContent = '✔ 클라우드 저장됨';
+      toastEl.style.display = 'inline';
+      toastEl.style.color = (ok === false) ? '#e57373' : '#81c784';
+      setTimeout(() => { toastEl.style.display = 'none'; }, 3000);
     }
-    // Firebase 저장 (비동기, 로그인 시)
-    if (G.user) {
-      await fbDb.ref('taxmanager/' + G.user.uid).set({
-        clients:     JSON.stringify(G.clients),
-        periods:     JSON.stringify(G.periods),
-        julgae:      JSON.stringify(G.julgae),
-        settings:    JSON.stringify(G.settings),
-        monthlyFees: JSON.stringify(G.monthlyFees),
-        invoiceData: JSON.stringify(G.invoiceData||{}),
-        clientNotes: JSON.stringify(G.clientNotes||{}),
-        taxInvoice:  JSON.stringify(G.taxInvoice||{}),
-        favorites:   JSON.stringify(G.favorites||[]),
-        feeHistory:  JSON.stringify(G.feeHistory||{}),
-        managerHistory: JSON.stringify(G.managerHistory||{}),
-        feeChangeHistory: JSON.stringify(G.feeChangeHistory||{}),
-        clientTags:  JSON.stringify(G.clientTags||{}),
-        docChecklist: JSON.stringify(G.docChecklist||{}),
-        closureChecklist: JSON.stringify(G.closureChecklist||{}),
-        withholding: JSON.stringify(G.withholding||{}),
-        periodNotes: JSON.stringify(G.periodNotes||{}),
-        julgaeLinks: JSON.stringify(G.julgaeLinks||{}),
-        feePayments: JSON.stringify(G.feePayments||{}),
-        filterPresets: JSON.stringify(G.filterPresets||[]),
-        contactLogs: JSON.stringify(G.contactLogs||{}),
-        adHocFees: JSON.stringify(G.adHocFees||{}),
-        julgaeSelectedPeriods: JSON.stringify(G.julgaeSelectedPeriods||[]),
-        julgaeSelectedYears: JSON.stringify(G.julgaeSelectedYears||[]),
-      });
-      toastEl.textContent = '✔ 클라우드 저장됨';
-    } else {
-      toastEl.textContent = '✔ 로컬 저장됨 (로그인 시 클라우드 동기화)';
-    }
-    toastEl.style.display = 'inline';
-    toastEl.style.color = '#81c784';
-    setTimeout(() => { toastEl.style.display = 'none'; }, 3000);
   } catch(e) {
     console.error('저장 실패:', e);
-    showSaveError('Firebase 저장 실패 — 로컬에만 저장됨 (' + (e.message||'네트워크 오류') + ')');
+    showSaveError('저장 실패 — ' + (e.message||'네트워크 오류'));
   } finally {
     if (btn) { btn.disabled = false; btn.style.opacity = ''; btn.textContent = '💾 저장'; }
   }
@@ -10949,7 +10901,7 @@ function doGlobalSearch(q) {
   const lq = q.toLowerCase();
   const matches = G.clients.filter(c=>{
     if (!lq) return true;
-    const _nn=c.name.toLowerCase().replace(/\s+/g,''),_lq=lq.replace(/\s+/g,'');return _nn.includes(_lq)||(c.rep||'').toLowerCase().replace(/\s+/g,'').includes(_lq)||(c.bizNo||'').includes(lq);
+    const _nn=(c.name||'').toLowerCase().replace(/\s+/g,''),_lq=lq.replace(/\s+/g,'');return _nn.includes(_lq)||(c.rep||'').toLowerCase().replace(/\s+/g,'').includes(_lq)||(c.bizNo||'').includes(lq);
   }).slice(0,20);
   if (!matches.length) { res.innerHTML='<div style="color:#aaa;text-align:center;padding:20px 0">검색 결과 없음</div>'; return; }
   res.innerHTML = matches.map(c=>`<div onclick="closeGlobalSearch();switchTab('clients');G.searchText='${esc(c.name).replace(/'/g,"\\'")}';renderClients()" style="padding:10px 12px;border-radius:10px;border:1px solid #f0f0f0;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;background:#fafbff" onmouseover="this.style.background='#e8f0fe'" onmouseout="this.style.background='#fafbff'">
@@ -11138,15 +11090,8 @@ function checkAllJulgaeField(field) {
   const period = G.periods[Math.min(G.julgaePeriodIdx, Math.max(0, G.periods.length-1))];
   if (!period) return;
   const pKey = period.id;
-  // renderJulgae와 동일한 클라이언트 목록 사용
-  let clients = G.clients.filter(c => c.status !== '해지' && c.status !== '폐업');
-  const hasEnroll = period.enrolled && period.enrolled.length > 0;
-  if (hasEnroll) {
-    clients = clients.filter(c => period.enrolled.includes(c.id));
-  } else {
-    clients = applyReportFilter(clients, period);
-  }
-  const ids = clients.map(c => c.id);
+  // 현재 화면에 실제로 보이는 목록(_julgaeVisible)에만 적용 — 필터/검색 적용된 집합과 일치, 숨겨진 거래처 오염 방지
+  const ids = (window._julgaeVisible || []).filter(c => !c._julgaeAdhoc).map(c => c.id);
   const allOn = ids.every(id => !!(G.julgae[pKey]?.[id]?.[field]));
   const newVal = !allOn;
   if (!G.julgae[pKey]) G.julgae[pKey] = {};
@@ -12241,7 +12186,7 @@ function batchPrintFeeInvoices() {
       </table>
     </div>`;
   }).join('');
-  const win = window.open('','_blank');
+  const win = window.open('','_blank'); if(!win){toast('팝업이 차단되었습니다. 브라우저에서 팝업을 허용한 뒤 다시 시도하세요.','warning');return;}
   win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${yr}년 ${mo}월 수수료 청구서 일괄</title>
     <style>body{font-family:inherit;margin:20px}@media print{.no-print{display:none}}</style>
   </head><body><button class="no-print" onclick="window.print()" style="margin-bottom:16px;padding:8px 16px;background:#4f8ef7;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px">🖨 인쇄</button>${invoiceHtml}</body></html>`);
@@ -12315,7 +12260,7 @@ function renderNotesSearch(q) {
   Object.entries(G.clientNotes||{}).forEach(([idStr, notes])=>{
     const c = G.clients.find(x=>x.id===Number(idStr)); if(!c) return;
     notes.forEach(n=>{
-      if (!lq || n.text.toLowerCase().includes(lq) || c.name.toLowerCase().includes(lq))
+      if (!lq || n.text.toLowerCase().includes(lq) || (c.name||'').toLowerCase().includes(lq))
         matches.push({c, n});
     });
   });
