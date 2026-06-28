@@ -2043,6 +2043,10 @@ function renderClients() {
     ${(()=>{
       const sf = (G.clientSort||{}).field||'d', sd = (G.clientSort||{}).dir||'asc';
       const opts = [{k:'c',l:'수임일자'},{k:'n',l:'업체명'},{k:'r',l:'대표자'},{k:'d',l:'수임유형'},{k:'f',l:'수수료'},{k:'m',l:'담당자'}];
+      const curLabel = (opts.find(o=>o.k===sf)||{l:''}).l + (sd==='asc'?'↑':'↓');
+      const open = !!G.clientSortOpen;
+      const toggle = `<button onclick="G.clientSortOpen=!G.clientSortOpen;renderClients()" style="padding:4px 10px;border-radius:16px;font-size:11px;cursor:pointer;font-family:inherit;background:#f0f2f7;color:#555;border:1px solid #d8dbe0;font-weight:600">${open?'▾ 정렬필터':'▸ 정렬필터'} (${curLabel})</button>`;
+      if (!open) return toggle;
       const btns = opts.map(({k,l})=>{
         const active = sf===k;
         const nextDir = active && sd==='asc' ? 'desc' : 'asc';
@@ -2051,7 +2055,7 @@ function renderClients() {
         return `<button onclick="G.clientSort={field:'${k}',dir:'${nextDir}'};G.clientPage=0;renderClients()" style="padding:4px 9px;border-radius:16px;font-size:11px;cursor:pointer;font-family:inherit;${st}">${l}${icon}</button>`;
       }).join('');
       const resetBtn = (sf!=='d'||sd!=='asc') ? `<button onclick="G.clientSort={field:'d',dir:'asc'};G.clientPage=0;renderClients()" style="padding:4px 7px;border-radius:16px;font-size:10px;cursor:pointer;font-family:inherit;background:#fdecea;color:#c62828;border:1.5px solid #ef9a9a" title="정렬 초기화">✕</button>` : '';
-      return `<div style="display:contents">${btns}${resetBtn}</div>`;
+      return `<div style="display:contents">${toggle}${btns}${resetBtn}</div>`;
     })()}
     <div style="font-size:12px;color:#888;white-space:nowrap;margin-left:4px">총 ${totalCount}개 (${G.clientPage+1}/${totalPages})</div>
     ${sectionToggleBtn('clients-list')}
@@ -4908,11 +4912,6 @@ function renderJulgae() {
   document.getElementById('page-julgae').innerHTML = `
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
     <h2 style="font-size:20px;font-weight:800">신고 및 결재</h2>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn-sm" style="background:#e8f5e9;color:#1b5e20;border:1.5px solid #81c784" onclick="exportJulgaeToExcel()">📊 Excel 내보내기</button>
-      <button class="btn-sm" style="background:#fff8e1;color:#e65100;border:1.5px solid #ffcc02" onclick="openPeriodSummaryPDF()">🖨 결과 요약 PDF</button>
-      <button class="btn-primary btn-sm" onclick="openAddPeriod()" style="padding:8px 14px">+ 신고리스트 추가</button>
-    </div>
   </div>
 
   ${periods.length === 0 ? `<div class="card" style="text-align:center;padding:40px;color:#aaa">
@@ -4992,7 +4991,9 @@ function renderJulgae() {
       ? `<button onclick="togglePeriodLock('${period.id}')" style="padding:4px 10px;border-radius:6px;border:1.5px solid #43a047;background:#e8f5e9;color:#2e7d32;font-size:12px;cursor:pointer;font-family:inherit">🔓 해제</button>`
       : `<button onclick="togglePeriodLock('${period.id}')" style="padding:4px 10px;border-radius:6px;border:1.5px solid #e53935;background:#fdecea;color:#c62828;font-size:12px;cursor:pointer;font-family:inherit">🔒 마감</button>`)
       : '';
-    return `<div class="card" style="padding:12px 14px;margin-bottom:12px">
+    const _pOpen = G.julgaeProgressOpen!==false;
+    return `<div style="margin-bottom:8px"><button class="btn-sm" onclick="G.julgaeProgressOpen=G.julgaeProgressOpen===false?true:false;renderJulgae()" style="background:#f0f2f7;color:#555;border:1px solid #d8dbe0;font-weight:600">${_pOpen?'▾ 신고기간 진행현황 접기':'▸ 신고기간 진행현황'}${period?` — ${esc(period.label)}`:''}</button></div>
+    ${_pOpen?`<div class="card" style="padding:12px 14px;margin-bottom:12px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px">
         <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#888;font-weight:600">
           신고기간 진행 현황${period?` — <b style="color:#333">${esc(period.label)}</b>${ddBadge}`:''}
@@ -5009,10 +5010,12 @@ function renderJulgae() {
         </button>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:8px">${tiles||'<span style="font-size:12px;color:#aaa">리스트를 선택하면 여기에 표시됩니다</span>'}</div>
-    </div>`;
+    </div>`:''}`;
   })()}
 
   ${period ? `
+  <div style="margin-bottom:8px"><button class="btn-sm" onclick="G.julgaeSummaryOpen=!G.julgaeSummaryOpen;renderJulgae()" style="background:#f0f2f7;color:#555;border:1px solid #d8dbe0;font-weight:600">${G.julgaeSummaryOpen?'▾ 요약 접기':'▸ 요약'} — 업체 ${total} · 청구 ${feeTotal.toLocaleString()}원</button></div>
+  ${G.julgaeSummaryOpen?`
   <div style="display:flex;align-items:stretch;gap:8px;margin-bottom:12px;overflow-x:auto">
     <div class="stat-card" style="border-left:3px solid #4f8ef7;flex:0 0 auto;min-width:130px;padding:8px 12px">
       <div class="stat-label" style="font-size:11px">대상 업체</div>
@@ -5043,7 +5046,7 @@ function renderJulgae() {
           `</div>${arrow}</div>`;
       }).join('')}
     </div>` : ''}
-  </div>
+  </div>`:''}
 
   ${prevPeriods1.length > 0 ? (()=>{
     const open = G._yrCompareOpen !== false;
@@ -5097,6 +5100,9 @@ function renderJulgae() {
     <button class="btn-sm" onclick="G.julgaeColsOpen=!G.julgaeColsOpen;renderJulgae()" style="background:${jHiddenCount?'#fff3e0':'#f0f2f7'};color:${jHiddenCount?'#e65100':'#555'};border:1px solid ${jHiddenCount?'#ffb74d':'#d8dbe0'};font-weight:600">${G.julgaeColsOpen?'▾ 컬럼추가/숨김 접기':'▸ 컬럼추가/숨김'}${jHiddenCount?` (${jHiddenCount} 숨김)`:''}</button>
   </div>
   ${G.julgaeToolsOpen?`<div class="filter-bar">
+    <button class="btn-sm" style="background:#e8f5e9;color:#1b5e20;border:1.5px solid #81c784" onclick="exportJulgaeToExcel()">📊 Excel 내보내기</button>
+    <button class="btn-sm" style="background:#fff8e1;color:#e65100;border:1.5px solid #ffcc02" onclick="openPeriodSummaryPDF()">🖨 결과 요약 PDF</button>
+    <button class="btn-primary btn-sm" onclick="openAddPeriod()">+ 신고리스트 추가</button>
     <button class="btn-sm" style="background:#fce4ec;color:#880e4f;border:1.5px solid #f48fb1" onclick="showNameRepDuplicates()">🔎 중복검색</button>
     <button class="btn-sm" style="background:#e3f2fd;color:#1565c0;border:1.5px solid #90caf9" onclick="openEnrollModal('${pKey}')">
       ☑ 업체 선택${hasEnroll?` (${period.enrolled.length})`:' (자동)'}
