@@ -4353,7 +4353,6 @@ function renderSchedule() {
     <div style="min-width:100px">${filterPopupBtn('scheduleManagerFilter','담당자 전체')}</div>
     ${(schSrchActive||schMgrActive)?`<button onclick="G.scheduleSearch='';G.scheduleManagerFilter=[];renderSchedule()" style="padding:7px 10px;border-radius:8px;border:1.5px solid #e0e0e0;background:#fff;color:#888;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap">초기화</button>`:''}
   </div>
-  ${tabFilterBar('schedule')}
   ${(schSrchActive||schMgrActive)?`<div style="font-size:12px;color:#4f8ef7;background:#e8f0fe;border-radius:8px;padding:6px 12px;margin-bottom:12px">🔍 필터 적용 중 — 각 항목의 건수가 검색 결과 기준입니다</div>`:''}
   ${KEY_ITEMS.length?`<div class="stat-grid" style="margin-bottom:16px">${keyCards}</div>`:''}
   ${calHTML}
@@ -6357,6 +6356,9 @@ function deleteAdHocFee(clientId, feeId) {
 function renderFees() {
   if (!G.feesYM) G.feesYM = currentYM();
   const ym = G.feesYM;
+  // 모든 수수료 섹션 기본 접힘 (최초 1회만 — 이후 사용자 토글 상태 유지)
+  if (!G.sectionCollapsed) G.sectionCollapsed = {};
+  ['fees-monthly','fees-filing','fees-adhoc'].forEach(k=>{ if(!(k in G.sectionCollapsed)) G.sectionCollapsed[k]=true; });
 
   // 월정 수수료 대상: 기장/고문/성실 활성 거래처
   const monthlyClients = G.clients.filter(c =>
@@ -6540,18 +6542,20 @@ function renderFees() {
     });
     return aging;
   })();
-  const agingOpen = (G.agingOpen !== false);
+  const agingOpen = !!G.feesAgingOpen; // 기본 접힘
+  const agingTotCnt = agingData.m1.count + agingData.m23.count + agingData.m4p.count;
+  const agingTotAmt = agingData.m1.total + agingData.m23.total + agingData.m4p.total;
 
   document.getElementById('page-fees').innerHTML = `
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
     <h2 style="font-size:20px;font-weight:800">💰 수수료 관리</h2>
   </div>
-  <div class="card" style="margin-bottom:14px;padding:0;border-left:4px solid #7b1fa2;overflow:hidden">
-    <div onclick="G.feesToolsOpen=!G.feesToolsOpen;renderFees()" style="display:flex;align-items:center;gap:8px;padding:11px 14px;cursor:pointer;background:#f9f0ff">
-      <span style="font-size:12px;color:#7b1fa2">${G.feesToolsOpen?'▼':'▶'}</span>
-      <span style="font-weight:700;color:#6a1b9a;font-size:14px">🛠 도구 (인상이력·인쇄·내보내기·청구·안내)</span>
+  <div class="card" style="margin-bottom:14px;border-left:4px solid #7b1fa2">
+    <div style="display:flex;align-items:center;gap:8px;${G.feesToolsOpen?'margin-bottom:12px':''}">
+      <button onclick="G.feesToolsOpen=!G.feesToolsOpen;renderFees()" style="padding:2px 8px;border-radius:6px;border:1.5px solid #e0e0e0;background:${G.feesToolsOpen?'#fff':'#f5f5f5'};color:#888;font-size:12px;cursor:pointer;font-family:inherit;line-height:1.4">${G.feesToolsOpen?'▼':'▶'}</button>
+      <div class="card-title" style="margin-bottom:0;color:#6a1b9a">🛠 도구 (인상이력·인쇄·내보내기·청구·안내)</div>
     </div>
-    ${G.feesToolsOpen?`<div style="display:flex;gap:8px;flex-wrap:wrap;padding:12px 14px;border-top:1px solid #f0e6f7;background:#fff">
+    ${G.feesToolsOpen?`<div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn-sm" style="background:#f9f0ff;color:#7b1fa2;border:1.5px solid #ce93d8" onclick="openFeeChangeHistory()">💴 인상이력</button>
       <button class="btn-sm" style="background:#e8f0fe;color:#1a237e;border:1.5px solid #9fa8da" onclick="batchPrintFeeInvoices()">🖨 일괄인쇄</button>
       <button class="btn-sm" style="background:#e8f5e9;color:#1b5e20;border:1.5px solid #81c784" onclick="exportFeesToExcel()">📊 Excel 내보내기</button>
@@ -6561,10 +6565,11 @@ function renderFees() {
     </div>`:''}
   </div>
 
-  <div class="card" style="margin-bottom:14px;cursor:pointer" onclick="G.agingOpen=G.agingOpen===false?true:false;renderFees()">
-    <div style="display:flex;justify-content:space-between;align-items:center">
+  <div class="card" style="margin-bottom:14px;border-left:4px solid #e53935">
+    <div style="display:flex;align-items:center;gap:8px;${agingOpen?'margin-bottom:0':''}">
+      <button onclick="G.feesAgingOpen=!G.feesAgingOpen;renderFees()" style="padding:2px 8px;border-radius:6px;border:1.5px solid #e0e0e0;background:${agingOpen?'#fff':'#f5f5f5'};color:#888;font-size:12px;cursor:pointer;font-family:inherit;line-height:1.4">${agingOpen?'▼':'▶'}</button>
       <div class="card-title" style="margin-bottom:0">📊 미수금 에이징 분석</div>
-      <span style="font-size:12px;color:#888">${agingOpen?'▲ 접기':'▼ 열기'}</span>
+      ${!agingOpen?`<span style="font-size:12px;color:#888;margin-left:auto">총 ${agingTotCnt}건 · <b style="color:#e53935">${agingTotAmt.toLocaleString()}원</b></span>`:''}
     </div>
     ${agingOpen ? `
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px">
@@ -6589,9 +6594,10 @@ function renderFees() {
   <!-- 월정 수수료 -->
   <div class="card" style="margin-bottom:16px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-      <div style="display:flex;align-items:center;gap:8px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         ${sectionToggleBtn('fees-monthly')}
         <div class="card-title" style="margin-bottom:0">📅 월정 수수료 (기장·고문·성실)</div>
+        ${(G.sectionCollapsed||{})['fees-monthly']?`<span style="font-size:12px;color:#555">청구 ${mFeeTotal.toLocaleString()} · 수금 <b style="color:#2e7d32">${mFeeCollected.toLocaleString()}</b> · 미수금 <b style="color:#e53935">${mFeeUnpaid.toLocaleString()}</b></span>`:''}
       </div>
       <div style="display:flex;align-items:center;gap:6px">
         <button onclick="G.feesYM='${prevYM}';renderFees()" style="padding:5px 10px;border-radius:7px;border:1px solid #e0e0e0;background:#fff;cursor:pointer;font-family:inherit">‹</button>
