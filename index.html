@@ -5507,6 +5507,34 @@ function _setJulgae(pKey, cid, patch) {
 }
 
 // 수금 입력 모달: 체크박스(전액수금)가 기본, 금액 입력 시 '일부입금(차액 미수금)' vs '청구액 변경' 구분
+// 신고수수료 거래처별 수금 모달 — 어느 신고의 수수료를 수금할지 선택(각 기간별 수금/일부입금/청구변경은 openCollectModal 재사용)
+function openFilingCollectModal(cid) {
+  const c = G.clients.find(x=>x.id===cid);
+  // 이 거래처의 미수금 있는 신고기간 수집
+  const rows = [];
+  for (const pKey of Object.keys(G.julgae)) {
+    const period = G.periods.find(p=>p.id===pKey); if(!period) continue;
+    const v = G.julgae[pKey]?.[cid]; if(!v) continue;
+    const billed = julgaeBilled(period, v); if(!billed) continue;
+    const unpaid = julgaeUnpaid(period, v); if(unpaid<=0) continue;
+    rows.push({pKey, label:period.label, billed, paid:julgaeCollectedAmt(period,v), unpaid});
+  }
+  rows.sort((a,b)=>a.label.localeCompare(b.label));
+  const body = rows.length ? rows.map(r=>`
+    <div style="border:1px solid #eee;border-radius:10px;padding:10px 12px;margin-bottom:8px">
+      <div style="font-weight:700;font-size:13px;margin-bottom:4px">${esc(r.label)}</div>
+      <div style="font-size:12px;color:#555;margin-bottom:8px">청구 ${r.billed.toLocaleString()} · 입금 <b style="color:#2e7d32">${r.paid.toLocaleString()}</b> · 미수 <b style="color:#e53935">${r.unpaid.toLocaleString()}</b></div>
+      <button onclick="openCollectModal('${r.pKey}',${cid})" class="btn-primary" style="width:100%;padding:9px">💵 수금 입력 (전액·일부·청구변경)</button>
+    </div>`).join('') : '<div style="color:#2e7d32;text-align:center;padding:20px">미수금이 없습니다 ✓</div>';
+  showModal(`<div style="max-width:440px;width:92vw;max-height:calc(100vh - 60px);display:flex;flex-direction:column">
+    <div class="modal-header"><h3>💰 신고수수료 수금 — ${esc(c?.name||'')}</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body" style="overflow-y:auto;flex:1">
+      <div style="font-size:12px;color:#888;margin-bottom:10px">수금할 신고를 선택하세요. 입금액이 청구액과 다르면 '청구액 변경' 또는 '일부 입금'을 선택할 수 있고, 신고리스트 금액과 자동 연동됩니다.</div>
+      ${body}
+    </div>
+  </div>`);
+}
+
 function openCollectModal(pKey, cid) {
   const period = G.periods.find(p=>p.id===pKey); if(!period){toast('기간 오류','warning');return;}
   const c = G.clients.find(x=>x.id===cid);
@@ -6187,6 +6215,72 @@ function isMonthlyBillable(c, ym) {
   return getFeeForYM(c, ym) > 0;
 }
 
+// 특정 월의 월정 미수 잔액 (완납=0, 일부입금은 잔액)
+function monthlyRemaining(c, ymS) {
+  if (!isMonthlyBillable(c, ymS)) return 0;
+  if (isMonthCollected(c.id, ymS)) return 0;
+  const fee = getFeeForYM(c, ymS);
+  const pp = G.feePayments?.[c.id]?.[ymS];
+  const partial = (pp && pp.partial) ? (pp.amount||0) : 0;
+  return Math.max(0, fee - partial);
+}
+// uptoYM 직전월까지의 월정 미수금 내역
+function clientMonthlyArrears(c, uptoYM) {
+  let total=0; const months=[]; let y=2026, mo=1;
+  for (let i=0;i<120;i++){
+    const ymS = y+'-'+String(mo).padStart(2,'0');
+    if (ymS >= uptoYM) break;
+    const rem = monthlyRemaining(c, ymS);
+    if (rem > 0) { const pp=G.feePayments?.[c.id]?.[ymS]; months.push({ym:ymS, fee:getFeeForYM(c,ymS), partial:(pp&&pp.partial?pp.amount:0), remaining:rem}); total+=rem; }
+    mo++; if(mo>12){mo=1;y++;}
+  }
+  return {total, months};
+}
+function applyMonthlyArrears(cid, ym, mode) {
+  const c = G.clients.find(x=>x.id===cid); if(!c) return;
+  const amt = Math.max(0, Math.round(Number(document.getElementById('ma-'+ym)?.value)||0));
+  const fee = getFeeForYM(c, ym);
+  const today = new Date().toISOString().slice(0,10);
+  if (!G.monthlyFees[cid]) G.monthlyFees[cid] = {};
+  if (!G.feePayments) G.feePayments = {}; if (!G.feePayments[cid]) G.feePayments[cid] = {};
+  if (mode==='full') {
+    G.monthlyFees[cid][ym] = true;
+    G.feePayments[cid][ym] = { method:'수금', amount:fee, date:today };
+  } else if (mode==='partial') {
+    const prev = (G.feePayments[cid][ym]?.partial ? G.feePayments[cid][ym].amount : 0);
+    const np = prev + amt;
+    if (np >= fee) { G.monthlyFees[cid][ym] = true; G.feePayments[cid][ym] = { method:'수금', amount:fee, date:today }; }
+    else { delete G.monthlyFees[cid][ym]; G.feePayments[cid][ym] = { method:'일부', amount:np, partial:true, underpaid:fee-np, date:today }; }
+  } else if (mode==='revise') {
+    setMonthlyFee(cid, amt, ym); // 해당 월부터 청구액 변경
+    G.monthlyFees[cid][ym] = true;
+    G.feePayments[cid][ym] = { method:'수금', amount:amt, date:today };
+  }
+  saveToLS(); closeModal(); renderFees();
+}
+function openMonthlyArrearsModal(cid) {
+  const c = G.clients.find(x=>x.id===cid);
+  const ar = clientMonthlyArrears(c, G.feesYM||currentYM());
+  const body = ar.months.length ? ar.months.map(m=>`
+    <div style="border:1px solid #eee;border-radius:10px;padding:10px 12px;margin-bottom:8px">
+      <div style="font-weight:700;font-size:13px">${ymLabel(m.ym)}</div>
+      <div style="font-size:12px;color:#555;margin:4px 0 8px">청구 ${m.fee.toLocaleString()}${m.partial?` · 기입금 <b style="color:#2e7d32">${m.partial.toLocaleString()}</b>`:''} · 미수 <b style="color:#e53935">${m.remaining.toLocaleString()}</b></div>
+      <input type="number" id="ma-${m.ym}" value="${m.remaining}" inputmode="numeric" style="width:100%;padding:8px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;box-sizing:border-box;text-align:right;font-family:inherit">
+      <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+        <button onclick="applyMonthlyArrears(${cid},'${m.ym}','full')" class="btn-primary" style="flex:1;padding:8px">✅ 전액수금</button>
+        <button onclick="applyMonthlyArrears(${cid},'${m.ym}','partial')" style="flex:1;padding:8px;border:1.5px solid #ef9a9a;background:#fff5f5;color:#c62828;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700">💵 일부입금</button>
+        <button onclick="applyMonthlyArrears(${cid},'${m.ym}','revise')" style="flex:1;padding:8px;border:1.5px solid #90caf9;background:#f0f7ff;color:#1565c0;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700">✏️ 청구변경</button>
+      </div>
+    </div>`).join('') : '<div style="color:#2e7d32;text-align:center;padding:20px">이전 미수금이 없습니다 ✓</div>';
+  showModal(`<div style="max-width:440px;width:92vw;max-height:calc(100vh - 60px);display:flex;flex-direction:column">
+    <div class="modal-header"><h3>💰 월정 미수금 수금 — ${esc(c?.name||'')}</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body" style="overflow-y:auto;flex:1">
+      <div style="font-size:12px;color:#888;margin-bottom:10px">월별 미수금입니다. 입금액 입력 후 어느 달 수금인지 선택하세요. 전액/일부입금/청구액 변경 가능.</div>
+      ${body}
+    </div>
+  </div>`);
+}
+
 // 월정/기장료 변경 — effectiveYM(적용 시작월)부터 반영. feeChanges가 단일 진실원천.
 // 신고리스트·수수료탭·대시보드가 모두 getFeeForYM/c.fee를 통해 같은 값을 표시.
 function setMonthlyFee(clientId, newAmount, effectiveYM) {
@@ -6417,6 +6511,22 @@ function renderFees() {
   const fCollected = filingFees.reduce((a,x)=>a+x.paid,0); // 일부입금 포함
   const fUnpaid    = Math.max(0, fTotal - fCollected);
 
+  // 신고수수료 거래처별 집계 (미수금 있는 업체만, 유형별 합계: 부가세/조정료/성실)
+  const _filingCat = rt => (['corp','income'].includes(rt) ? 'adj' : rt==='seongsi' ? 'ss' : 'vat');
+  const filingAgg = {};
+  for (const x of filingFees) {
+    const unpaid = x.fee - x.paid;
+    if (unpaid <= 0) continue;
+    if (!filingAgg[x.cid]) filingAgg[x.cid] = {client:x.client, vat:0, adj:0, ss:0, total:0};
+    filingAgg[x.cid][_filingCat(x.period.reportType||'')] += unpaid;
+    filingAgg[x.cid].total += unpaid;
+  }
+  let filingAggList = Object.values(filingAgg);
+  if (G.filingSearch) filingAggList = filingAggList.filter(a=>(a.client.name||'').replace(/\s+/g,'').includes(G.filingSearch.replace(/\s+/g,'')));
+  if (G.filingRepSearch) filingAggList = filingAggList.filter(a=>(a.client.rep||'').includes(G.filingRepSearch));
+  if ((G.filingManagerFilter||[]).length>0) filingAggList = filingAggList.filter(a=>{const ms=getManagers(a.client);return G.filingManagerFilter.some(m=>m==='(없음)'?ms.length===0:ms.includes(m));});
+  filingAggList.sort((a,b)=>a.client.name.localeCompare(b.client.name,'ko'));
+
   // 추가 청구 (신고대리/조정료/성실신고) — G.adHocFees
   const allAdHocFees = Object.entries(G.adHocFees||{}).flatMap(([cidStr, fees]) => {
     const cid = Number(cidStr);
@@ -6500,6 +6610,9 @@ function renderFees() {
       <td style="text-align:right;font-weight:700;color:#7b1fa2;${hc['fm_fee']?'display:none':''}">
         <div onclick="event.stopPropagation();openFeeChangeModal(${c.id})" style="cursor:pointer" title="클릭하여 기장료 변경(적용월 지정)">${getFeeForYM(c,ym).toLocaleString()}원${(c.feeChanges||[]).some(x=>x.from!=='1900-01')?`<span style="font-size:9px;color:#f57c00;margin-left:3px">변경됨✎</span>`:''}</div>
         ${!oldMonth&&!collected?`<input type="number" placeholder="${getFeeForYM(c,ym)}" style="width:80px;margin-top:3px;padding:2px 5px;border:1px solid #ddd;border-radius:5px;font-size:11px;text-align:right;font-family:inherit" title="실수금액 입력 후 Enter" onblur="if(this.value)handleActualAmount(${c.id},'${ym}',this)" onkeydown="if(event.key==='Enter')this.blur()">`:``}
+      </td>
+      <td style="text-align:right">
+        ${(()=>{const ar=clientMonthlyArrears(c,ym);return ar.total>0?`<button onclick="event.stopPropagation();openMonthlyArrearsModal(${c.id})" style="border:1px solid #ef9a9a;background:#fdecea;color:#c62828;border-radius:6px;font-size:11px;padding:3px 7px;cursor:pointer;font-family:inherit;font-weight:700" title="이전 미수금 내역·수금">${ar.total.toLocaleString()} ›</button>`:'<span style="color:#ccc">-</span>';})()}
       </td>
       <td ${!oldMonth?`onclick="toggleMonthlyFee(${c.id},'${ym}')" style="text-align:center;cursor:pointer"`:`style="text-align:center;opacity:.5"`}>
         <div class="chk ${collected?'on':''}" style="margin:0 auto;width:26px;height:26px;${collected?'background:#c8e6c9;border-color:#2e7d32;color:#2e7d32':''}">${collected?'💰':''}</div>
@@ -6656,6 +6769,7 @@ function renderFees() {
         <th style="padding:4px 6px;${_hcStyle('fm_manager')}"><div style="display:flex;align-items:center">${filterPopupBtn('feesManagerFilter','담당자')}${_hcBtn('fm_manager')}</div></th>
         <th style="${_hcStyle('fm_contractDate')}"><div style="display:flex;align-items:center;justify-content:center">수임일${_hcBtn('fm_contractDate')}</div></th>
         <th style="text-align:right;${_hcStyle('fm_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">월수수료${_hcBtn('fm_fee')}</div></th>
+        <th style="text-align:right;font-size:11px;white-space:nowrap">이전<br>미수금</th>
         <th style="width:56px;text-align:center;padding:3px">
           <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
             ${feesCycleBtn('feesCollectFilter','수금',['전체','수금','미수금'])}
@@ -6681,22 +6795,30 @@ function renderFees() {
     </div>
     <div style="font-size:13px;color:#555;margin-bottom:12px">청구 ${fTotal.toLocaleString()} · 수금 <b style="color:#2e7d32">${fCollected.toLocaleString()}</b> · 미수금 <b style="color:#e53935">${fUnpaid.toLocaleString()}</b></div>
     <div style="${(G.sectionCollapsed||{})['fees-filing']?'display:none':''}">
-    ${ffChips?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${ffChips}</div>`:''}
-    ${filingFees.length > 0 ? `
+    <div style="font-size:11px;color:#888;margin-bottom:8px">미수금이 있는 거래처만 표시 · 부가세·법인세·소득세·성실은 동일 유형 미수금을 합산</div>
+    ${filingAggList.length > 0 ? `
     <div class="tbl-wrap">
     <table>
       <thead><tr>
-        <th style="${_hcStyle('ff_period')}"><div style="display:flex;align-items:center;justify-content:center">신고기간${_hcBtn('ff_period')}</div></th>
-        <th style="padding:4px 6px"><button onclick="openFilingNameSearch(this)" style="width:100%;padding:3px 5px;border-radius:6px;font-size:10px;cursor:pointer;font-family:inherit;${filingSearchActive?'border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7':'border:1.5px solid #ddd;background:#fff;color:#555'};text-align:left">거래처명 🔍</button></th>
-        <th style="width:80px;padding:4px 6px;${_hcStyle('ff_rep')}"><div style="display:flex;align-items:center"><button onclick="openFilingRepSearch(this)" style="flex:1;padding:3px 5px;border-radius:6px;font-size:10px;cursor:pointer;font-family:inherit;${filingRepSearchActive?'border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7':'border:1.5px solid #ddd;background:#fff;color:#555'};text-align:left">대표자 🔍</button>${_hcBtn('ff_rep')}</div></th>
-        <th style="padding:4px 6px;${_hcStyle('ff_manager')}"><div style="display:flex;align-items:center">${filterPopupBtn('filingManagerFilter','담당자')}${_hcBtn('ff_manager')}</div></th>
-        <th style="text-align:right;${_hcStyle('ff_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">청구액${_hcBtn('ff_fee')}</div></th>
-        <th style="width:60px;text-align:center;padding:3px">${feesCycleBtn('filingCollectFilter','수금',['전체','수금','미수금'])}</th>
+        <th style="padding:4px 6px"><button onclick="openFilingNameSearch(this)" style="width:100%;padding:3px 5px;border-radius:6px;font-size:10px;cursor:pointer;font-family:inherit;${filingSearchActive?'border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7':'border:1.5px solid #ddd;background:#fff;color:#555'};text-align:left">상호 🔍</button></th>
+        <th style="width:80px;padding:4px 6px"><button onclick="openFilingRepSearch(this)" style="width:100%;padding:3px 5px;border-radius:6px;font-size:10px;cursor:pointer;font-family:inherit;${filingRepSearchActive?'border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7':'border:1.5px solid #ddd;background:#fff;color:#555'};text-align:left">대표자 🔍</button></th>
+        <th style="padding:4px 6px"><div style="display:flex;align-items:center">${filterPopupBtn('filingManagerFilter','담당자')}</div></th>
+        <th style="text-align:right;padding:4px 6px;font-size:11px">부가세<br>수수료</th>
+        <th style="text-align:right;padding:4px 6px;font-size:11px">조정료<br>(법인·개인)</th>
+        <th style="text-align:right;padding:4px 6px;font-size:11px">성실<br>수수료</th>
+        <th style="width:60px;text-align:center;padding:3px;font-size:11px">수금</th>
       </tr></thead>
-      <tbody>${filingRows}</tbody>
+      <tbody>${filingAggList.map(a=>`<tr>
+        <td style="padding:5px 6px;font-weight:600;font-size:13px">${esc(a.client.name)}</td>
+        <td style="padding:5px 6px;font-size:12px;color:#444">${esc(a.client.rep||'-')}</td>
+        <td style="padding:5px 6px;font-size:12px;color:#555">${esc(getManagers(a.client).join(', ')||'-')}</td>
+        <td style="text-align:right;padding:5px 6px;font-weight:600;color:${a.vat?'#e53935':'#ccc'}">${a.vat?a.vat.toLocaleString():'-'}</td>
+        <td style="text-align:right;padding:5px 6px;font-weight:600;color:${a.adj?'#e53935':'#ccc'}">${a.adj?a.adj.toLocaleString():'-'}</td>
+        <td style="text-align:right;padding:5px 6px;font-weight:600;color:${a.ss?'#e53935':'#ccc'}">${a.ss?a.ss.toLocaleString():'-'}</td>
+        <td style="text-align:center;padding:3px"><button onclick="openFilingCollectModal(${a.client.id})" style="border:1px solid #a5d6a7;background:#e8f5e9;border-radius:6px;font-size:12px;padding:4px 8px;cursor:pointer;color:#2e7d32;font-family:inherit">💵</button></td>
+      </tr>`).join('')}</tbody>
     </table></div>
-    ${filteredFilingFees.length===0?'<div style="color:#aaa;text-align:center;padding:16px;font-size:13px">필터 조건에 맞는 항목 없음</div>':''}
-    ` : '<div style="color:#aaa;text-align:center;padding:20px">신고 수수료 청구 내역 없음 (신고및결재 탭에서 수수료청구액 입력)</div>'}
+    ` : '<div style="color:#2e7d32;text-align:center;padding:20px">미수금이 있는 신고 수수료가 없습니다 ✓</div>'}
     </div>
   </div>
 
