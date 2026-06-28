@@ -4345,15 +4345,6 @@ function renderSchedule() {
     <h2 style="font-size:20px;font-weight:800;margin:0">신고 일정</h2>
     <button onclick="G.scheduleCalView=!G.scheduleCalView;G.scheduleCalMonth=0;renderSchedule()" style="padding:6px 14px;border-radius:8px;border:1.5px solid ${G.scheduleCalView?'#4f8ef7':'#e0e0e0'};background:${G.scheduleCalView?'#e8f0fe':'#f5f5f5'};color:${G.scheduleCalView?'#4f8ef7':'#555'};font-size:13px;cursor:pointer;font-family:inherit">${G.scheduleCalView?'📅 달력 ON':'📅 달력 뷰'}</button>
   </div>
-  <div style="display:flex;gap:8px;align-items:center;margin-bottom:${KEY_ITEMS.length?'12px':'14px'}">
-    <div style="position:relative;flex:1">
-      <input id="schedule-search-input" type="text" placeholder="거래처명 / 대표자 검색" value="${esc(G.scheduleSearch||'')}" oninput="onScheduleSearch(this.value)" style="width:100%;padding:8px 32px 8px 12px;border-radius:9px;border:1.5px solid ${schSrchActive?'#4f8ef7':'#e0e0e0'};font-size:13px;font-family:inherit;box-sizing:border-box;outline:none">
-      ${schSrchActive?`<button onclick="G.scheduleSearch='';renderSchedule()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:18px;color:#bbb;cursor:pointer;line-height:1">×</button>`:''}
-    </div>
-    <div style="min-width:100px">${filterPopupBtn('scheduleManagerFilter','담당자 전체')}</div>
-    ${(schSrchActive||schMgrActive)?`<button onclick="G.scheduleSearch='';G.scheduleManagerFilter=[];renderSchedule()" style="padding:7px 10px;border-radius:8px;border:1.5px solid #e0e0e0;background:#fff;color:#888;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap">초기화</button>`:''}
-  </div>
-  ${(schSrchActive||schMgrActive)?`<div style="font-size:12px;color:#4f8ef7;background:#e8f0fe;border-radius:8px;padding:6px 12px;margin-bottom:12px">🔍 필터 적용 중 — 각 항목의 건수가 검색 결과 기준입니다</div>`:''}
   ${KEY_ITEMS.length?`<div class="stat-grid" style="margin-bottom:16px">${keyCards}</div>`:''}
   ${calHTML}
   <div style="font-size:12px;color:#888;margin-bottom:12px">★ 표시 항목은 주요 신고 · 마감일 기준 D-day 표시</div>
@@ -6353,6 +6344,23 @@ function deleteAdHocFee(clientId, feeId) {
   renderFees();
 }
 
+function showAgingBucket(bucket) {
+  const items = (window._agingBuckets||{})[bucket] || [];
+  const label = {m1:'1개월 미수', m23:'2~3개월 미수', m4p:'3개월+ 미수'}[bucket] || '미수금';
+  const total = items.reduce((a,x)=>a+(x.amount||0),0);
+  const rows = items.length ? items.sort((a,b)=>a.ym.localeCompare(b.ym)||a.name.localeCompare(b.name,'ko')).map(x=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid #f0f0f0;font-size:13px;cursor:pointer" onclick="closeModal();openClientNotes(${x.id})">
+      <span style="flex:1;font-weight:600">${esc(x.name)}</span>
+      <span style="color:#888;font-size:11px;white-space:nowrap">${esc(x.manager||'-')}</span>
+      <span style="color:#888;font-size:11px;white-space:nowrap">${esc(x.ym)}</span>
+      <span style="font-weight:700;color:#e53935;white-space:nowrap">${(x.amount||0).toLocaleString()}원</span>
+    </div>`).join('') : '<div style="color:#aaa;text-align:center;padding:20px">해당 업체가 없습니다</div>';
+  showModal(`<div style="max-width:480px;width:92vw;max-height:calc(100vh - 60px);display:flex;flex-direction:column">
+    <div class="modal-header"><h3>📊 ${label} (${items.length}건 · ${total.toLocaleString()}원)</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body" style="overflow-y:auto;flex:1">${rows}</div>
+  </div>`);
+}
+
 function renderFees() {
   if (!G.feesYM) G.feesYM = currentYM();
   const ym = G.feesYM;
@@ -6526,7 +6534,7 @@ function renderFees() {
       const d = new Date(y, m-1+delta, 1);
       return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
     };
-    const aging = {m1:{count:0,total:0}, m23:{count:0,total:0}, m4p:{count:0,total:0}};
+    const aging = {m1:{count:0,total:0,items:[]}, m23:{count:0,total:0,items:[]}, m4p:{count:0,total:0,items:[]}};
     const activeClients = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&c.fee&&getDealTypes(c).some(d=>['기장','고문','성실'].includes(d)));
     activeClients.forEach(c=>{
       const months = clientMonths(c);
@@ -6535,11 +6543,14 @@ function renderFees() {
         if (checkYM < '2026-01') continue;
         if (!months.includes(checkYM)) continue;
         if (G.monthlyFees[c.id]?.[checkYM]) continue; // already collected
-        if (i===1) { aging.m1.count++; aging.m1.total += c.fee||0; }
-        else if (i<=3) { aging.m23.count++; aging.m23.total += c.fee||0; }
-        else { aging.m4p.count++; aging.m4p.total += c.fee||0; }
+        const amt = getFeeForYM(c, checkYM) || c.fee || 0;
+        const entry = {id:c.id, name:c.name, manager:getManagers(c).join(','), ym:checkYM, amount:amt};
+        if (i===1) { aging.m1.count++; aging.m1.total += amt; aging.m1.items.push(entry); }
+        else if (i<=3) { aging.m23.count++; aging.m23.total += amt; aging.m23.items.push(entry); }
+        else { aging.m4p.count++; aging.m4p.total += amt; aging.m4p.items.push(entry); }
       }
     });
+    window._agingBuckets = {m1:aging.m1.items, m23:aging.m23.items, m4p:aging.m4p.items};
     return aging;
   })();
   const agingOpen = !!G.feesAgingOpen; // 기본 접힘
@@ -6573,18 +6584,18 @@ function renderFees() {
     </div>
     ${agingOpen ? `
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px">
-      <div style="background:#fff3e0;border-radius:10px;padding:12px;border-left:3px solid #f57c00">
-        <div style="font-size:11px;color:#888;margin-bottom:4px">1개월</div>
+      <div onclick="showAgingBucket('m1')" style="background:#fff3e0;border-radius:10px;padding:12px;border-left:3px solid #f57c00;cursor:pointer" title="업체 목록 보기">
+        <div style="font-size:11px;color:#888;margin-bottom:4px">1개월 ›</div>
         <div style="font-size:18px;font-weight:800;color:#f57c00">${agingData.m1.count}건</div>
         <div style="font-size:12px;color:#aaa">${agingData.m1.total.toLocaleString()}원</div>
       </div>
-      <div style="background:#fdecea;border-radius:10px;padding:12px;border-left:3px solid #e53935">
-        <div style="font-size:11px;color:#888;margin-bottom:4px">2~3개월</div>
+      <div onclick="showAgingBucket('m23')" style="background:#fdecea;border-radius:10px;padding:12px;border-left:3px solid #e53935;cursor:pointer" title="업체 목록 보기">
+        <div style="font-size:11px;color:#888;margin-bottom:4px">2~3개월 ›</div>
         <div style="font-size:18px;font-weight:800;color:#e53935">${agingData.m23.count}건</div>
         <div style="font-size:12px;color:#aaa">${agingData.m23.total.toLocaleString()}원</div>
       </div>
-      <div style="background:#fce4ec;border-radius:10px;padding:12px;border-left:3px solid #c62828">
-        <div style="font-size:11px;color:#888;margin-bottom:4px">3개월+</div>
+      <div onclick="showAgingBucket('m4p')" style="background:#fce4ec;border-radius:10px;padding:12px;border-left:3px solid #c62828;cursor:pointer" title="업체 목록 보기">
+        <div style="font-size:11px;color:#888;margin-bottom:4px">3개월+ ›</div>
         <div style="font-size:18px;font-weight:800;color:#c62828">${agingData.m4p.count}건</div>
         <div style="font-size:12px;color:#aaa">${agingData.m4p.total.toLocaleString()}원</div>
       </div>
@@ -6657,13 +6668,11 @@ function renderFees() {
 
   <!-- 신고 수수료 -->
   <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <div style="display:flex;align-items:center;gap:8px">
-        ${sectionToggleBtn('fees-filing')}
-        <div class="card-title" style="margin-bottom:0">📋 신고 수수료 (신고·결재 항목 청구액)</div>
-      </div>
-      <div style="font-size:13px;color:#555">청구 ${fTotal.toLocaleString()}원 · 수금 ${fCollected.toLocaleString()}원 · 미수금 ${fUnpaid.toLocaleString()}원</div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+      ${sectionToggleBtn('fees-filing')}
+      <div class="card-title" style="margin-bottom:0">📋 신고 수수료 (신고·결재 항목 청구액)</div>
     </div>
+    <div style="font-size:13px;color:#555;margin-bottom:12px">청구 ${fTotal.toLocaleString()} · 수금 <b style="color:#2e7d32">${fCollected.toLocaleString()}</b> · 미수금 <b style="color:#e53935">${fUnpaid.toLocaleString()}</b></div>
     <div style="${(G.sectionCollapsed||{})['fees-filing']?'display:none':''}">
     ${ffChips?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${ffChips}</div>`:''}
     ${filingFees.length > 0 ? `
