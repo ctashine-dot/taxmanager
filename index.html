@@ -699,6 +699,14 @@ function clientInFilingPeriod(c, period) {
   return false;
 }
 
+// ── 신고 수수료 청구/수금/미수 통합 계산 (모든 화면 동일 기준) ──
+// 청구액 = 조정료 + (성실기간이면 성실확인비용)
+function julgaeBilled(period, v) { return (v.fee||0) + ((period && period.reportType==='seongsi') ? (v.feeSeongsi||0) : 0); }
+// 수금액 = 수금완료(s) 체크 시 전액, 아니면 입력된 입금액(청구액 한도)
+function julgaeCollectedAmt(period, v) { const b = julgaeBilled(period, v); return v.s ? b : Math.min(v.paid||0, b); }
+// 미수금 = 청구액 - 수금액 (음수 클램프)
+function julgaeUnpaid(period, v) { return Math.max(0, julgaeBilled(period, v) - julgaeCollectedAmt(period, v)); }
+
 const DEFAULT_PERIODS = PERIOD_TEMPLATES.map(t => ({
   id: t.tpl + '_' + new Date().getFullYear(),
   label: String(new Date().getFullYear()).slice(2) + '년 ' + t.label,
@@ -1543,12 +1551,12 @@ function _renderDashboardInner() {
       const cl = G.clients.find(c=>c.id===clientId);
       if (!cl) continue;
       const v = pData[clientId] || {};
-      const isSeongsiPeriod = period2.reportType === 'seongsi';
-      const fee2 = (v.fee || 0) + (isSeongsiPeriod ? (v.feeSeongsi || 0) : 0);
+      const fee2 = julgaeBilled(period2, v);
       if (!fee2) continue;
+      const coll2 = julgaeCollectedAmt(period2, v);
       filingTotal += fee2;
-      if (v.s) filingCollected += fee2;
-      else filingUnpaidClients.push({client:cl, fee:fee2, period:period2});
+      filingCollected += coll2;
+      if (coll2 < fee2) filingUnpaidClients.push({client:cl, fee:fee2-coll2, period:period2});
     }
   }
 
@@ -1963,7 +1971,9 @@ function clientFeeDisplay(c) {
   const cym=currentYM();
   const pending=((G.adHocFees||{})[c.id]||[]).filter(f=>!f.collected&&f.ym===cym);
   const parts=[];
-  if(c.fee)parts.push('<span style="color:#aaa;font-size:10px">기장</span> '+c.fee.toLocaleString());
+  const _mf=getFeeForYM(c,cym);
+  const _chg=(c.feeChanges||[]).some(x=>x.from!=='1900-01');
+  parts.push(`<span onclick="event.stopPropagation();openFeeChangeModal(${c.id})" style="cursor:pointer" title="클릭하여 기장료 변경(적용월 지정)"><span style="color:#aaa;font-size:10px">기장</span> ${_mf?_mf.toLocaleString():'0'}${_chg?'<span style="font-size:8px;color:#f57c00">✎</span>':''}</span>`);
   const _singo=c.feeSingo||0;
   const _jojung=c.adjustFee||c.feeJojung||0;
   const _seongsi=c.seongsiConfirmFee||c.feeSeongsi||0;
@@ -3189,7 +3199,7 @@ function updateClientField(id, field, value, _skipCheck) {
       return;
     }
   }
-  if (field==='fee') value = Number(value)||0;
+  if (field==='fee') { setMonthlyFee(id, Number(value)||0, currentYM()); return; } // 적용월 이력 일관 처리
   if (field==='dealType') { c.dealType=value; c.dealTypes=[value]; }
   else if (field==='manager') { c.manager=value; c.managers=value?[value]:[]; }
   else c[field] = value;
@@ -4647,7 +4657,7 @@ function renderJulgae() {
       if (!prevMap1[cid]) prevMap1[cid] = {revenue:0, salesAmount:0, fee:0};
       prevMap1[cid].revenue     += (v&&v.revenue)||0;
       prevMap1[cid].salesAmount += (v&&v.salesAmount)||0;
-      prevMap1[cid].fee         += (v&&v.fee)||0;
+      prevMap1[cid].fee         += ((v&&v.fee)||0) + (isSeongsiType ? ((v&&v.feeSeongsi)||0) : 0);
     });
   });
   prevPeriods2.forEach(pp => {
@@ -4688,9 +4698,9 @@ function renderJulgae() {
     - jHideable.filter(k=>hc[k]).length
     - jTypeHideable.filter(k=>hc[k]).length
     - jSeongsiExtra.filter(k=>hc[k]).length;
-  const _jFeeSum    = c => { const v=julgaeVal(pKey2,c.id); const f=v.fee||0; return f+(isSeongsiType?(v.feeSeongsi||0):0); };
+  const _jFeeSum    = c => julgaeBilled(period, julgaeVal(pKey2,c.id));
   const feeTotal    = clients.reduce((a,c) => a + _jFeeSum(c), 0);
-  const feeCollected= clients.filter(c => julgaeVal(pKey2,c.id).s).reduce((a,c) => a + _jFeeSum(c), 0);
+  const feeCollected= clients.reduce((a,c) => a + julgaeCollectedAmt(period, julgaeVal(pKey2,c.id)), 0); // 일부입금 포함
   // 정렬
   const _jSort = G.julgaeSort || 'name';
   const _jDir  = G.julgaeSortDir === 'desc' ? -1 : 1;
@@ -5252,7 +5262,7 @@ function renderJulgae() {
         `}
         ${isIncomeType?`
           <td style="text-align:right;padding:4px 8px;${hc['j_col_paid']?'display:none':''}">${niInput(c.id,'paid',v.paid,v.paid?'font-weight:700;color:#2e7d32':'')}</td>
-          ${(()=>{const unpaid=(v.fee||0)+(v.feeSeongsi||0)-(v.paid||0);return`<td style="text-align:right;padding:4px 8px;font-size:12px;font-weight:600;${hc['j_col_unpaid']?'display:none':''}${unpaid>0?';color:#e53935':unpaid<0?';color:#1565c0':';color:#aaa'}">${unpaid!==0?unpaid.toLocaleString():'-'}</td>`})()}
+          ${(()=>{const unpaid=julgaeUnpaid(period,v);return`<td style="text-align:right;padding:4px 8px;font-size:12px;font-weight:600;${hc['j_col_unpaid']?'display:none':''}${unpaid>0?';color:#e53935':';color:#aaa'}">${unpaid>0?unpaid.toLocaleString():'-'}</td>`})()}
           <td style="text-align:right;padding:4px 8px;${hc['j_col_fee25']?'display:none':''}">${niInput(c.id,'fee25',v.fee25)}${isSeongsiType?niInput(c.id,'fee25ss',v.fee25ss,'font-size:9px;color:#7b1fa2;margin-top:2px;display:block;'):''}</td>
           <td style="text-align:right;padding:4px 8px;${hc['j_col_fee24']?'display:none':''}">${niInput(c.id,'fee24',v.fee24)}${isSeongsiType?niInput(c.id,'fee24ss',v.fee24ss,'font-size:9px;color:#7b1fa2;margin-top:2px;display:block;'):''}</td>
           <td style="text-align:right;padding:4px 8px;${hc['j_col_fee23']?'display:none':''}">${niInput(c.id,'fee23',v.fee23)}${isSeongsiType?niInput(c.id,'fee23ss',v.fee23ss,'font-size:9px;color:#7b1fa2;margin-top:2px;display:block;'):''}</td>
@@ -5501,13 +5511,14 @@ function openUnpaidSMSBuilder() {
     const pData = G.julgae[p.id] || {};
     for (const c of G.clients) {
       const v = pData[c.id] || {};
-      const totFee = (v.fee||0) + (p.reportType==='seongsi' ? (v.feeSeongsi||0) : 0);
-      if (totFee && !v.s) unpaid.push({ client: c, fee: totFee, paid: v.paid||0, period: p });
+      const totFee = julgaeBilled(p, v);
+      const unp = julgaeUnpaid(p, v);
+      if (unp > 0) unpaid.push({ client: c, fee: totFee, paid: julgaeCollectedAmt(p,v), unpaidAmt: unp, period: p });
     }
   }
   if (!unpaid.length) { toast('미수금 내역이 없습니다', 'info'); return; }
   const msgs = unpaid.map(r => {
-    const unpaidAmt = r.fee - r.paid;
+    const unpaidAmt = r.unpaidAmt;
     return `[${r.period.label}] ${r.client.name} 귀중\n안녕하세요. 세무사 사무소입니다.\n${r.period.label} 세무수수료 ${r.fee.toLocaleString()}원 중 미수금 ${unpaidAmt.toLocaleString()}원이 남아있습니다.\n빠른 시일 내 납부 부탁드립니다.\n감사합니다.`;
   });
   const combined = msgs.join('\n\n─────────────────\n\n');
@@ -5534,9 +5545,9 @@ function openPeriodSummaryPDF() {
   const total = clients.length;
   const rows = clients.map(c => {
     const v = G.julgae[pKey]?.[c.id] || {};
-    const fee = (v.fee || 0) + (period.reportType==='seongsi' ? (v.feeSeongsi||0) : 0);
-    const paid = v.paid || 0;
-    const unpaid = Math.max(0, fee - paid);
+    const fee = julgaeBilled(period, v);
+    const paid = julgaeCollectedAmt(period, v);
+    const unpaid = julgaeUnpaid(period, v);
     return { c, v, fee, paid, unpaid };
   });
   const totalFee = rows.reduce((a,r)=>a+r.fee,0);
@@ -6277,18 +6288,20 @@ function renderFees() {
     if (!period) continue;
     const pData = G.julgae[pKey];
     for (const [cidStr, v] of Object.entries(pData)) {
-      if (!v || !v.fee) continue;
+      if (!v || (!v.fee && !v.feeSeongsi)) continue;
       const cid = Number(cidStr);
       const client = G.clients.find(c=>c.id===cid);
       if (!client) continue;
-      filingFees.push({period, client, fee:v.fee, collected:!!v.s, pKey, cid});
+      const billed = julgaeBilled(period, v);
+      const coll = julgaeCollectedAmt(period, v);
+      filingFees.push({period, client, fee:billed, paid:coll, collected: coll>=billed, pKey, cid});
     }
   }
   filingFees.sort((a,b)=>a.period.label.localeCompare(b.period.label));
 
   const fTotal     = filingFees.reduce((a,x)=>a+x.fee,0);
-  const fCollected = filingFees.filter(x=>x.collected).reduce((a,x)=>a+x.fee,0);
-  const fUnpaid    = fTotal - fCollected;
+  const fCollected = filingFees.reduce((a,x)=>a+x.paid,0); // 일부입금 포함
+  const fUnpaid    = Math.max(0, fTotal - fCollected);
 
   // 추가 청구 (신고대리/조정료/성실신고) — G.adHocFees
   const allAdHocFees = Object.entries(G.adHocFees||{}).flatMap(([cidStr, fees]) => {
@@ -6369,7 +6382,7 @@ function renderFees() {
       <td style="color:#555;font-size:12px;${hc['fm_manager']?'display:none':''}">${esc(getManagers(c).join(', ')||'-')}</td>
       <td style="font-size:11px;color:#888;${hc['fm_contractDate']?'display:none':''}">${c.contractDate?c.contractDate.slice(0,7):'-'}</td>
       <td style="text-align:right;font-weight:700;color:#7b1fa2;${hc['fm_fee']?'display:none':''}">
-        <div>${getFeeForYM(c,ym).toLocaleString()}원${getFeeForYM(c,ym)!==c.fee?`<span style="font-size:9px;color:#f57c00;margin-left:3px">변경됨</span>`:''}</div>
+        <div onclick="event.stopPropagation();openFeeChangeModal(${c.id})" style="cursor:pointer" title="클릭하여 기장료 변경(적용월 지정)">${getFeeForYM(c,ym).toLocaleString()}원${(c.feeChanges||[]).some(x=>x.from!=='1900-01')?`<span style="font-size:9px;color:#f57c00;margin-left:3px">변경됨✎</span>`:''}</div>
         ${!oldMonth&&!collected?`<input type="number" placeholder="${getFeeForYM(c,ym)}" style="width:80px;margin-top:3px;padding:2px 5px;border:1px solid #ddd;border-radius:5px;font-size:11px;text-align:right;font-family:inherit" title="실수금액 입력 후 Enter" onblur="if(this.value)handleActualAmount(${c.id},'${ym}',this)" onkeydown="if(event.key==='Enter')this.blur()">`:``}
       </td>
       <td ${!oldMonth?`onclick="toggleMonthlyFee(${c.id},'${ym}')" style="text-align:center;cursor:pointer"`:`style="text-align:center;opacity:.5"`}>
@@ -9504,13 +9517,8 @@ function openPeriodComparison() {
     const pData = G.julgae[p.id] || {};
     const enrolled = p.enrolled || [];
     const total = enrolled.length;
-    const _ss = p.reportType==='seongsi';
-    const _cf = v => (v.fee||0) + (_ss ? (v.feeSeongsi||0) : 0);
-    const feeSum = enrolled.reduce((s, cid) => s + _cf(pData[cid]||{}), 0);
-    const paidSum = enrolled.reduce((s, cid) => {
-      const v = pData[cid] || {};
-      return s + (v.s ? (v.paid || _cf(v) || 0) : 0);
-    }, 0);
+    const feeSum = enrolled.reduce((s, cid) => s + julgaeBilled(p, pData[cid]||{}), 0);
+    const paidSum = enrolled.reduce((s, cid) => s + julgaeCollectedAmt(p, pData[cid]||{}), 0);
     const unpaid = Math.max(0, feeSum - paidSum);
     const pct = feeSum ? Math.round(paidSum / feeSum * 100) : 0;
     return { p, total, feeSum, paidSum, unpaid, pct };
@@ -9572,9 +9580,9 @@ function openManagerAnalysis() {
   const thisYM = (()=>{const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');})();
   const rows = managers.map(m=>{
     const allC=G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&getManagers(c).includes(m));
-    const monthlyC=allC.filter(c=>getDealTypes(c).some(d=>['기장','고문','성실'].includes(d)));
-    const monthlyFee=monthlyC.reduce((a,c)=>a+(c.fee||0),0);
-    const collected=monthlyC.filter(c=>(G.monthlyFees[c.id]||{})[thisYM]).reduce((a,c)=>a+(c.fee||0),0);
+    const monthlyC=allC.filter(c=>getDealTypes(c).some(d=>['기장','고문','성실'].includes(d))&&(!c.contractDate||c.contractDate.slice(0,7)<=thisYM)&&getFeeForYM(c,thisYM)>0);
+    const monthlyFee=monthlyC.reduce((a,c)=>a+getFeeForYM(c,thisYM),0);
+    const collected=monthlyC.filter(c=>(G.monthlyFees[c.id]||{})[thisYM]).reduce((a,c)=>a+getFeeForYM(c,thisYM),0);
     const collPct=monthlyFee>0?Math.round(collected/monthlyFee*100):0;
     let jDone=0,jTotal=0;
     (G.periods||[]).forEach(p=>{
@@ -9685,7 +9693,7 @@ function openBulkReminder() {
 
   const unpaidByClient = feeTargets.map(c=>{
     const unpaidMonths = [thisYM,...prevYMs].filter(ym=>!(G.monthlyFees[c.id]||{})[ym]);
-    const total = unpaidMonths.length * (c.fee||0);
+    const total = unpaidMonths.reduce((s,ym)=>s+getFeeForYM(c,ym),0);
     return {...c, unpaidMonths, total};
   }).filter(c=>c.unpaidMonths.length>0);
 
@@ -9941,17 +9949,18 @@ function openAnnualFeeStatement() {
   const genHTML = (y) => {
     const months = Array.from({length:12},(_,i)=>String(i+1).padStart(2,'0')).map(m=>`${y}-${m}`);
     const feeClients = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&getDealTypes(c).some(d=>['기장','고문','성실'].includes(d)));
-    const rows = feeClients.filter(c=>c.fee>0).map(c=>{
+    const rows = feeClients.filter(c=>months.some(ym=>getFeeForYM(c,ym)>0)).map(c=>{
       const cells = months.map(ym=>G.monthlyFees[c.id]?.[ym]?`<td style="text-align:center;background:#e8f5e9;color:#2e7d32;font-size:11px">${(G.feePayments?.[c.id]?.[ym]?.method||'✓')}</td>`:`<td style="text-align:center;color:#ddd;font-size:11px">-</td>`);
       const paid = months.filter(ym=>G.monthlyFees[c.id]?.[ym]).length;
-      return `<tr><td style="padding:6px 8px;font-size:12px;font-weight:600;white-space:nowrap">${esc(c.name)}</td><td style="padding:6px 8px;font-size:12px;text-align:right">${(c.fee||0).toLocaleString()}</td>${cells.join('')}<td style="padding:6px 8px;font-size:12px;text-align:center;font-weight:700;color:${paid===12?'#2e7d32':'#e65100'}">${paid}/12</td><td style="padding:6px 8px;font-size:12px;text-align:right;font-weight:700">${((c.fee||0)*paid).toLocaleString()}</td></tr>`;
+      const cTotal = months.filter(ym=>G.monthlyFees[c.id]?.[ym]).reduce((a,ym)=>a+getFeeForYM(c,ym),0);
+      return `<tr><td style="padding:6px 8px;font-size:12px;font-weight:600;white-space:nowrap">${esc(c.name)}</td><td style="padding:6px 8px;font-size:12px;text-align:right">${getFeeForYM(c,`${y}-12`).toLocaleString()}</td>${cells.join('')}<td style="padding:6px 8px;font-size:12px;text-align:center;font-weight:700;color:${paid===12?'#2e7d32':'#e65100'}">${paid}/12</td><td style="padding:6px 8px;font-size:12px;text-align:right;font-weight:700">${cTotal.toLocaleString()}</td></tr>`;
     }).join('');
     const totRow = (() => {
       const cells2 = months.map(ym=>{
-        const mTotal = feeClients.filter(c=>G.monthlyFees[c.id]?.[ym]).reduce((a,c)=>a+(c.fee||0),0);
+        const mTotal = feeClients.filter(c=>G.monthlyFees[c.id]?.[ym]).reduce((a,c)=>a+getFeeForYM(c,ym),0);
         return `<td style="text-align:right;font-size:11px;color:#555">${mTotal>0?mTotal.toLocaleString():''}</td>`;
       });
-      return `<tr style="background:#f5f5f5;font-weight:700"><td colspan="2" style="padding:6px 8px;font-size:12px">합계</td>${cells2.join('')}<td></td><td style="padding:6px 8px;font-size:12px;text-align:right">${feeClients.reduce((a,c)=>a+(c.fee||0)*months.filter(ym=>G.monthlyFees[c.id]?.[ym]).length,0).toLocaleString()}</td></tr>`;
+      return `<tr style="background:#f5f5f5;font-weight:700"><td colspan="2" style="padding:6px 8px;font-size:12px">합계</td>${cells2.join('')}<td></td><td style="padding:6px 8px;font-size:12px;text-align:right">${feeClients.reduce((a,c)=>a+months.filter(ym=>G.monthlyFees[c.id]?.[ym]).reduce((s,ym)=>s+getFeeForYM(c,ym),0),0).toLocaleString()}</td></tr>`;
     })();
     return `<table style="width:100%;border-collapse:collapse;font-size:12px">
       <thead><tr style="background:#f0f4ff"><th style="padding:6px 8px;text-align:left">거래처</th><th style="padding:6px 8px;text-align:right">월정액</th>${months.map(ym=>`<th style="padding:4px 2px;text-align:center;font-size:10px;min-width:28px">${ym.slice(5)}월</th>`).join('')}<th style="padding:6px 4px;text-align:center">납부</th><th style="padding:6px 8px;text-align:right">합계</th></tr></thead>
