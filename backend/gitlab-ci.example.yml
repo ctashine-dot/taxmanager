@@ -1,0 +1,143 @@
+# .gitlab-ci.yml (예시) — 급여/세금 관리 시스템 CI/CD
+# 빌드 → 테스트 → 보안검사 → Docker 이미지 → Kubernetes 배포
+# (GitHub 리포지토리에서는 동작하지 않습니다 — GitLab으로 미러링/이전 시 루트의 .gitlab-ci.yml로 사용)
+
+stages:
+  - build
+  - test
+  - security
+  - package
+  - deploy
+
+variables:
+  PYTHON_IMAGE: "python:3.12-slim"
+  IMAGE: "$CI_REGISTRY_IMAGE/payroll-api"
+  IMAGE_TAG: "$CI_COMMIT_SHORT_SHA"
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+# GitLab 내장 보안 스캐너 템플릿
+include:
+  - template: Security/SAST.gitlab-ci.yml
+  - template: Security/Secret-Detection.gitlab-ci.yml
+  - template: Security/Dependency-Scanning.gitlab-ci.yml
+  - template: Security/Container-Scanning.gitlab-ci.yml
+
+cache:
+  key: "$CI_COMMIT_REF_SLUG"
+  paths: [.cache/pip, .venv/]
+
+# ───────────────────────── 1) BUILD ─────────────────────────
+build:backend:
+  stage: build
+  image: $PYTHON_IMAGE
+  script:
+    - python -m venv .venv && . .venv/bin/activate
+    - pip install -r backend/requirements.txt ruff mypy
+    - ruff check backend/            # 린트
+    - mypy backend/ || true          # 타입 체크(점진 도입)
+  artifacts:
+    paths: [.venv/]
+    expire_in: 1 hour
+
+build:frontend:
+  stage: build
+  image: node:22-slim
+  script:
+    - node -e "const fs=require('fs');const h=fs.readFileSync('index.html','utf8');const re=/<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/g;let m,e=0;while((m=re.exec(h))){try{new Function(m[1])}catch(x){e++;console.error(x.message)}}process.exit(e?1:0)"
+    # 필요 시 번들/압축 단계 추가
+
+# ───────────────────────── 2) TEST ──────────────────────────
+test:unit:
+  stage: test
+  image: $PYTHON_IMAGE
+  needs: ["build:backend"]
+  script:
+    - . .venv/bin/activate
+    - pip install pytest pytest-cov
+    - pytest backend/tests -v --cov=backend --cov-report=term --cov-report=xml --junitxml=report.xml
+  coverage: '/^TOTAL.+?(\d+\%)$/'
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
+      coverage_report: { coverage_format: cobertura, path: coverage.xml }
+
+test:integration:
+  stage: test
+  image: $PYTHON_IMAGE
+  needs: ["build:backend"]
+  services:
+    - name: postgres:16
+      alias: db
+  variables:
+    POSTGRES_DB: taxmgr_test
+    POSTGRES_USER: ci
+    POSTGRES_PASSWORD: ci
+    DATABASE_URL: "postgresql://ci:ci@db:5432/taxmgr_test"
+  script:
+    - . .venv/bin/activate
+    - pip install pytest httpx
+    - pytest backend/tests/integration -v   # API + DB(RLS) 통합 테스트
+
+# ─────────────────────── 3) SECURITY ────────────────────────
+# SAST / Secret-Detection / Dependency-Scanning 은 include 템플릿이 security 단계에서 자동 실행.
+# 추가 보강: 명시적 의존성 취약점 스캔
+security:pip-audit:
+  stage: security
+  image: $PYTHON_IMAGE
+  needs: ["build:backend"]
+  allow_failure: true   # 보고는 하되 파이프라인 차단은 정책에 따라
+  script:
+    - . .venv/bin/activate
+    - pip install pip-audit
+    - pip-audit -r backend/requirements.txt
+
+# ─────────────────────── 4) PACKAGE ─────────────────────────
+package:image:
+  stage: package
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: [""]
+  needs: ["test:unit", "test:integration"]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_TAG'
+  script:
+    - mkdir -p /kaniko/.docker
+    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"auth\":\"$(printf '%s:%s' $CI_REGISTRY_USER $CI_REGISTRY_PASSWORD | base64)\"}}}" > /kaniko/.docker/config.json
+    - /kaniko/executor --context "$CI_PROJECT_DIR" --dockerfile backend/Dockerfile
+        --destination "$IMAGE:$IMAGE_TAG" --destination "$IMAGE:latest"
+
+# 컨테이너 이미지 취약점 스캔(Trivy, GitLab Container-Scanning 템플릿)
+container_scanning:
+  stage: package
+  needs: ["package:image"]
+  variables:
+    CS_IMAGE: "$IMAGE:$IMAGE_TAG"
+
+# ──────────────────────── 5) DEPLOY ─────────────────────────
+.deploy_template: &deploy
+  image: alpine/helm:3.15.0
+  script:
+    - helm upgrade --install $RELEASE ./deploy/chart
+        --namespace $NAMESPACE --create-namespace
+        --set image.repository=$IMAGE --set image.tag=$IMAGE_TAG
+        --set env=$ENVIRONMENT --wait --timeout 5m
+
+deploy:staging:
+  stage: deploy
+  <<: *deploy
+  needs: ["package:image", "container_scanning"]
+  variables: { RELEASE: payroll-staging, NAMESPACE: staging, ENVIRONMENT: staging }
+  environment: { name: staging, url: https://staging.taxoffice.example }
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+deploy:production:
+  stage: deploy
+  <<: *deploy
+  needs: ["deploy:staging"]
+  variables: { RELEASE: payroll-prod, NAMESPACE: production, ENVIRONMENT: production }
+  environment: { name: production, url: https://app.taxoffice.example }
+  rules:
+    - if: '$CI_COMMIT_TAG'      # 태그 푸시 시에만
+      when: manual              # 수동 승인 게이트
