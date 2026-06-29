@@ -1350,6 +1350,7 @@ const TAB_ACCESS = {
 function getRole() { return (G.settings && G.settings.role) || 'admin'; }
 function canSeeTab(tab) { return (TAB_ACCESS[tab] || ROLES).includes(getRole()); }
 function canWrite() { return ['admin','tax_manager','accountant'].includes(getRole()); } // auditor·employee 읽기전용
+function requireWrite() { if (!canWrite()) { toast(`'${ROLE_LABELS[getRole()]}' 권한은 읽기 전용입니다 (수정 불가)`, 'warning', 3000); return false; } return true; }
 function canManagePayroll() { return ['admin','tax_manager'].includes(getRole()); }
 function canRevealPII() { return ['admin','tax_manager'].includes(getRole()); }
 function applyRoleVisibility() {
@@ -5881,6 +5882,7 @@ function addJulgaeListMember(leadId, targetId) {
 
 function toggleJulgaeField(pKey, clientId, field) {
   if (!pKey) return;
+  if (!requireWrite()) return;
   const period = G.periods.find(p=>p.id===pKey);
   if (period?.locked) { toast('마감된 리스트는 수정할 수 없습니다','warning'); return; }
   if (!G.julgae[pKey]) G.julgae[pKey] = {};
@@ -5897,6 +5899,7 @@ function toggleJulgaeField(pKey, clientId, field) {
 // 그룹 접힘(요약)행 체크 — 그룹 전원에게 일괄 적용
 function toggleJulgaeGroupField(pKey, field, idsCsv) {
   if (!pKey) return;
+  if (!requireWrite()) return;
   const period = G.periods.find(p => p.id === pKey);
   if (period?.locked) { toast('마감된 리스트는 수정할 수 없습니다','warning'); return; }
   const ids = String(idsCsv).split('-').map(Number).filter(Boolean);
@@ -5922,6 +5925,7 @@ function toggleGroupJoint(idsCsv) {
 
 // 신고 데이터 부분 갱신 헬퍼
 function _setJulgae(pKey, cid, patch) {
+  if (!requireWrite()) return false;
   const period = G.periods.find(p=>p.id===pKey);
   if (period?.locked) { toast('마감된 리스트는 수정할 수 없습니다','warning'); return false; }
   if (!G.julgae[pKey]) G.julgae[pKey] = {};
@@ -6343,6 +6347,7 @@ function _jppConfirm() {
 
 function updateJulgaeNum(pKey, clientId, field, rawVal) {
   if (!pKey) return;
+  if (!requireWrite()) { renderJulgae(); return; }
   const period0 = G.periods.find(p=>p.id===pKey);
   if (period0?.locked) { toast('마감된 리스트는 수정할 수 없습니다','warning'); return; }
   if (!G.julgae[pKey]) G.julgae[pKey] = {};
@@ -6384,6 +6389,7 @@ function updateJulgaeNum(pKey, clientId, field, rawVal) {
 }
 
 function bulkJulgae(pKey, val) {
+  if (!requireWrite()) return;
   if (!G.julgae[pKey]) G.julgae[pKey] = {};
   const mf = G.julgaeManagers || [];
   let clients = G.clients.filter(c => c.status !== '해지' && c.status !== '폐업');
@@ -11800,6 +11806,7 @@ function jmfSave(cid) {
   renderJulgae();
 }
 function jmfApplyRec(cid, rec) {
+  if (!requireWrite()) return;
   if (setMonthlyFee(cid, rec, currentYM())) { renderJulgae(); toast('추천 기장료 적용됨','success',1500); }
 }
 
@@ -11957,6 +11964,7 @@ function applyFeeSyncAll() {
 }
 
 function applyBosuFee(pKey, clientId, field, fee) {
+  if (!requireWrite()) return;
   if (!G.julgae[pKey]) G.julgae[pKey] = {};
   const cur = julgaeVal(pKey, clientId);
   cur[field] = fee;
@@ -12460,6 +12468,7 @@ function toggleJulgaeSelect(clientId) {
   renderJulgae();
 }
 function checkAllJulgaeField(field) {
+  if (!requireWrite()) return;
   const period = G.periods[Math.min(G.julgaePeriodIdx, Math.max(0, G.periods.length-1))];
   if (!period) return;
   const pKey = period.id;
@@ -12480,6 +12489,7 @@ function bulkSetJulgaeAll(value) {
   saveToLS(); renderJulgae();
 }
 function bulkSetJulgae(field, value, skipSave) {
+  if (!requireWrite()) return;
   const period = G.periods[G.julgaePeriodIdx];
   if (!period) return;
   const pKeySimple = period.id;
