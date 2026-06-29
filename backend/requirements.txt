@@ -1,0 +1,10 @@
+anthropic>=0.69
+pdfplumber>=0.11
+pymupdf>=1.24
+pytesseract>=0.3.10
+pillow>=10
+pydantic>=2.5
+fastapi>=0.110
+uvicorn[standard]>=0.27
+python-multipart>=0.0.9
+# 시스템 패키지(별도 설치): tesseract-ocr, tesseract-ocr-kor
