@@ -5479,6 +5479,25 @@ function removeFromJulgaeGroup(pKey2, clientId) {
   renderJulgae();
 }
 
+// 거래처명 팝업에서 현재 신고리스트에서 제외
+function removeClientFromJulgaeList(id) {
+  const period = G.periods[G.julgaePeriodIdx];
+  if (!period) { toast('신고 기간을 먼저 선택하세요','warning'); return; }
+  const c = G.clients.find(x=>x.id===id);
+  if (!confirm(`'${c?.name||''}'을(를) '${period.label}' 신고리스트에서 제외할까요?\n(거래처 자체는 삭제되지 않습니다)`)) return;
+  // adhoc(미등록) 항목이면 adhoc에서 제거
+  if ((G.julgaeAdhoc||{})[period.id]?.some(a=>a.id===id)) {
+    G.julgaeAdhoc[period.id] = G.julgaeAdhoc[period.id].filter(a=>a.id!==id);
+  } else {
+    if (!period.enrolled || !period.enrolled.length) {
+      period.enrolled = applyReportFilter(G.clients.filter(cc=>clientInFilingPeriod(cc, period)), period).map(cc=>cc.id);
+    }
+    period.enrolled = period.enrolled.filter(x=>x!==id);
+  }
+  saveToLS(); closeModal(); renderJulgae();
+  toast('신고리스트에서 제외했습니다','success',2000);
+}
+
 function toggleJulgaeField(pKey, clientId, field) {
   if (!pKey) return;
   const period = G.periods.find(p=>p.id===pKey);
@@ -9622,7 +9641,7 @@ function openClientNotes(id) {
   const notes = (G.clientNotes||{})[id] || [];
   const feeHist = (G.feeChangeHistory||{})[id] || [];
   showModal(`<div style="max-width:520px">
-  <div class="modal-header"><h3>📝 ${esc(c.name)} — 메모/이력</h3><div style="display:flex;gap:6px;align-items:center"><button onclick="closeModal();openClientFilingHistory(${id})" style="padding:4px 12px;background:#e8f0fe;color:#1565c0;border:1px solid #c5cae9;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">📋 신고이력</button><button onclick="closeModal();openForm(${id})" style="padding:4px 12px;background:#f0f4ff;color:#4f8ef7;border:1px solid #c5cae9;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">✏ 거래처 수정</button><button class="close-btn" onclick="closeModal()">✕</button></div></div>
+  <div class="modal-header"><h3>📝 ${esc(c.name)} — 메모/이력</h3><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end"><button onclick="closeModal();openClientFilingHistory(${id})" style="padding:4px 12px;background:#e8f0fe;color:#1565c0;border:1px solid #c5cae9;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">📋 신고이력</button><button onclick="closeModal();openForm(${id})" style="padding:4px 12px;background:#f0f4ff;color:#4f8ef7;border:1px solid #c5cae9;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">✏ 거래처 수정</button>${G.currentTab==='julgae'?`<button onclick="closeModal();openIncomeGroupLink(${id})" style="padding:4px 12px;background:#f3e5f5;color:#6a1b9a;border:1px solid #ce93d8;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">👥 그룹 추가</button><button onclick="removeClientFromJulgaeList(${id})" style="padding:4px 12px;background:#fdecea;color:#c62828;border:1px solid #ef9a9a;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">🗑 리스트 제외</button>`:''}<button class="close-btn" onclick="closeModal()">✕</button></div></div>
   <div class="modal-body">
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <div style="display:flex;flex-direction:column;gap:6px;flex:1">
