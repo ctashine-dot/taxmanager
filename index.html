@@ -6642,16 +6642,22 @@ function renderFees() {
       </td>
     </tr>`;
   };
-  window._feesVisibleClients = filteredFeeClients;
-  const monthlyRows = (_fmMgrKeys.length > 1 ? _fmMgrKeys : ['_all']).flatMap(mgrKey => {
-    const cls = mgrKey === '_all' ? filteredFeeClients : _fmByMgr[mgrKey];
-    const subTotal = cls.reduce((a,c)=>a+getFeeForYM(c,ym),0);
-    const subColl = cls.filter(c=>G.monthlyFees[c.id]?.[ym]).reduce((a,c)=>a+getFeeForYM(c,ym),0);
-    const subPct = subTotal ? Math.round(subColl/subTotal*100) : 0;
-    const header = _fmMgrKeys.length > 1 ? `<tr style="background:#e8eaf6"><td colspan="8" style="padding:4px 10px;font-size:11px;font-weight:700;color:#3949ab">👤 ${esc(mgrKey)} <span style="font-weight:400;color:#7986cb">${cls.length}개 업체 · ${subTotal.toLocaleString()}원 · 수금${subPct}%</span></td></tr>` : '';
-    const rows = cls.map(_genFeeRow);
-    return [header, ...rows];
-  }).join('');
+  // 거래처목록 기본 정렬(수임유형순→수임일자)과 동일하게, 담당자 그룹핑 없이 평면 정렬
+  const _feeSorted = [...filteredFeeClients].sort((a,b)=>{
+    const ar=dealSortRankForClient(a), br=dealSortRankForClient(b);
+    if (ar!==br) return ar-br;
+    const ad=a.contractDate||'ZZZZ-ZZ', bd=b.contractDate||'ZZZZ-ZZ';
+    return ad.localeCompare(bd) || (a.name||'').localeCompare(b.name||'','ko');
+  });
+  window._feesVisibleClients = _feeSorted;
+  const monthlyRows = _feeSorted.map(_genFeeRow).join('');
+  // 담당자별 현황 집계(박스 밑 표시용)
+  const _mgrSummary = _fmMgrKeys.map(k=>{
+    const cls=_fmByMgr[k];
+    const t=cls.reduce((a,c)=>a+getFeeForYM(c,ym),0);
+    const col=cls.filter(c=>G.monthlyFees[c.id]?.[ym]).reduce((a,c)=>a+getFeeForYM(c,ym),0);
+    return {k, n:cls.length, t, pct: t?Math.round(col/t*100):0};
+  });
 
   const filingRows = filteredFilingFees.map(x => `
     <tr style="background:${x.collected?'#e8f5e9':'#fff'}">
@@ -6772,6 +6778,13 @@ function renderFees() {
         <div style="font-size:18px;font-weight:800;color:#e53935">${mFeeUnpaid.toLocaleString()}원</div>
       </div>
     </div>
+    ${_mgrSummary.length?`<div style="border:1px solid #e8eaf6;border-radius:10px;overflow:hidden;margin-bottom:14px">
+      <div style="background:#f5f7ff;padding:6px 12px;font-size:12px;font-weight:700;color:#3949ab">👤 담당자별 현황</div>
+      ${_mgrSummary.map(m=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 12px;border-top:1px solid #f0f0f0;font-size:12px">
+        <span style="font-weight:600">${esc(m.k)} <span style="color:#888;font-weight:400">${m.n}개</span></span>
+        <span style="color:#555">청구 <b style="color:#4f8ef7">${m.t.toLocaleString()}</b> · 수금 ${m.pct}%</span>
+      </div>`).join('')}
+    </div>`:''}
     <div class="progress-bar" style="margin-bottom:6px"><div class="progress-fill" style="width:${mFeePct}%"></div></div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:${(G.sectionCollapsed||{})['fees-monthly-list']?4:12}px">
       ${sectionToggleBtn('fees-monthly-list')}
