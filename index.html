@@ -373,6 +373,7 @@ body.dark-mode .overlay { background: rgba(0,0,0,.65); }
   <button class="tab" onclick="switchTab('schedule')" id="tab-schedule">📅 신고 일정</button>
   <button class="tab" onclick="switchTab('julgae')" id="tab-julgae">신고 및 결재</button>
   <button class="tab" onclick="switchTab('fees')" id="tab-fees">💰 수수료</button>
+  <button class="tab" onclick="switchTab('payroll')" id="tab-payroll">🧾 급여관리</button>
   <button class="tab" onclick="switchTab('aitools')" id="tab-aitools">✦ AI 도구</button>
 </div>
 
@@ -385,6 +386,7 @@ body.dark-mode .overlay { background: rgba(0,0,0,.65); }
   <div id="page-closure" style="display:none"></div>
   <div id="page-julgae" style="display:none"></div>
   <div id="page-fees" style="display:none"></div>
+  <div id="page-payroll" style="display:none"></div>
   <div id="page-aitools" style="display:none"></div>
 </div>
 
@@ -454,6 +456,10 @@ function expandClients(mini) {
 let G = {
   user: null,
   clients: [],
+  employees: [],      // 급여관리 직원(users)
+  payroll: {},        // 급여 기록 — key: `${empId}_${YYYY-MM}`
+  payrollLog: [],     // 급여 변경 감사로그(append-only)
+  payrollYM: '',      // 급여관리 현재 조회월
   currentTab: 'dashboard',
   searchText: '',
   clientRepSearch: '',
@@ -787,6 +793,9 @@ function saveToLS() {
     localStorage.setItem('tm_adHocFees', JSON.stringify(G.adHocFees||{}));
     localStorage.setItem('tm_julgaeAdhoc', JSON.stringify(G.julgaeAdhoc||{}));
     localStorage.setItem('tm_income26Unmatched', JSON.stringify(G.income26Unmatched||[]));
+    localStorage.setItem('tm_employees', JSON.stringify(G.employees||[]));
+    localStorage.setItem('tm_payroll', JSON.stringify(G.payroll||{}));
+    localStorage.setItem('tm_payrollLog', JSON.stringify(G.payrollLog||[]));
     if (G.julgaeSelectedPeriods) localStorage.setItem('tm_julgaeSelectedPeriods', JSON.stringify(G.julgaeSelectedPeriods));
     if (G.julgaeSelectedYears) localStorage.setItem('tm_julgaeSelectedYears', JSON.stringify(G.julgaeSelectedYears));
     if (G.pinnedPeriods) localStorage.setItem('tm_pinnedPeriods', JSON.stringify(G.pinnedPeriods));
@@ -826,6 +835,9 @@ function saveToLS() {
       invoiceHistory: JSON.stringify(G.invoiceHistory||[]),
       income26Unmatched: JSON.stringify(G.income26Unmatched||[]),
       pinnedPeriods: JSON.stringify(G.pinnedPeriods||[]),
+      employees: JSON.stringify(G.employees||[]),
+      payroll: JSON.stringify(G.payroll||{}),
+      payrollLog: JSON.stringify(G.payrollLog||[]),
     }).then(() => true).catch(e => {
       console.error('Firebase 저장 실패:', e);
       showSaveError('클라우드 저장 실패 — 로컬에만 저장됨');
@@ -1329,7 +1341,7 @@ function switchTab(tab) {
   const page = document.getElementById('page-'+tab);
   page.style.display = 'block';
   G.currentTab = tab;
-  const renders = {dashboard:renderDashboard,clients:renderClients,schedule:renderSchedule,closure:renderClosure,julgae:renderJulgae,fees:renderFees,aitools:renderAITools};
+  const renders = {dashboard:renderDashboard,clients:renderClients,schedule:renderSchedule,closure:renderClosure,julgae:renderJulgae,fees:renderFees,payroll:renderPayroll,aitools:renderAITools};
   renders[tab]?.();
 }
 
@@ -7431,6 +7443,209 @@ function savePeriodNote(pKey) {
   saveToLS(); closeModal(); renderJulgae();
 }
 
+// ══════════════════════════════════════════════════════
+// 급여관리 (users · payroll · tax_records · audit_logs)
+// ══════════════════════════════════════════════════════
+// 4대보험 근로자 부담 요율(2024 기준, 필요시 조정)
+const PAYROLL_RATES = { np: 0.045, hi: 0.03545, ltc: 0.1295, ei: 0.009, local: 0.10 };
+const EMP_STATUS = ['재직', '휴직', '퇴직'];
+
+function payrollCalc(empId, ym) {
+  const e = G.employees.find(x => x.id === empId) || {};
+  const rec = (G.payroll || {})[`${empId}_${ym}`] || {};
+  const base = rec.base != null ? rec.base : (e.baseSalary || 0);
+  const allowance = rec.allowance || 0, overtime = rec.overtime || 0, bonus = rec.bonus || 0;
+  const gross = base + allowance + overtime + bonus;
+  const taxable = gross; // 간이: 비과세 항목 제외는 생략
+  const _trunc = (x) => Math.floor(x + 1e-6); // 부동소수 보정 후 원단위 절사
+  const np  = _trunc(taxable * PAYROLL_RATES.np);
+  const hi  = _trunc(taxable * PAYROLL_RATES.hi);
+  const ltc = _trunc(hi * PAYROLL_RATES.ltc);
+  const ei  = _trunc(taxable * PAYROLL_RATES.ei);
+  const incomeTax = rec.incomeTax || 0;
+  const localTax = _trunc(incomeTax * PAYROLL_RATES.local);
+  const other = rec.other || 0;
+  const deduction = np + hi + ltc + ei + incomeTax + localTax + other;
+  const net = gross - deduction;
+  return { base, allowance, overtime, bonus, gross, np, hi, ltc, ei, incomeTax, localTax, other, deduction, net };
+}
+
+function _payrollLog(action, empId, ym, field, value) {
+  if (!G.payrollLog) G.payrollLog = [];
+  const e = G.employees.find(x => x.id === empId);
+  const ts = (()=>{const d=new Date();const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;})();
+  G.payrollLog.unshift({ ts, actor: (G.user && (G.user.displayName || G.user.email)) || '-', action, emp: e ? e.name : String(empId||''), ym: ym || '', field: field || '', value: value != null ? value : '' });
+  if (G.payrollLog.length > 500) G.payrollLog.length = 500;
+}
+
+function updatePayrollField(empId, ym, field, value) {
+  const key = `${empId}_${ym}`;
+  if (!G.payroll[key]) G.payroll[key] = {};
+  const num = Number(String(value).replace(/[,\s원]/g, '')) || 0;
+  G.payroll[key][field] = num;
+  _payrollLog('급여수정', empId, ym, field, num);
+  saveToLS();
+  renderPayroll();
+}
+
+function payrollMonthChange(dir) {
+  const ym = G.payrollYM || currentYM();
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(y, m - 1 + dir, 1);
+  G.payrollYM = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  renderPayroll();
+}
+
+function openEmployeeModal(id) {
+  const e = id ? G.employees.find(x => x.id === id) : null;
+  const f = (label, field, val, attrs='') => `<div style="margin-bottom:10px"><label class="flabel">${label}</label><input id="emp-${field}" value="${esc(val||'')}" ${attrs} style="width:100%;border:1px solid #e0e0e0;border-radius:8px;padding:9px;font-size:14px;box-sizing:border-box;font-family:inherit"></div>`;
+  showModal(`<div style="max-width:460px;width:100%">
+    <div class="modal-header"><h3>${e?'직원 수정':'직원 추가'}</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div style="display:flex;gap:8px">
+        <div style="flex:1">${f('사번','empNo',e?.empNo)}</div>
+        <div style="flex:1">${f('성명','name',e?.name)}</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <div style="flex:1">${f('부서','dept',e?.dept)}</div>
+        <div style="flex:1">${f('직위','position',e?.position)}</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <div style="flex:1">${f('입사일','hireDate',e?.hireDate,'type="date"')}</div>
+        <div style="flex:1">${f('기본급','baseSalary',e?.baseSalary,'inputmode="numeric"')}</div>
+      </div>
+      <div style="margin-bottom:10px"><label class="flabel">상태</label>
+        <select id="emp-status" class="fsel" style="width:100%">${EMP_STATUS.map(s=>`<option ${e?.status===s?'selected':''}>${s}</option>`).join('')}</select>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        ${e?`<button class="btn-sm" style="background:#fdecea;color:#c62828;border:1.5px solid #ef9a9a" onclick="deleteEmployee(${e.id})">삭제</button>`:''}
+        <button class="btn-primary" style="flex:1" onclick="saveEmployeeFromForm(${e?e.id:'null'})">${e?'저장':'추가'}</button>
+      </div>
+    </div></div>`);
+}
+
+function saveEmployeeFromForm(id) {
+  const v = f => (document.getElementById('emp-'+f)?.value || '').trim();
+  const empNo = v('empNo'), name = v('name');
+  if (!name) { toast('성명을 입력해주세요', 'warning'); return; }
+  const data = { empNo, name, dept: v('dept'), position: v('position'), hireDate: v('hireDate'),
+    baseSalary: Number(v('baseSalary').replace(/[,\s]/g,''))||0, status: document.getElementById('emp-status')?.value || '재직' };
+  if (id) {
+    const e = G.employees.find(x => x.id === id); if (e) Object.assign(e, data);
+    _payrollLog('직원수정', id, '', 'name', name);
+  } else {
+    const newId = (G.employees.reduce((mx, e) => Math.max(mx, e.id||0), 0) || 0) + 1;
+    G.employees.push({ id: newId, ...data });
+    _payrollLog('직원추가', newId, '', 'name', name);
+  }
+  saveToLS(); closeModal(); renderPayroll();
+  toast(id ? '직원 정보 저장됨' : '직원 추가됨', 'success');
+}
+
+function deleteEmployee(id) {
+  const e = G.employees.find(x => x.id === id); if (!e) return;
+  if (!confirm(`'${e.name}' 직원을 삭제할까요?\n해당 직원의 급여 기록도 함께 삭제됩니다.`)) return;
+  G.employees = G.employees.filter(x => x.id !== id);
+  Object.keys(G.payroll).forEach(k => { if (k.startsWith(id + '_')) delete G.payroll[k]; });
+  _payrollLog('직원삭제', id, '', 'name', e.name);
+  saveToLS(); closeModal(); renderPayroll();
+  toast('직원 삭제됨', 'info');
+}
+
+function renderPayroll() {
+  if (!G.payrollYM) G.payrollYM = currentYM();
+  const ym = G.payrollYM;
+  const emps = (G.employees || []);
+  const active = emps.filter(e => e.status === '재직' || e.status === '휴직');
+  const calcs = active.map(e => ({ e, c: payrollCalc(e.id, ym) }));
+  const sum = calcs.reduce((a, {c}) => ({ gross:a.gross+c.gross, ded:a.ded+c.deduction, net:a.net+c.net,
+    inc:a.inc+c.incomeTax, loc:a.loc+c.localTax, tax:a.tax+c.incomeTax+c.localTax,
+    np:a.np+c.np, hi:a.hi+c.hi, ltc:a.ltc+c.ltc, ei:a.ei+c.ei }), {gross:0,ded:0,net:0,inc:0,loc:0,tax:0,np:0,hi:0,ltc:0,ei:0});
+  const won = n => (n||0).toLocaleString();
+  const pin = (empId, field, val) => `<input type="text" inputmode="numeric" value="${val?won(val):''}" onfocus="this.value=this.value.replace(/,/g,'');this.select()" onblur="const n=Number(this.value.replace(/,/g,''))||0;this.value=n?n.toLocaleString():''" onchange="updatePayrollField(${empId},'${ym}','${field}',this.value)" style="width:84px;text-align:right;border:1px solid #e0e0e0;border-radius:5px;padding:3px 5px;font-size:12px;font-family:inherit;box-sizing:border-box">`;
+  const td = (v, style='') => `<td style="text-align:right;padding:4px 8px;font-size:12px;${style}">${v}</td>`;
+
+  const empOpen = !!G.payrollEmpOpen, logOpen = !!G.payrollLogOpen;
+
+  document.getElementById('page-payroll').innerHTML = `
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+    <h2 style="font-size:20px;font-weight:800">🧾 급여관리</h2>
+    <div style="display:flex;align-items:center;gap:6px">
+      <button class="btn-sm" style="background:#f5f5f5;color:#555" onclick="payrollMonthChange(-1)">←</button>
+      <span style="font-weight:700;font-size:15px;min-width:92px;text-align:center">${ym}</span>
+      <button class="btn-sm" style="background:#f5f5f5;color:#555" onclick="payrollMonthChange(1)">→</button>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px">
+    <div class="card" style="padding:12px"><div style="font-size:12px;color:#888">재직 인원</div><div style="font-size:20px;font-weight:800;color:#1565c0">${active.length}명</div></div>
+    <div class="card" style="padding:12px"><div style="font-size:12px;color:#888">지급총액</div><div style="font-size:18px;font-weight:800;color:#2e7d32">${won(sum.gross)}</div></div>
+    <div class="card" style="padding:12px"><div style="font-size:12px;color:#888">공제합계</div><div style="font-size:18px;font-weight:800;color:#e53935">${won(sum.ded)}</div></div>
+    <div class="card" style="padding:12px"><div style="font-size:12px;color:#888">실지급합계</div><div style="font-size:18px;font-weight:800;color:#1a1a2e">${won(sum.net)}</div></div>
+    <div class="card" style="padding:12px"><div style="font-size:12px;color:#888">원천징수(소득세+지방세)</div><div style="font-size:18px;font-weight:800;color:#6a1b9a">${won(sum.tax)}</div></div>
+  </div>
+
+  <div style="margin-bottom:8px;display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn-sm" style="background:#e8f0fe;color:#1565c0;border:1px solid #90caf9;font-weight:600" onclick="G.payrollEmpOpen=!G.payrollEmpOpen;renderPayroll()">${empOpen?'▾ 직원 관리 접기':'▸ 직원 관리'} (${emps.length}명)</button>
+    <button class="btn-sm" style="background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;font-weight:600" onclick="openEmployeeModal(null)">+ 직원 추가</button>
+    <button class="btn-sm" style="background:#f3e5f5;color:#6a1b9a;border:1px solid #ce93d8;font-weight:600" onclick="G.payrollLogOpen=!G.payrollLogOpen;renderPayroll()">${logOpen?'▾ 변경 이력 접기':'▸ 변경 이력'}</button>
+  </div>
+
+  ${empOpen ? `<div class="tbl-wrap" style="margin-bottom:16px"><table>
+    <thead><tr><th>사번</th><th>성명</th><th>부서</th><th>직위</th><th>입사일</th><th style="text-align:right">기본급</th><th style="text-align:center">상태</th><th style="text-align:center">수정</th></tr></thead>
+    <tbody>${emps.length ? emps.map(e=>`<tr>
+      <td style="font-size:12px;color:#888">${esc(e.empNo)||'-'}</td>
+      <td style="font-weight:600">${esc(e.name)}</td>
+      <td style="font-size:12px">${esc(e.dept)||'-'}</td>
+      <td style="font-size:12px">${esc(e.position)||'-'}</td>
+      <td style="font-size:12px;color:#666">${esc(e.hireDate)||'-'}</td>
+      <td style="text-align:right;font-size:12px">${won(e.baseSalary)}</td>
+      <td style="text-align:center">${badge(e.status||'재직', e.status==='퇴직'?'red':e.status==='휴업'||e.status==='휴직'?'orange':'green')}</td>
+      <td style="text-align:center"><button class="btn-sm" style="background:#f5f5f5;color:#555;padding:2px 8px" onclick="openEmployeeModal(${e.id})">✏</button></td>
+    </tr>`).join('') : `<tr><td colspan="8" style="text-align:center;padding:30px;color:#aaa">등록된 직원이 없습니다. '직원 추가'로 시작하세요.</td></tr>`}</tbody>
+  </table></div>` : ''}
+
+  ${logOpen ? `<div class="card" style="margin-bottom:16px;max-height:240px;overflow:auto;padding:10px">
+    <div style="font-size:12px;font-weight:700;color:#6a1b9a;margin-bottom:6px">📋 변경 이력 (감사로그)</div>
+    ${(G.payrollLog||[]).length ? (G.payrollLog||[]).slice(0,30).map(l=>`<div style="font-size:11px;color:#555;padding:3px 0;border-bottom:1px solid #f0f0f0"><span style="color:#aaa">${esc(l.ts)}</span> · ${esc(l.actor)} · <b>${esc(l.action)}</b> ${esc(l.emp)}${l.ym?` (${esc(l.ym)})`:''}${l.field?` · ${esc(l.field)}=${esc(String(l.value))}`:''}</div>`).join('') : '<div style="font-size:12px;color:#aaa">이력 없음</div>'}
+  </div>` : ''}
+
+  <div class="tbl-wrap"><table>
+    <thead><tr>
+      <th style="width:28px">번</th><th>성명</th>
+      <th style="text-align:right">기본급</th><th style="text-align:right">수당</th><th style="text-align:right">상여</th>
+      <th style="text-align:right">지급계</th>
+      <th style="text-align:right">국민연금</th><th style="text-align:right">건강</th><th style="text-align:right">장기요양</th><th style="text-align:right">고용</th>
+      <th style="text-align:right">소득세</th><th style="text-align:right">지방세</th>
+      <th style="text-align:right">공제계</th><th style="text-align:right">실지급</th>
+    </tr></thead>
+    <tbody>
+    ${active.length ? calcs.map(({e,c}, i) => `<tr>
+      <td style="color:#aaa;font-size:11px">${i+1}</td>
+      <td style="font-weight:600;white-space:nowrap">${esc(e.name)}${e.status==='휴직'?'<span style="font-size:9px;color:#e65100;margin-left:3px">휴직</span>':''}</td>
+      <td style="text-align:right">${pin(e.id,'base',c.base)}</td>
+      <td style="text-align:right">${pin(e.id,'allowance',c.allowance)}</td>
+      <td style="text-align:right">${pin(e.id,'bonus',c.bonus)}</td>
+      ${td(`<b>${won(c.gross)}</b>`,'color:#2e7d32')}
+      ${td(won(c.np),'color:#888')}${td(won(c.hi),'color:#888')}${td(won(c.ltc),'color:#888')}${td(won(c.ei),'color:#888')}
+      <td style="text-align:right">${pin(e.id,'incomeTax',c.incomeTax)}</td>
+      ${td(won(c.localTax),'color:#888')}
+      ${td(`<b>${won(c.deduction)}</b>`,'color:#e53935')}
+      ${td(`<b>${won(c.net)}</b>`,'color:#1a1a2e;font-size:13px')}
+    </tr>`).join('') : `<tr><td colspan="14" style="text-align:center;padding:30px;color:#aaa">재직 중인 직원이 없습니다. '직원 추가'로 등록하세요.</td></tr>`}
+    ${active.length ? `<tr style="background:#f5f0fa;border-top:2px solid #ce93d8;font-weight:700">
+      <td></td><td style="color:#4a148c">합계</td><td colspan="3"></td>
+      ${td(won(sum.gross),'color:#2e7d32')}
+      ${td(won(sum.np))}${td(won(sum.hi))}${td(won(sum.ltc))}${td(won(sum.ei))}
+      ${td(won(sum.inc))}${td(won(sum.loc))}
+      ${td(won(sum.ded),'color:#e53935')}${td(won(sum.net),'color:#1a1a2e')}
+    </tr>` : ''}
+    </tbody>
+  </table></div>
+  <div style="font-size:11px;color:#aaa;margin-top:8px">※ 4대보험 근로자부담 자동계산(국민연금 4.5% · 건강 3.545% · 장기요양 건강료의 12.95% · 고용 0.9%). 소득세는 간이세액표 기준으로 직접 입력하면 지방소득세(10%)는 자동 계산됩니다.</div>
+  `;
+}
+
 function renderAITools() {
   document.getElementById('page-aitools').innerHTML = `
   <div style="margin-bottom:20px"><h2 style="font-size:20px;font-weight:800;margin:0">AI 도구</h2>
@@ -12756,13 +12971,16 @@ function applyCloudSnapshot(data) {
   G.adHocFees = P(data.adHocFees, {});
   G.julgaeAdhoc = P(data.julgaeAdhoc, {});
   G.income26Unmatched = data.income26Unmatched ? P(data.income26Unmatched, []) : P(localStorage.getItem('tm_income26Unmatched'), []);
+  G.employees = P(data.employees, []);
+  G.payroll = P(data.payroll, {});
+  G.payrollLog = P(data.payrollLog, []);
   if (data.pinnedPeriods) G.pinnedPeriods = P(data.pinnedPeriods, G.pinnedPeriods||[]);
   if (data.julgaeSelectedPeriods) G.julgaeSelectedPeriods = P(data.julgaeSelectedPeriods, G.julgaeSelectedPeriods);
   if (data.julgaeSelectedYears) G.julgaeSelectedYears = P(data.julgaeSelectedYears, G.julgaeSelectedYears);
 }
 
 function rerenderCurrent() {
-  const renders = {dashboard:renderDashboard,clients:renderClients,schedule:renderSchedule,closure:renderClosure,julgae:renderJulgae,fees:renderFees,aitools:renderAITools};
+  const renders = {dashboard:renderDashboard,clients:renderClients,schedule:renderSchedule,closure:renderClosure,julgae:renderJulgae,fees:renderFees,payroll:renderPayroll,aitools:renderAITools};
   try { renders[G.currentTab]?.(); } catch(e) { console.error('재렌더 실패:', e); }
 }
 
@@ -12825,6 +13043,9 @@ async function loadFromFirebase() {
         G.adHocFees = JSON.parse(localStorage.getItem('tm_adHocFees')||'{}');
         G.julgaeAdhoc = JSON.parse(localStorage.getItem('tm_julgaeAdhoc')||'{}');
         G.income26Unmatched = JSON.parse(localStorage.getItem('tm_income26Unmatched')||'[]');
+        G.employees = JSON.parse(localStorage.getItem('tm_employees')||'[]');
+        G.payroll = JSON.parse(localStorage.getItem('tm_payroll')||'{}');
+        G.payrollLog = JSON.parse(localStorage.getItem('tm_payrollLog')||'[]');
         const sjsp = localStorage.getItem('tm_julgaeSelectedPeriods'); if(sjsp) G.julgaeSelectedPeriods = JSON.parse(sjsp);
         const sjsy = localStorage.getItem('tm_julgaeSelectedYears'); if(sjsy) G.julgaeSelectedYears = JSON.parse(sjsy);
         const _pp = localStorage.getItem('tm_pinnedPeriods'); if(_pp) G.pinnedPeriods = JSON.parse(_pp);
