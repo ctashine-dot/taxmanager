@@ -350,6 +350,7 @@ body.dark-mode .overlay { background: rgba(0,0,0,.65); }
     TaxManager
   </div>
   <div id="header-btns">
+    <span id="role-badge" onclick="openSettings()" title="역할 변경(설정)" style="display:none;cursor:pointer;background:#ede7f6;color:#4a148c;border:1px solid #ce93d8;border-radius:10px;padding:3px 10px;font-size:11px;font-weight:700;align-self:center"></span>
     <button class="hbtn pwa-only" onclick="window.location.reload()" title="새로고침">🔄</button>
 
     <button class="hbtn" onclick="openGlobalSearch()" title="전체 검색">🔍</button>
@@ -1334,7 +1335,32 @@ function dealBadge(d) {
 // ══════════════════════════════════════════════════════
 // 탭 전환
 // ══════════════════════════════════════════════════════
+// ── 앱 내 RBAC: 역할별 화면/기능 권한 게이트 ──
+const ROLES = ['admin','tax_manager','accountant','employee','auditor'];
+const ROLE_LABELS = {admin:'관리자', tax_manager:'세무사', accountant:'담당직원', employee:'직원(본인)', auditor:'열람전용'};
+const TAB_ACCESS = {
+  dashboard: ROLES,
+  clients:   ['admin','tax_manager','accountant','auditor'],
+  schedule:  ['admin','tax_manager','accountant','auditor'],
+  julgae:    ['admin','tax_manager','accountant','auditor'],
+  fees:      ['admin','tax_manager','accountant','auditor'],
+  payroll:   ['admin','tax_manager','accountant'],   // 민감(급여·PII) — 열람전용/직원 제외
+  aitools:   ['admin','tax_manager','accountant'],
+};
+function getRole() { return (G.settings && G.settings.role) || 'admin'; }
+function canSeeTab(tab) { return (TAB_ACCESS[tab] || ROLES).includes(getRole()); }
+function canWrite() { return ['admin','tax_manager','accountant'].includes(getRole()); } // auditor·employee 읽기전용
+function canManagePayroll() { return ['admin','tax_manager'].includes(getRole()); }
+function canRevealPII() { return ['admin','tax_manager'].includes(getRole()); }
+function applyRoleVisibility() {
+  Object.keys(TAB_ACCESS).forEach(tab => { const b = document.getElementById('tab-'+tab); if (b) b.style.display = canSeeTab(tab) ? '' : 'none'; });
+  const badge = document.getElementById('role-badge');
+  if (badge) { const r = getRole(); badge.textContent = ROLE_LABELS[r] || r; badge.style.display = r==='admin' ? 'none' : 'inline-block'; }
+  if (!canSeeTab(G.currentTab)) switchTab('dashboard');
+}
+
 function switchTab(tab) {
+  if (!canSeeTab(tab)) { toast(`'${ROLE_LABELS[getRole()]}' 권한으로는 접근할 수 없는 메뉴입니다`, 'warning'); return; }
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.getElementById('tab-'+tab)?.classList.add('active');
   document.querySelectorAll('[id^="page-"]').forEach(p=>p.style.display='none');
@@ -7589,6 +7615,7 @@ function maskAccount(s) {
 }
 // 주민번호·계좌 평문 열람 — 감사로그 기록
 function revealEmpPII(empId, field) {
+  if (!canRevealPII()) { toast(`'${ROLE_LABELS[getRole()]}' 권한으로는 주민번호·계좌를 열람할 수 없습니다 (관리자/세무사 전용)`, 'warning', 3500); return; }
   const e = G.employees.find(x => x.id === empId); if (!e) return;
   const val = field === 'residentNo' ? e.residentNo : e.bankAccount;
   if (!val) { toast('등록된 값이 없습니다', 'info'); return; }
@@ -7681,6 +7708,7 @@ function saveEmployeeFromForm(id) {
 }
 
 function deleteEmployee(id) {
+  if (!canManagePayroll()) { toast(`'${ROLE_LABELS[getRole()]}' 권한으로는 직원 삭제가 불가합니다 (관리자/세무사 전용)`, 'warning', 3500); return; }
   const e = G.employees.find(x => x.id === id); if (!e) return;
   if (!confirm(`'${e.name}' 직원을 삭제할까요?\n해당 직원의 급여 기록도 함께 삭제됩니다.`)) return;
   G.employees = G.employees.filter(x => x.id !== id);
@@ -11425,6 +11453,11 @@ function openSettings() {
         <button onclick="addMgr()" class="btn-sm" style="background:#4f8ef7;color:#fff">추가</button>
       </div>
     </div>
+    <div style="border:1px solid #e1d5f5;border-radius:10px;padding:12px;background:#faf7ff;margin-bottom:4px">
+      <label class="flabel" style="color:#4a148c">내 역할 (화면·기능 권한)</label>
+      <select class="fsel" id="set-role" style="width:100%">${ROLES.map(r=>`<option value="${r}" ${getRole()===r?'selected':''}>${ROLE_LABELS[r]} (${r})</option>`).join('')}</select>
+      <div style="font-size:11px;color:#888;margin-top:4px">관리자/세무사=전체, 담당직원=급여·신고 가능, 열람전용=읽기만, 직원=대시보드. 급여관리·AI도구는 관리자/세무사/담당직원만, 급여 PII 열람은 관리자/세무사만.</div>
+    </div>
     <div><label class="flabel">월 수금 목표액 (원)</label>
     <input type="number" class="finput" id="set-feeTarget" value="${s.feeTarget||0}" placeholder="0"></div>
     <div><label class="flabel">청구서 시작 번호</label>
@@ -11593,6 +11626,8 @@ function saveSettings() {
   G.settings.managers = [..._tempMgrs];
   G.settings.feeTarget = Number(document.getElementById('set-feeTarget')?.value)||0;
   G.settings.invoiceSeq = Number(document.getElementById('set-invoiceSeq')?.value)||0;
+  const _selRole = document.getElementById('set-role')?.value;
+  if (_selRole && ROLES.includes(_selRole)) G.settings.role = _selRole;
   const newKey = document.getElementById('set-aiKey')?.value||'';
   if (newKey) G.settings.aiKey = newKey;
   G.settings.autoCreatePeriods = document.getElementById('set-autoCreatePeriods')?.checked||false;
@@ -11606,6 +11641,7 @@ function saveSettings() {
   MANAGERS = ['전체', ...G.settings.managers];
   saveToLS();
   closeModal();
+  applyRoleVisibility();
 }
 
 function suggestFeeFromBosuTable() {
@@ -13440,6 +13476,7 @@ async function loadFromFirebase() {
     document.getElementById('loading').style.display = 'none';
     document.getElementById('page-dashboard').style.display = 'block';
     updateSettingsBadge();
+    applyRoleVisibility();
     renderDashboard();
     if (G.settings?.autoCreatePeriods) {
       const yr = new Date().getFullYear();
