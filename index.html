@@ -2030,6 +2030,25 @@ function _renderDashboardInner() {
 const CLIENT_PAGE_SIZE = 50;
 
 // 거래처목록 수수료 셀 내용 (기장/신고/조정료/성실 + 미수) — 그룹 리드/멤버 공통
+// 거래처의 최신 신고리스트 수수료 자동 연동값(신고수수료/조정료/성실수수료)
+// — 가장 최근 신고기간의 입력값을 우선 사용. 없으면 null.
+function latestFilingFees(c) {
+  const byNew = [...G.periods].sort((a,b)=>String(b.id||'').localeCompare(String(a.id||'')));
+  let jojung=null, seongsi=null, singo=null;
+  for (const p of byNew) {
+    const v = (G.julgae[p.id]||{})[c.id]; if (!v) continue;
+    const rt = p.reportType || '';
+    if (['corp','income','seongsi'].includes(rt)) {
+      if (jojung==null && (v.fee||0)>0) jojung = v.fee;
+      if (seongsi==null && (v.feeSeongsi||0)>0) seongsi = v.feeSeongsi;
+    } else if (rt==='sajup' || rt.indexOf('vat')===0) {
+      if (singo==null && (v.fee||0)>0) singo = v.fee;
+    }
+    if (jojung!=null && seongsi!=null && singo!=null) break;
+  }
+  return { jojung, seongsi, singo };
+}
+
 function clientFeeDisplay(c) {
   if (c.status!=='정상' && c.status!=='주의') return '-';
   const cym=currentYM();
@@ -2038,9 +2057,11 @@ function clientFeeDisplay(c) {
   const _mf=getFeeForYM(c,cym);
   const _chg=(c.feeChanges||[]).some(x=>x.from!=='1900-01');
   parts.push(`<span onclick="event.stopPropagation();openFeeChangeModal(${c.id})" style="cursor:pointer" title="클릭하여 기장료 변경(적용월 지정)"><span style="color:#aaa;font-size:10px">기장</span> ${_mf?_mf.toLocaleString():'0'}${_chg?'<span style="font-size:8px;color:#f57c00">✎</span>':''}</span>`);
-  const _singo=c.feeSingo||0;
-  const _jojung=c.adjustFee||c.feeJojung||0;
-  const _seongsi=c.seongsiConfirmFee||c.feeSeongsi||0;
+  // 신고수수료·조정료·성실수수료는 최근 신고리스트 입력값 자동 연동(없으면 거래처 저장값)
+  const lf=latestFilingFees(c);
+  const _singo=lf.singo!=null?lf.singo:(c.feeSingo||0);
+  const _jojung=lf.jojung!=null?lf.jojung:(c.adjustFee||c.feeJojung||0);
+  const _seongsi=lf.seongsi!=null?lf.seongsi:(c.seongsiConfirmFee||c.feeSeongsi||0);
   if(_singo)parts.push('<span style="color:#aaa;font-size:10px">신고</span> '+_singo.toLocaleString());
   if(_jojung)parts.push('<span style="color:#aaa;font-size:10px">조정료</span> '+_jojung.toLocaleString());
   if(_seongsi)parts.push('<span style="color:#aaa;font-size:10px">성실</span> '+_seongsi.toLocaleString());
@@ -2055,9 +2076,10 @@ function clientFeeDisplayGroup(members) {
   members.forEach(c => {
     if (c.status!=='정상' && c.status!=='주의') return;
     mf += getFeeForYM(c,cym)||0;
-    singo += c.feeSingo||0;
-    jojung += (c.adjustFee||c.feeJojung||0);
-    seongsi += (c.seongsiConfirmFee||c.feeSeongsi||0);
+    const lf = latestFilingFees(c);
+    singo += lf.singo!=null?lf.singo:(c.feeSingo||0);
+    jojung += lf.jojung!=null?lf.jojung:(c.adjustFee||c.feeJojung||0);
+    seongsi += lf.seongsi!=null?lf.seongsi:(c.seongsiConfirmFee||c.feeSeongsi||0);
     pending += ((G.adHocFees||{})[c.id]||[]).filter(f=>!f.collected&&f.ym===cym).length;
   });
   const parts = [`<span style="color:#aaa;font-size:10px">기장</span> ${mf.toLocaleString()}`];
