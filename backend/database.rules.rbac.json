@@ -1,0 +1,59 @@
+{
+  "rules": {
+    "taxmanager": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+
+    "office": {
+      "$officeId": {
+        ".read": "auth != null && auth.token.officeId === $officeId",
+
+        "clients": {
+          ".write": "auth != null && auth.token.officeId === $officeId && (auth.token.role === 'admin' || auth.token.role === 'tax_manager' || auth.token.role === 'accountant')"
+        },
+
+        "payroll": {
+          ".write": "auth != null && auth.token.officeId === $officeId && (auth.token.role === 'admin' || auth.token.role === 'tax_manager' || auth.token.role === 'accountant')",
+          "$recordId": {
+            "approved": {
+              ".validate": "auth.token.role === 'admin' || auth.token.role === 'tax_manager'"
+            }
+          }
+        },
+
+        "tax": {
+          ".write": "auth != null && auth.token.officeId === $officeId && (auth.token.role === 'admin' || auth.token.role === 'tax_manager' || auth.token.role === 'accountant')"
+        },
+
+        "employees": {
+          "$empUid": {
+            ".read": "auth != null && (auth.uid === $empUid || auth.token.officeId === $officeId && (auth.token.role === 'admin' || auth.token.role === 'tax_manager' || auth.token.role === 'auditor'))",
+            ".write": "auth != null && auth.token.officeId === $officeId && (auth.token.role === 'admin' || auth.token.role === 'tax_manager' || auth.token.role === 'accountant')"
+          }
+        },
+
+        "roles": {
+          ".read": "auth != null && auth.token.officeId === $officeId",
+          ".write": "auth != null && auth.token.officeId === $officeId && auth.token.role === 'admin'"
+        }
+      }
+    },
+
+    "audit": {
+      "$officeId": {
+        ".read": "auth != null && auth.token.officeId === $officeId && (auth.token.role === 'admin' || auth.token.role === 'auditor')",
+        "$logId": {
+          ".write": "auth != null && auth.token.officeId === $officeId && !data.exists() && newData.exists()",
+          ".validate": "newData.hasChildren(['actor','action','ts']) && newData.child('actor').val() === auth.uid",
+          "ts":     { ".validate": "newData.isNumber()" },
+          "actor":  { ".validate": "newData.isString()" },
+          "action": { ".validate": "newData.isString()" },
+          "$field": { ".validate": true }
+        }
+      }
+    }
+  }
+}
