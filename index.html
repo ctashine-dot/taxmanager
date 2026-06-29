@@ -7575,6 +7575,30 @@ function payrollCalc(empId, ym) {
   return { base, allowance, overtime, bonus, gross, np, hi, ltc, ei, incomeTax, localTax, other, deduction, net };
 }
 
+// 민감정보 마스킹 (표시 보호 — 실제 암호화는 백엔드 권장)
+function maskResidentNo(s) {
+  const d = String(s||'').replace(/\s/g,'');
+  if (!d) return '-';
+  const m = d.match(/^(\d{6})-?(\d)/);
+  return m ? `${m[1]}-${m[2]}******` : (d.length>4 ? d.slice(0,4)+'***' : '***');
+}
+function maskAccount(s) {
+  const t = String(s||'').trim();
+  if (!t) return '-';
+  return t.replace(/\d(?=\d{3})/g, '*'); // 마지막 3자리만 노출
+}
+// 주민번호·계좌 평문 열람 — 감사로그 기록
+function revealEmpPII(empId, field) {
+  const e = G.employees.find(x => x.id === empId); if (!e) return;
+  const val = field === 'residentNo' ? e.residentNo : e.bankAccount;
+  if (!val) { toast('등록된 값이 없습니다', 'info'); return; }
+  _payrollLog(field === 'residentNo' ? '주민번호 열람' : '계좌 열람', empId, '', field, '열람');
+  saveToLS();
+  const cell = document.getElementById(`pii-${field}-${empId}`);
+  if (cell) cell.innerHTML = `<span style="font-family:monospace;font-size:12px">${esc(val)}</span> <button onclick="renderPayroll()" style="font-size:9px;border:1px solid #e0e0e0;background:#f5f5f5;border-radius:4px;padding:1px 5px;cursor:pointer;color:#888">숨김</button>`;
+  toast('열람 기록이 감사로그에 저장되었습니다', 'info', 2500);
+}
+
 function _payrollLog(action, empId, ym, field, value) {
   if (!G.payrollLog) G.payrollLog = [];
   const e = G.employees.find(x => x.id === empId);
@@ -7620,6 +7644,11 @@ function openEmployeeModal(id) {
         <div style="flex:1">${f('기본급','baseSalary',e?.baseSalary,'inputmode="numeric"')}</div>
       </div>
       <div style="margin-bottom:10px">${f('공제대상가족수(본인 포함)','family',e?.family!=null?e.family:1,'inputmode="numeric" placeholder="간이세액 추정용"')}</div>
+      <div style="display:flex;gap:8px">
+        <div style="flex:1">${f('주민등록번호','residentNo',e?.residentNo,'placeholder="******-*******"')}</div>
+        <div style="flex:1">${f('급여계좌','bankAccount',e?.bankAccount,'placeholder="은행/계좌번호"')}</div>
+      </div>
+      <div style="font-size:11px;color:#e65100;background:#fff8e1;border-radius:6px;padding:6px 10px;margin-bottom:10px">🔒 주민번호·계좌는 목록에서 마스킹되며, '보기'를 누르면 열람 기록이 감사로그에 남습니다.</div>
       <div style="margin-bottom:10px"><label class="flabel">상태</label>
         <select id="emp-status" class="fsel" style="width:100%">${EMP_STATUS.map(s=>`<option ${e?.status===s?'selected':''}>${s}</option>`).join('')}</select>
       </div>
@@ -7637,6 +7666,7 @@ function saveEmployeeFromForm(id) {
   const data = { empNo, name, dept: v('dept'), position: v('position'), hireDate: v('hireDate'),
     baseSalary: Number(v('baseSalary').replace(/[,\s]/g,''))||0,
     family: Math.max(1, Number(v('family').replace(/[,\s]/g,''))||1),
+    residentNo: v('residentNo'), bankAccount: v('bankAccount'),
     status: document.getElementById('emp-status')?.value || '재직' };
   if (id) {
     const e = G.employees.find(x => x.id === id); if (e) Object.assign(e, data);
@@ -7714,7 +7744,7 @@ function renderPayroll() {
   </div>
 
   ${empOpen ? `<div class="tbl-wrap" style="margin-bottom:16px"><table>
-    <thead><tr><th>사번</th><th>성명</th><th>부서</th><th>직위</th><th>입사일</th><th style="text-align:right">기본급</th><th style="text-align:center">상태</th><th style="text-align:center">수정</th></tr></thead>
+    <thead><tr><th>사번</th><th>성명</th><th>부서</th><th>직위</th><th>입사일</th><th style="text-align:right">기본급</th><th>주민번호</th><th>급여계좌</th><th style="text-align:center">상태</th><th style="text-align:center">수정</th></tr></thead>
     <tbody>${emps.length ? emps.map(e=>`<tr>
       <td style="font-size:12px;color:#888">${esc(e.empNo)||'-'}</td>
       <td style="font-weight:600">${esc(e.name)}</td>
@@ -7722,9 +7752,11 @@ function renderPayroll() {
       <td style="font-size:12px">${esc(e.position)||'-'}</td>
       <td style="font-size:12px;color:#666">${esc(e.hireDate)||'-'}</td>
       <td style="text-align:right;font-size:12px">${won(e.baseSalary)}</td>
+      <td id="pii-residentNo-${e.id}" style="font-size:11px;font-family:monospace;color:#666;white-space:nowrap">${e.residentNo?`${maskResidentNo(e.residentNo)} <button onclick="event.stopPropagation();revealEmpPII(${e.id},'residentNo')" style="font-size:9px;border:1px solid #e0e0e0;background:#fff;border-radius:4px;padding:1px 5px;cursor:pointer;color:#1565c0" title="열람(기록됨)">👁</button>`:'-'}</td>
+      <td id="pii-bankAccount-${e.id}" style="font-size:11px;font-family:monospace;color:#666;white-space:nowrap">${e.bankAccount?`${esc(maskAccount(e.bankAccount))} <button onclick="event.stopPropagation();revealEmpPII(${e.id},'bankAccount')" style="font-size:9px;border:1px solid #e0e0e0;background:#fff;border-radius:4px;padding:1px 5px;cursor:pointer;color:#1565c0" title="열람(기록됨)">👁</button>`:'-'}</td>
       <td style="text-align:center">${badge(e.status||'재직', e.status==='퇴직'?'red':e.status==='휴업'||e.status==='휴직'?'orange':'green')}</td>
       <td style="text-align:center"><button class="btn-sm" style="background:#f5f5f5;color:#555;padding:2px 8px" onclick="openEmployeeModal(${e.id})">✏</button></td>
-    </tr>`).join('') : `<tr><td colspan="8" style="text-align:center;padding:30px;color:#aaa">등록된 직원이 없습니다. '직원 추가'로 시작하세요.</td></tr>`}</tbody>
+    </tr>`).join('') : `<tr><td colspan="10" style="text-align:center;padding:30px;color:#aaa">등록된 직원이 없습니다. '직원 추가'로 시작하세요.</td></tr>`}</tbody>
   </table></div>` : ''}
 
   ${logOpen ? `<div class="card" style="margin-bottom:16px;max-height:240px;overflow:auto;padding:10px">
