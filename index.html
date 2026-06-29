@@ -8628,6 +8628,7 @@ ${text.slice(0, 12000)}
 ---
 【중요】 위 페이지 이미지에 데이터가 보이면 절대 "페이지 누락/공란"이라고 판단하지 말 것. 이미지의 표·숫자를 직접 읽어 추출하십시오.
 【금액 단위 — 필수】 표 머리글에 '단위: 천원' 또는 '(천원)' 표기가 있으면 그 표의 숫자에 1,000을 곱해 '원' 단위로 변환할 것. 모든 금액 필드(revenue/income/taxBase/totalTax/payTax)는 콤마·억·만 없는 순수 정수(원)로만 출력.
+【세액 추출 — 필수】 과세표준·산출세액·결정세액(totalTax)·납부할세액(payTax)·지방소득세(residentTax)는 신고서 본문/별지(소득세신고서, 결산보고서 등) 모든 페이지를 끝까지 확인해 반드시 추출할 것. 한 페이지에 없으면 다른 페이지에서 찾고, 지방소득세가 별도 표기 없으면 결정세액의 10%로 계산해 넣을 것. 값을 찾았는데 0으로 비우지 말 것.
 
 【1단계】 핵심 데이터 추출 — 아래 JSON을 반드시 \`\`\`json ... \`\`\` 블록으로 출력:
 {
@@ -8640,6 +8641,10 @@ ${text.slice(0, 12000)}
   "taxBase": 과세표준(숫자, 없으면 0),
   "totalTax": 결정세액(숫자, 없으면 0),
   "payTax": 신고서상납부할총세액(숫자, 없으면 0),
+  "residentTax": 지방소득세/주민세(숫자. 신고서에 없으면 결정세액×10%),
+  "salesAmount": 부가세과세매출액(부가세 신고서일 때만, 없으면 0),
+  "purchaseAmount": 부가세매입액(부가세 신고서일 때만, 없으면 0),
+  "vatAmount": 납부할부가세액(부가세 신고서일 때만, 없으면 0),
   "incomeRatio": 소득률(소득÷수입×100 소수점1자리, 없으면 null),
   "taxCreditIssues": ["누락·검토필요 세액공제·감면 항목 (예: '중소기업특별세액감면 미적용 의심'). 없으면 빈배열"],
   "feeRecommendation": 추천수수료(숫자, 한국 세무사 보수표 기준),
@@ -8894,6 +8899,7 @@ ${text.slice(0, 14000)}
 ---
 【중요】 위 페이지 이미지에 데이터가 보이면 절대 "페이지 누락/공란/확인 불가"라고 판단하지 말 것. 이미지의 표·숫자를 직접 읽어 추출하십시오. 보조 텍스트가 비어 있어도 이미지가 있으면 이미지를 근거로 검토합니다.
 【금액 단위 — 필수】 표 머리글에 '단위: 천원' 또는 '(천원)' 표기가 있으면 그 표의 숫자에 1,000을 곱해 '원' 단위로 변환할 것. 모든 금액 필드(revenue/income/taxBase/totalTax/payTax)는 콤마·억·만 없는 순수 정수(원)로만 출력.
+【세액 추출 — 필수】 과세표준·산출세액·결정세액(totalTax)·납부할세액(payTax)·지방소득세(residentTax)는 신고서 본문/별지(소득세신고서, 결산보고서 등) 모든 페이지를 끝까지 확인해 반드시 추출할 것. 한 페이지에 없으면 다른 페이지에서 찾고, 지방소득세가 별도 표기 없으면 결정세액의 10%로 계산해 넣을 것. 값을 찾았는데 0으로 비우지 말 것.
 
 【출력 형식】 오직 하나의 \`\`\`json ... \`\`\` 블록만 출력하십시오. 블록 밖에는 아무 글자도 쓰지 마십시오. 자유 서술·서론·결론·별표(**)·마크다운 제목(#) 금지. 모든 검토 의견은 아래 findings 배열에 담으십시오.
 
@@ -8908,6 +8914,10 @@ ${text.slice(0, 14000)}
   "taxBase": 과세표준(숫자, 없으면 0),
   "totalTax": 결정세액(숫자, 없으면 0),
   "payTax": 신고서상납부할총세액(숫자, 없으면 0),
+  "residentTax": 지방소득세/주민세(숫자. 신고서에 없으면 결정세액×10%),
+  "salesAmount": 부가세과세매출액(부가세 신고서일 때만, 없으면 0),
+  "purchaseAmount": 부가세매입액(부가세 신고서일 때만, 없으면 0),
+  "vatAmount": 납부할부가세액(부가세 신고서일 때만, 없으면 0),
   "incomeRatio": 소득률(소득÷수입×100 소수점1자리, 없으면 null),
   "prevCompare": "전년 대비 수입·소득률·세액 증감 한 줄 요약 (전년 데이터 없으면 빈 문자열)",
   "findings": [
@@ -9014,16 +9024,10 @@ ${text.slice(0, 14000)}
     const sortedF = [...findings].sort((a,b)=>(order[a.level]??9)-(order[b.level]??9));
     const findingsHtml = sortedF.length ? sortedF.map(f=>{
       const s = lvlStyle[f.level] || lvlStyle.warn;
-      return `<div style="background:${s.bg};border:1px solid ${s.bd};border-radius:10px;padding:10px 12px;margin-bottom:8px">
-        <div style="font-size:13px;font-weight:800;color:${s.fg};margin-bottom:3px">${s.icon} ${esc(f.title||s.label)}</div>
-        <div style="font-size:13px;color:#333;line-height:1.6">${esc(f.detail||'')}</div>
-      </div>`;
+      return `<div style="background:${s.bg};border:1px solid ${s.bd};border-radius:8px;padding:7px 10px;margin-bottom:6px"><div style="font-size:13px;font-weight:800;color:${s.fg};margin-bottom:2px">${s.icon} ${esc(f.title||s.label)}</div><div style="font-size:13px;color:#333;line-height:1.45">${esc(f.detail||'')}</div></div>`;
     }).join('') : '<div style="color:#aaa;font-size:13px;padding:10px;text-align:center">검토 항목이 생성되지 않았습니다</div>';
 
-    const prevCompareHtml = reviewData?.prevCompare ? `<div style="background:#eef4ff;border:1px solid #c5d6f5;border-radius:10px;padding:10px 12px;margin-bottom:8px">
-      <div style="font-size:13px;font-weight:800;color:#1565c0;margin-bottom:3px">📈 전년 대비</div>
-      <div style="font-size:13px;color:#333;line-height:1.6">${esc(reviewData.prevCompare)}</div>
-    </div>` : '';
+    const prevCompareHtml = reviewData?.prevCompare ? `<div style="background:#eef4ff;border:1px solid #c5d6f5;border-radius:8px;padding:7px 10px;margin-bottom:6px"><div style="font-size:13px;font-weight:800;color:#1565c0;margin-bottom:2px">📈 전년 대비</div><div style="font-size:13px;color:#333;line-height:1.45">${esc(reviewData.prevCompare)}</div></div>` : '';
 
     // 텍스트 저장용 평문 구성
     const plainLines = [];
@@ -9051,7 +9055,7 @@ ${text.slice(0, 14000)}
         </div>
         <button onclick="downloadTRRReview()" style="padding:5px 12px;background:#eef2ff;color:#3949ab;border:1px solid #c5cae9;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">💾 텍스트 저장</button>
       </div>
-      <div class="ai-result" style="font-size:13px;line-height:1.6">${prevCompareHtml}${findingsHtml}</div>
+      <div class="ai-result" style="font-size:13px;line-height:1.5;white-space:normal;background:none;border:none;padding:0">${prevCompareHtml}${findingsHtml}</div>
       ${reviewData ? `
       <div style="background:#f1f8e9;border:1.5px solid #a5d6a7;border-radius:12px;padding:14px 16px;margin-top:12px">
         <div style="font-size:13px;font-weight:700;color:#2e7d32;margin-bottom:10px">💰 수수료 직접 입력 후 데이터 반영</div>
@@ -9489,16 +9493,22 @@ function doRecordTRRWith(clientId, pKey) {
   if (!data) return;
   if (!G.julgae[pKey]) G.julgae[pKey] = {};
   const cur = julgaeVal(pKey, clientId);
-  const updated = {
-    ...cur,
-    ...(data.revenue  ? { revenue: data.revenue }   : {}),
-    ...(data.income   ? { income: data.income }      : {}),
-    ...(data.taxBase  ? { taxBase: data.taxBase }    : {}),
-    ...(data.totalTax ? { totalTax: data.totalTax }  : {}),
-    ...(data.payTax   ? { payTax: data.payTax }      : {}),
-    ...(data.feeRecommendation ? { fee: data.feeRecommendation } : {}),
-    ...(data.feeSeongsi ? { feeSeongsi: data.feeSeongsi } : {}),
-  };
+  const num = x => { const n = Number(String(x==null?'':x).replace(/[,\s원]/g,'')); return isNaN(n)?0:n; };
+  const updated = {...cur};
+  const setIf = (k, val) => { if (val) updated[k] = val; }; // 0/미추출은 기존값 유지
+  setIf('revenue', num(data.revenue));
+  setIf('income', num(data.income));
+  setIf('taxBase', num(data.taxBase));
+  setIf('totalTax', num(data.totalTax));
+  setIf('payTax', num(data.payTax));
+  setIf('salesAmount', num(data.salesAmount));
+  setIf('purchaseAmount', num(data.purchaseAmount));
+  setIf('vatAmount', num(data.vatAmount));
+  setIf('prevRevenue', num(data.prevRevenue));
+  // 주민세(지방소득세): 신고서 명시값 우선, 없으면 결정세액(totalTax)의 10% 자동
+  setIf('residentTax', num(data.residentTax) || (num(data.totalTax) ? Math.round(num(data.totalTax)*0.1) : 0));
+  setIf('fee', num(data.feeRecommendation));
+  setIf('feeSeongsi', num(data.feeSeongsi));
   G.julgae[pKey][clientId] = updated;
   // enrolled가 이미 명시적으로 사용 중인 경우에만 추가 (빈 배열이면 "전체 자동" 상태이므로 건드리지 않음)
   const period = G.periods.find(p=>p.id===pKey);
@@ -9515,6 +9525,25 @@ function doRecordTRRWith(clientId, pKey) {
   const c = G.clients.find(x=>x.id===clientId);
   const p = G.periods.find(x=>x.id===pKey);
   toast(`✅ ${c?.name||clientId} / ${p?.label||pKey} 신고리스트에 기록 완료`, 'success', 3500);
+  _promptFillMissingClientInfo(clientId, data); // 거래처목록 누락 정보 보완 제안
+}
+
+// 리스트 반영 시 거래처목록에 누락된 정보(사업자번호·대표자·상호)를 신고서 정보로 보완 제안
+function _promptFillMissingClientInfo(clientId, data) {
+  const c = G.clients.find(x=>x.id===clientId);
+  if (!c || !data) return;
+  const fills = [];
+  const bn = String(data.bizNo||'').replace(/\D/g,'');
+  if (!(c.bizNo||'').replace(/\D/g,'') && bn.length===10) fills.push({field:'bizNo', label:'사업자번호', val:data.bizNo});
+  if (!(c.rep||'').trim() && String(data.representative||'').trim()) fills.push({field:'rep', label:'대표자', val:data.representative});
+  if (!(c.name||'').trim() && String(data.companyName||'').trim()) fills.push({field:'name', label:'상호', val:data.companyName});
+  if (!fills.length) return;
+  setTimeout(()=>{
+    if (!confirm(`'${c.name||clientId}' 거래처목록에 누락된 정보가 있습니다. 신고서 정보로 채울까요?\n\n`+fills.map(f=>`· ${f.label}: ${f.val}`).join('\n'))) return;
+    fills.forEach(f=>{ c[f.field] = f.val; });
+    saveToLS();
+    toast('거래처 정보를 보완했습니다 ('+fills.map(f=>f.label).join(', ')+')', 'success', 3000);
+  }, 400);
 }
 
 // ══════════════════════════════════════════════════════
