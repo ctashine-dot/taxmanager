@@ -380,7 +380,7 @@ body.dark-mode .overlay { background: rgba(0,0,0,.65); }
 
 <!-- 메인 -->
 <div id="main">
-  <div id="loading" style="display:none"><span class="spin">⏳</span><div style="font-weight:700;font-size:16px">거래처 데이터 로딩 중...</div><div style="font-size:13px;margin-top:6px">552개 거래처 데이터를 불러오고 있습니다</div></div>
+  <div id="loading" style="display:none"><span class="spin">⏳</span><div style="font-weight:700;font-size:16px">거래처 데이터 로딩 중...</div><div id="loading-sub" style="font-size:13px;margin-top:6px">거래처 데이터를 불러오고 있습니다</div></div>
   <div id="page-dashboard" style="display:none"></div>
   <div id="page-clients" style="display:none"></div>
   <div id="page-schedule" style="display:none"></div>
@@ -3840,6 +3840,10 @@ function openForm(id) {
   const _groupMembers = c.relatedGroup
     ? G.clients.filter(cl=>cl.id!==c.id&&cl.relatedGroup===c.relatedGroup)
     : (isEdit && !c.soloGroup && c.rep ? G.clients.filter(cl=>cl.id!==c.id&&!cl.soloGroup&&!cl.relatedGroup&&cl.rep===c.rep) : []);
+  // 공동사업자(같은 사업장 여러 명) 연결 — 신고리스트 '공동' 그룹 표시용
+  const _jointPartners = (isEdit && c.incomeGroupKey)
+    ? G.clients.filter(cl=>cl.id!==c.id&&cl.incomeGroupKey===c.incomeGroupKey)
+    : [];
 
   window._formIsNew = (id === null);
   function contractsHTML() { return buildContractAreaHTML(); }
@@ -3935,15 +3939,27 @@ function openForm(id) {
       <input class="finput" id="f-taxOffice" value="${esc(c.taxOffice||'')}" oninput="window._formData.taxOffice=this.value">
     </div>
 
-    <div class="c3" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <div class="ff">
-        <label class="ffl">개업연월일</label>
-        <input type="date" class="finput" id="f-openDate" value="${esc(c.openDate||'')}" oninput="window._formData.openDate=this.value">
-      </div>
-      <label class="ff" style="cursor:pointer">
-        <input type="checkbox" id="f-jointBiz" ${c.jointBiz?'checked':''} onchange="window._formData.jointBiz=this.checked" style="width:15px;height:15px;flex-shrink:0;cursor:pointer;accent-color:#4f8ef7">
-        <span class="ffl">공동사업자</span>
+    <div class="c3 ff">
+      <label class="ffl">개업연월일</label>
+      <input type="date" class="finput" id="f-openDate" value="${esc(c.openDate||'')}" oninput="window._formData.openDate=this.value">
+    </div>
+
+    <div class="c3" style="background:#f1faf9;border:1px solid #b2dfdb;border-radius:10px;padding:10px">
+      <label style="display:flex;align-items:center;gap:7px;cursor:pointer">
+        <input type="checkbox" id="f-jointBiz" ${c.jointBiz?'checked':''} onchange="window._formData.jointBiz=this.checked;toggleJointManageBox(this.checked)" style="width:15px;height:15px;flex-shrink:0;cursor:pointer;accent-color:#00897b">
+        <span style="font-size:12px;font-weight:700;color:#00695c">공동사업자 <span style="font-weight:400;color:#80a8a3">(같은 사업장을 여러 명이 공동 운영)</span></span>
       </label>
+      <div id="joint-manage-box" style="display:${c.jointBiz?'block':'none'};margin-top:9px">
+        ${isEdit ? `
+          <div style="font-size:11px;color:#00695c;margin-bottom:5px;font-weight:600">연결된 공동사업자 ${_jointPartners.length}명</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-bottom:7px">
+            ${_jointPartners.length
+              ? _jointPartners.map(p=>`<span style="background:#e0f2f1;color:#00695c;border:1px solid #80cbc4;border-radius:8px;padding:2px 9px;font-size:11px;font-weight:600">👥 ${esc(p.name)}${p.rep?` · ${esc(p.rep)}`:''}</span>`).join('')
+              : `<span style="font-size:11px;color:#999">아직 연결된 공동사업자가 없습니다. 아래 버튼으로 함께 사업하는 사람을 연결하세요.</span>`}
+          </div>
+          <button type="button" onclick="manageJointPartners(${id})" style="width:100%;padding:7px;border-radius:8px;border:1.5px solid #00897b;background:#fff;color:#00897b;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700">🔗 공동사업자 연결 관리</button>
+        ` : `<div style="font-size:11px;color:#888">거래처를 저장한 뒤, 다시 편집하면 함께 사업하는 공동사업자를 연결할 수 있습니다.</div>`}
+      </div>
     </div>
 
     <div class="c3" style="display:flex;align-items:center;gap:8px;background:#e8f0fe;border-radius:7px;padding:5px 10px">
@@ -4726,7 +4742,19 @@ function toggleJulgaeYear(yr) {
 }
 
 
-function openIncomeGroupLink(clientId) {
+// 거래처 편집 폼에서 공동사업자 관리 박스 펼치기/접기
+window.toggleJointManageBox = function(on){
+  const box = document.getElementById('joint-manage-box');
+  if (box) box.style.display = on ? 'block' : 'none';
+};
+// 폼에서 '공동사업자 연결 관리' — 현재 수정사항 저장 후 연결 도구 열기(공동 기본 체크)
+window.manageJointPartners = function(id){
+  if (id === null || id === undefined) { toast('거래처를 먼저 저장한 뒤 연결하세요','info',2500); return; }
+  if (window._formData) window._formData.jointBiz = true;
+  saveForm(id);                      // 폼의 다른 수정사항도 함께 저장 + 모달 닫기
+  openIncomeGroupLink(id, true);     // 공동사업자 체크 기본 ON 상태로 연결 도구 열기
+};
+function openIncomeGroupLink(clientId, forceJoint) {
   const client = G.clients.find(c => c.id === clientId);
   if (!client) return;
   const curKey = client.incomeGroupKey || '';
@@ -4758,7 +4786,7 @@ function openIncomeGroupLink(clientId) {
         <button onclick="unlinkIncomeGroup(${clientId});closeModal()" style="padding:3px 10px;border-radius:6px;border:1px solid #e53935;background:#ffebee;color:#e53935;cursor:pointer;font-family:inherit;font-size:11px">그룹 해제</button>
       </div>`:''}
       <label style="display:flex;align-items:center;gap:7px;margin-bottom:10px;padding:8px 12px;background:#e0f2f1;border:1px solid #80cbc4;border-radius:8px;cursor:pointer;font-size:13px;color:#00695c;font-weight:600">
-        <input id="iglink-joint" type="checkbox" ${client.groupJoint?'checked':''} style="width:16px;height:16px;cursor:pointer">
+        <input id="iglink-joint" type="checkbox" ${(forceJoint||client.groupJoint)?'checked':''} style="width:16px;height:16px;cursor:pointer">
         공동사업자 (같은 사업장을 여러 명이 공동 운영 — 매출·세금·수수료 별도 입력 후 합계 표시)
       </label>
       <input id="iglink-q" type="text" placeholder="거래처명 또는 대표자 검색..."
@@ -4782,8 +4810,8 @@ function linkIncomeGroup(clientAId, clientBId, joint) {
   if (oldKey) G.clients.forEach(c => { if (c.incomeGroupKey === oldKey) c.incomeGroupKey = key; });
   a.incomeGroupKey = key;
   b.incomeGroupKey = key;
-  if (joint) { // 공동사업자 체크 시 그룹 전원에 표시
-    G.clients.forEach(c => { if (c.incomeGroupKey === key) c.groupJoint = true; });
+  if (joint) { // 공동사업자 체크 시 그룹 전원에 표시(신고리스트 '공동' + 거래처목록 배지)
+    G.clients.forEach(c => { if (c.incomeGroupKey === key) { c.groupJoint = true; c.jointBiz = true; } });
   }
   saveToLS();
   renderJulgae();
@@ -5608,19 +5636,19 @@ function renderJulgae() {
             :`<div class="td-name" style="display:flex;align-items:center;gap:3px;min-width:0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font-size:${julgaeName(c.name).length>12?'10px':julgaeName(c.name).length>8?'11px':'12px'}">${esc(julgaeName(c.name))}</span>${_closedBadge}${_ssDupBadge}${_nameGrpBadge}${c._julgaeAdhoc?`<span style="background:#ff8f00;color:#fff;font-size:9px;border-radius:3px;padding:1px 4px;white-space:nowrap;flex-shrink:0">미등록</span>`:_revBadge}${c._julgaeAdhoc?`<button onclick="event.stopPropagation();deleteJulgaeAdhocEntry('${pKey2}',${c.id})" style="background:none;border:none;color:#ccc;cursor:pointer;font-size:12px;padding:0 2px;flex-shrink:0" title="리스트에서 제거">✕</button>`:_noteIcon}</div>`
         }</td>
         <td style="font-size:12px;color:#444;${hc['j_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
-        <td style="color:#555;font-size:12px;${hc['j_manager']?'display:none':''}">${isMemberRow?'':(getManagers(c).length?esc(getManagers(c).join(', ')):'<span style="color:#ff7043;font-size:11px">⚠ 미지정</span>')}</td>
+        <td style="color:#555;font-size:12px;${hc['j_manager']?'display:none':''}">${getManagers(c).length?esc(getManagers(c).join(', ')):'<span style="color:#ff7043;font-size:11px">⚠ 미지정</span>'}</td>
         <td style="text-align:center;${hc['j_book']?'display:none':''}">
-          ${isMemberRow?'':`<div class="chk ${v.b?'on':''}" style="margin:0 auto;width:24px;height:24px;touch-action:none;user-select:none;-webkit-user-select:none" onpointerdown="julgaeChkDown(this,'${pKey2}',${c.id},'b',${v.b?1:0})" onpointerup="julgaeChkUp(this,'${pKey2}',${c.id},'b',${v.b?1:0})" onpointercancel="julgaeChkCancel(this)" onpointerleave="julgaeChkCancel(this)">${v.b?'✓':''}</div>`}
+          ${`<div class="chk ${v.b?'on':''}" style="margin:0 auto;width:24px;height:24px;touch-action:none;user-select:none;-webkit-user-select:none" onpointerdown="julgaeChkDown(this,'${pKey2}',${c.id},'b',${v.b?1:0})" onpointerup="julgaeChkUp(this,'${pKey2}',${c.id},'b',${v.b?1:0})" onpointercancel="julgaeChkCancel(this)" onpointerleave="julgaeChkCancel(this)">${v.b?'✓':''}</div>`}
         </td>
         <td style="text-align:center;${hc['j_consul']?'display:none':''}">
-          ${isMemberRow?'':`<div class="chk ${v.c?'on':''}" style="margin:0 auto;width:24px;height:24px;touch-action:none;user-select:none;-webkit-user-select:none;${v.c?'background:#e3f2fd;border-color:#1565c0;color:#1565c0':''}" onpointerdown="julgaeChkDown(this,'${pKey2}',${c.id},'c',${v.c?1:0})" onpointerup="julgaeChkUp(this,'${pKey2}',${c.id},'c',${v.c?1:0})" onpointercancel="julgaeChkCancel(this)" onpointerleave="julgaeChkCancel(this)">${v.c?'💬':''}</div>`}
+          ${`<div class="chk ${v.c?'on':''}" style="margin:0 auto;width:24px;height:24px;touch-action:none;user-select:none;-webkit-user-select:none;${v.c?'background:#e3f2fd;border-color:#1565c0;color:#1565c0':''}" onpointerdown="julgaeChkDown(this,'${pKey2}',${c.id},'c',${v.c?1:0})" onpointerup="julgaeChkUp(this,'${pKey2}',${c.id},'c',${v.c?1:0})" onpointercancel="julgaeChkCancel(this)" onpointerleave="julgaeChkCancel(this)">${v.c?'💬':''}</div>`}
         </td>
         <td style="text-align:center;${hc['j_done']?'display:none':''}">
-          ${isMemberRow?'':`<div class="chk ${v.a?'on':''}" style="margin:0 auto;width:24px;height:24px;touch-action:none;user-select:none;-webkit-user-select:none" onpointerdown="julgaeChkDown(this,'${pKey2}',${c.id},'a',${v.a?1:0})" onpointerup="julgaeChkUp(this,'${pKey2}',${c.id},'a',${v.a?1:0})" onpointercancel="julgaeChkCancel(this)" onpointerleave="julgaeChkCancel(this)">${v.a?'✓':''}</div>`}
+          ${`<div class="chk ${v.a?'on':''}" style="margin:0 auto;width:24px;height:24px;touch-action:none;user-select:none;-webkit-user-select:none" onpointerdown="julgaeChkDown(this,'${pKey2}',${c.id},'a',${v.a?1:0})" onpointerup="julgaeChkUp(this,'${pKey2}',${c.id},'a',${v.a?1:0})" onpointercancel="julgaeChkCancel(this)" onpointerleave="julgaeChkCancel(this)">${v.a?'✓':''}</div>`}
         </td>
         <td style="text-align:right;padding:4px 6px;min-width:64px;${hc['j_monthly_fee']?'display:none':''}">
-          ${isMemberRow?'':(()=>{const _mf=getFeeForYM(c,currentYM());const _chg=(c.feeChanges||[]).some(x=>x.from!=='1900-01');return `<div style="font-size:12px;font-weight:700;color:${_mf?'#1565c0':'#ccc'};cursor:pointer;padding:2px 0" id="jmf-${c.id}" onclick="openFeeChangeModal(${c.id})" title="클릭하여 월정/기장료 변경(적용월 지정)">${_mf?_mf.toLocaleString():'0'}${_chg?'<span style="font-size:8px;color:#f57c00;margin-left:2px" title="변경 이력 있음">✎</span>':''}</div>`;})()}
-          ${isMemberRow?'':(_monthlyFeeRec&&_monthlyFeeRec!==getFeeForYM(c,currentYM())?`<div onclick="jmfApplyRec(${c.id},${_monthlyFeeRec})" style="font-size:9px;color:#7b1fa2;background:#f3e5f5;border-radius:4px;padding:1px 4px;cursor:pointer;margin-top:1px;text-align:right" title="보수표 추천: ${_monthlyFeeRec.toLocaleString()}원">💡${_monthlyFeeRec.toLocaleString()}</div>`:'')}
+          ${(()=>{const _mf=getFeeForYM(c,currentYM());const _chg=(c.feeChanges||[]).some(x=>x.from!=='1900-01');return `<div style="font-size:12px;font-weight:700;color:${_mf?'#1565c0':'#ccc'};cursor:pointer;padding:2px 0" id="jmf-${c.id}" onclick="openFeeChangeModal(${c.id})" title="클릭하여 월정/기장료 변경(적용월 지정)">${_mf?_mf.toLocaleString():'0'}${_chg?'<span style="font-size:8px;color:#f57c00;margin-left:2px" title="변경 이력 있음">✎</span>':''}</div>`;})()}
+          ${(_monthlyFeeRec&&_monthlyFeeRec!==getFeeForYM(c,currentYM())?`<div onclick="jmfApplyRec(${c.id},${_monthlyFeeRec})" style="font-size:9px;color:#7b1fa2;background:#f3e5f5;border-radius:4px;padding:1px 4px;cursor:pointer;margin-top:1px;text-align:right" title="보수표 추천: ${_monthlyFeeRec.toLocaleString()}원">💡${_monthlyFeeRec.toLocaleString()}</div>`:'')}
         </td>
         ${isIncomeType?`
           <td style="text-align:right;padding:4px 8px;${hc['j_col_revenue']?'display:none':''}">${niInput(c.id,'revenue',v.revenue)}${revAuxBadge}</td>
@@ -5918,7 +5946,7 @@ function toggleGroupJoint(idsCsv) {
   const members = ids.map(id => G.clients.find(c => c.id === id)).filter(Boolean);
   if (!members.length) return;
   const turnOn = !members.every(m => m.groupJoint);
-  members.forEach(m => { m.groupJoint = turnOn; });
+  members.forEach(m => { m.groupJoint = turnOn; if (turnOn) m.jointBiz = true; });
   saveToLS(); renderJulgae();
   toast(turnOn ? '공동사업자 그룹으로 표시합니다 (매출·세금·수수료 별도/합산)' : '동일인 그룹으로 표시합니다', 'success', 2800);
 }
