@@ -5498,6 +5498,57 @@ function removeClientFromJulgaeList(id) {
   toast('신고리스트에서 제외했습니다','success',2000);
 }
 
+// 거래처명 팝업 → 리스트 추가: 업체 검색해 현재 신고리스트에 추가 + (같은 주민번호면 자동/아니면 확인) 그룹 연결
+function openJulgaeListAdd(clientId) {
+  const lead = G.clients.find(c=>c.id===clientId); if(!lead) return;
+  const ns = s => (s||'').replace(/\s+/g,'').toLowerCase();
+  const nj = s => (s||'').replace(/[^0-9]/g,'');
+  const renderResults = (q) => {
+    const el = document.getElementById('jla-results'); if(!el) return;
+    const results = q ? G.clients.filter(c=>c.id!==clientId && (ns(c.name).includes(ns(q))||ns(c.rep||'').includes(ns(q)))).slice(0,15) : [];
+    el.innerHTML = (!results.length&&q) ? '<div style="color:#aaa;text-align:center;padding:12px">검색 결과 없음</div>'
+      : results.map(tc=>{
+          const sameJumin = nj(tc.jumin) && nj(lead.jumin) && nj(tc.jumin)===nj(lead.jumin);
+          const tag = sameJumin?'<span style="font-size:10px;color:#2e7d32;margin-left:6px">✓ 동일 주민번호</span>':(nj(tc.jumin)?'<span style="font-size:10px;color:#e65100;margin-left:6px">⚠ 주민번호 다름</span>':'<span style="font-size:10px;color:#999;margin-left:6px">주민번호 없음</span>');
+          return `<div onclick="addJulgaeListMember(${clientId},${tc.id})" style="padding:9px 12px;border-radius:8px;cursor:pointer;border:1px solid ${sameJumin?'#a5d6a7':'#f0f0f0'};margin-bottom:4px;background:${sameJumin?'#f1f8f4':'#fafbff'}">
+            <div style="font-weight:700;font-size:13px">${esc(tc.name)}${tag}</div>
+            <div style="font-size:11px;color:#888">${esc(tc.rep||'-')} · ${esc(getManagers(tc).join(', ')||'-')}${tc.status!=='정상'&&tc.status!=='주의'?' · '+esc(tc.status):''}${tc.incomeGroupKey?' <span style="color:#7b1fa2">[그룹]</span>':''}</div>
+          </div>`;
+        }).join('');
+  };
+  showModal(`<div style="max-width:480px;width:92vw">
+    <div class="modal-header"><h3>➕ 리스트에 거래처 추가 — ${esc(lead.name)}</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div style="font-size:12px;color:#888;margin-bottom:10px">추가할 거래처를 검색하세요. <b>동일 주민번호</b>면 같은 그룹으로 바로 추가되고, 다르거나 없으면 추가 여부를 확인합니다.</div>
+      <input id="jla-q" type="text" placeholder="거래처명 또는 대표자 검색..." oninput="window._jlaRender&&window._jlaRender(this.value)" style="width:100%;padding:9px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:10px">
+      <div id="jla-results" style="max-height:300px;overflow-y:auto"></div>
+    </div>
+  </div>`);
+  window._jlaRender = renderResults;
+  renderResults('');
+  setTimeout(()=>document.getElementById('jla-q')?.focus(),80);
+}
+function addJulgaeListMember(leadId, targetId) {
+  const lead=G.clients.find(c=>c.id===leadId), tgt=G.clients.find(c=>c.id===targetId);
+  if(!lead||!tgt) return;
+  const nj=s=>(s||'').replace(/[^0-9]/g,'');
+  const sameJumin = nj(tgt.jumin)&&nj(lead.jumin)&&nj(tgt.jumin)===nj(lead.jumin);
+  if(!sameJumin){
+    const reason = nj(tgt.jumin)?'주민번호가 서로 다릅니다':'대상 거래처에 주민번호가 없습니다';
+    if(!confirm(`${reason}.\n그래도 '${tgt.name}'을(를) '${lead.name}'와 같은 그룹으로 리스트에 추가할까요?`)) return;
+  }
+  const period=G.periods[G.julgaePeriodIdx];
+  if(period){
+    if(!period.enrolled||!period.enrolled.length){
+      period.enrolled = applyReportFilter(G.clients.filter(cc=>clientInFilingPeriod(cc,period)),period).map(cc=>cc.id);
+    }
+    if(!period.enrolled.includes(targetId)) period.enrolled.push(targetId);
+    if(!period.enrolled.includes(leadId)) period.enrolled.push(leadId);
+  }
+  closeModal();
+  linkIncomeGroup(leadId, targetId); // 그룹 연결 + saveToLS + renderJulgae + toast
+}
+
 function toggleJulgaeField(pKey, clientId, field) {
   if (!pKey) return;
   const period = G.periods.find(p=>p.id===pKey);
@@ -9713,7 +9764,7 @@ function openClientNotes(id) {
   const notes = (G.clientNotes||{})[id] || [];
   const feeHist = (G.feeChangeHistory||{})[id] || [];
   showModal(`<div style="max-width:520px">
-  <div class="modal-header"><h3>📝 ${esc(c.name)} — 메모/이력</h3><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end"><button onclick="closeModal();openClientFilingHistory(${id})" style="padding:4px 12px;background:#e8f0fe;color:#1565c0;border:1px solid #c5cae9;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">📋 신고이력</button><button onclick="closeModal();openForm(${id})" style="padding:4px 12px;background:#f0f4ff;color:#4f8ef7;border:1px solid #c5cae9;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">✏ 거래처 수정</button>${G.currentTab==='julgae'?`<button onclick="closeModal();openIncomeGroupLink(${id})" style="padding:4px 12px;background:#f3e5f5;color:#6a1b9a;border:1px solid #ce93d8;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">👥 그룹 추가</button><button onclick="removeClientFromJulgaeList(${id})" style="padding:4px 12px;background:#fdecea;color:#c62828;border:1px solid #ef9a9a;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">🗑 리스트 제외</button>`:''}<button class="close-btn" onclick="closeModal()">✕</button></div></div>
+  <div class="modal-header"><h3>📝 ${esc(c.name)} — 메모/이력</h3><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end"><button onclick="closeModal();openClientFilingHistory(${id})" style="padding:4px 12px;background:#e8f0fe;color:#1565c0;border:1px solid #c5cae9;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">📋 신고이력</button><button onclick="closeModal();openForm(${id})" style="padding:4px 12px;background:#f0f4ff;color:#4f8ef7;border:1px solid #c5cae9;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">✏ 거래처 수정</button>${G.currentTab==='julgae'?`<button onclick="closeModal();openJulgaeListAdd(${id})" style="padding:4px 12px;background:#f3e5f5;color:#6a1b9a;border:1px solid #ce93d8;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">➕ 리스트 추가</button><button onclick="removeClientFromJulgaeList(${id})" style="padding:4px 12px;background:#fdecea;color:#c62828;border:1px solid #ef9a9a;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">🗑 리스트 제외</button>`:''}<button class="close-btn" onclick="closeModal()">✕</button></div></div>
   <div class="modal-body">
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <div style="display:flex;flex-direction:column;gap:6px;flex:1">
