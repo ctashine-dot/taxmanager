@@ -8931,10 +8931,11 @@ ${text.slice(0, 14000)}
 
 【findings 작성 규칙 — 가장 중요】
 - level 의미: "error"=명백한 오류·세액 영향 큰 문제 / "warn"=확인 필요·이상 징후 / "tip"=절세 누락 의심·개선 제안 / "ok"=정상 확인된 주요 항목
-- 실제로 의미 있는 항목만 담되, 최소 3개 이상 최대 8개. 중요도 높은 순서.
+- 자세히 검토할 것: 최소 5개 이상(중요 사항이 많으면 12개까지). 중요도 높은 순서.
+- 다음을 빠짐없이 점검해 해당되면 항목으로 포함: ①소득률(업종기준 대비) ②세무조정(접대비·감가상각·기부금·대손·이월결손금 한도) ③세액공제·감면(①~⑫) 적용/누락 ④가산세 ⑤전년 대비 급변 ⑥성실신고 대상 여부 ⑦과세표준·산출세액·결정세액·납부세액 정합성
 - 소득률이 업종 기준을 벗어나면 반드시 warn 또는 error로 포함.
 - 적용 가능한데 신고서에 빠진 세액공제·감면(①~⑫)은 tip으로 포함.
-- 일반론·해당 없는 항목·뻔한 면책문구는 넣지 말 것. detail은 짧고 구체적으로.
+- 일반론·뻔한 면책문구는 빼되, 근거(금액·항목명)는 구체적으로 적을 것.
 ※ totalTax(결정세액)=산출세액-세액감면·공제+가산세 / payTax(납부할총세액)=결정세액-기납부세액`;
 
   try {
@@ -9509,6 +9510,8 @@ function doRecordTRRWith(clientId, pKey) {
   setIf('residentTax', num(data.residentTax) || (num(data.totalTax) ? Math.round(num(data.totalTax)*0.1) : 0));
   setIf('fee', num(data.feeRecommendation));
   setIf('feeSeongsi', num(data.feeSeongsi));
+  // 신고서를 검토·반영했으므로 진행상태(자료수령·기장·상담·결재) 자동 완료 처리
+  updated.d = true; updated.b = true; updated.c = true; updated.a = true;
   G.julgae[pKey][clientId] = updated;
   // enrolled가 이미 명시적으로 사용 중인 경우에만 추가 (빈 배열이면 "전체 자동" 상태이므로 건드리지 않음)
   const period = G.periods.find(p=>p.id===pKey);
