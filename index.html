@@ -7077,6 +7077,7 @@ function renderFees() {
       <button class="btn-sm" style="background:#e8f0fe;color:#1565c0;border:1.5px solid #90caf9" onclick="openBulkInvoice()">🖨 일괄 청구서 발행</button>
       <button class="btn-sm" style="background:#fff3e0;color:#e65100;border:1.5px solid #ffb74d" onclick="openBulkReminder()">📨 미수금 일괄 안내문</button>
       <button class="btn-sm" style="background:#f3e5f5;color:#6a1b9a;border:1.5px solid #ce93d8" onclick="openUnpaidSMSBuilder()">💬 미수금 문자 생성</button>
+      <button class="btn-sm" style="background:#e0f2f1;color:#00695c;border:1.5px solid #80cbc4" onclick="openFeeSyncReview()">🔄 수수료 동기화 검토</button>
     </div>`:''}
   </div>
 
@@ -10250,6 +10251,7 @@ function doRecordTRRWith(clientId, pKey) {
   // 신고서를 검토·반영했으므로 진행상태(자료수령·기장·상담·결재) 자동 완료 처리
   updated.d = true; updated.b = true; updated.c = true; updated.a = true;
   G.julgae[pKey][clientId] = updated;
+  syncJulgaeFeeToClient(clientId, G.periods.find(p=>p.id===pKey), updated.fee, updated.feeSeongsi); // 거래처목록 조정료·성실료 동기화
   // enrolled가 이미 명시적으로 사용 중인 경우에만 추가 (빈 배열이면 "전체 자동" 상태이므로 건드리지 않음)
   const period = G.periods.find(p=>p.id===pKey);
   if (period && period.enrolled?.length > 0 && !period.enrolled.includes(clientId)) {
@@ -11793,6 +11795,75 @@ function deleteJulgaeAdhocEntry(pKey, id) {
   if (G.julgae[pKey]) delete G.julgae[pKey][id];
   saveToLS();
   renderJulgae();
+}
+
+// 신고리스트의 조정료(fee)·성실확인비용(feeSeongsi)을 거래처목록 필드로 동기화
+function syncJulgaeFeeToClient(clientId, period, jfee, jseongsi) {
+  const client = G.clients.find(c => c.id === clientId);
+  if (!client || !period) return;
+  if (jseongsi != null && jseongsi > 0) { client.feeSeongsi = jseongsi; client.seongsiConfirmFee = jseongsi; }
+  if (jfee != null && jfee > 0) {
+    const ff = REPORT_FEE_FIELD[period.reportType]; if (ff) client[ff] = jfee;
+    if (['corp','income','seongsi'].includes(period.reportType)) client.adjustFee = jfee;
+  }
+}
+
+// 거래처목록에 반영 안 된 조정료·성실료 찾기 — 각 거래처의 '최신' 소득세류 신고기간 값 기준
+function findFeeSyncMismatches() {
+  const incPeriods = G.periods.filter(p => ['corp','income','seongsi'].includes(p.reportType))
+    .sort((a,b) => String(b.id||'').localeCompare(String(a.id||'')));
+  const out = [];
+  G.clients.forEach(c => {
+    if (c.status === '해지' || c.status === '폐업') return;
+    let jJojung=null, jSeongsi=null, plabel='';
+    for (const p of incPeriods) {
+      const v = (G.julgae[p.id]||{})[c.id];
+      if (!v) continue;
+      if (jJojung==null && (v.fee||0) > 0) { jJojung = v.fee; plabel = plabel || p.label; }
+      if (jSeongsi==null && (v.feeSeongsi||0) > 0) { jSeongsi = v.feeSeongsi; plabel = plabel || p.label; }
+      if (jJojung!=null && jSeongsi!=null) break;
+    }
+    const cJojung = c.adjustFee || c.feeJojung || 0;
+    const cSeongsi = c.seongsiConfirmFee || c.feeSeongsi || 0;
+    const jojungMiss = jJojung!=null && jJojung !== cJojung;
+    const seongsiMiss = jSeongsi!=null && jSeongsi !== cSeongsi;
+    if (jojungMiss || seongsiMiss) out.push({ c, jJojung, cJojung, jSeongsi, cSeongsi, jojungMiss, seongsiMiss, plabel });
+  });
+  return out;
+}
+
+function openFeeSyncReview() {
+  const list = findFeeSyncMismatches();
+  const won = n => (n||0).toLocaleString();
+  const rows = list.map(m => `<tr>
+    <td style="padding:6px 8px;font-weight:600">${esc(m.c.name)}</td>
+    <td style="padding:6px 8px;font-size:11px;color:#888">${esc(m.plabel||'')}</td>
+    <td style="padding:6px 8px;text-align:right">${m.jojungMiss?`<span style="color:#aaa;text-decoration:line-through">${won(m.cJojung)}</span> → <b style="color:#2e7d32">${won(m.jJojung)}</b>`:`<span style="color:#ccc">-</span>`}</td>
+    <td style="padding:6px 8px;text-align:right">${m.seongsiMiss?`<span style="color:#aaa;text-decoration:line-through">${won(m.cSeongsi)}</span> → <b style="color:#6a1b9a">${won(m.jSeongsi)}</b>`:`<span style="color:#ccc">-</span>`}</td>
+  </tr>`).join('');
+  showModal(`<div style="max-width:620px;width:100%">
+    <div class="modal-header"><h3>🔄 수수료 동기화 검토</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div style="font-size:13px;color:#555;margin-bottom:12px">신고리스트에 입력된 <b>조정료·성실확인비용</b>이 거래처목록에 반영되지 않은 거래처입니다. (각 거래처의 가장 최근 소득세류 신고기간 기준)</div>
+      ${list.length ? `<div style="max-height:50vh;overflow:auto;border:1px solid #eee;border-radius:8px">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="background:#f5f5f5;position:sticky;top:0"><th style="padding:7px 8px;text-align:left">거래처</th><th style="padding:7px 8px;text-align:left">기준 신고</th><th style="padding:7px 8px;text-align:right">조정료</th><th style="padding:7px 8px;text-align:right">성실확인비용</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>
+        <button class="btn-primary" style="width:100%;margin-top:14px" onclick="applyFeeSyncAll()">✅ ${list.length}곳 거래처목록에 일괄 반영</button>`
+      : `<div style="text-align:center;padding:30px;color:#2e7d32;font-weight:600">✓ 모든 조정료·성실확인비용이 거래처목록에 반영되어 있습니다.</div>`}
+    </div></div>`);
+}
+
+function applyFeeSyncAll() {
+  const list = findFeeSyncMismatches();
+  list.forEach(m => {
+    if (m.jojungMiss) { m.c.adjustFee = m.jJojung; m.c.feeJojung = m.jJojung; }
+    if (m.seongsiMiss) { m.c.seongsiConfirmFee = m.jSeongsi; m.c.feeSeongsi = m.jSeongsi; }
+  });
+  saveToLS(); closeModal();
+  toast(`${list.length}곳의 조정료·성실확인비용을 거래처목록에 반영했습니다`, 'success', 3500);
+  if (G.currentTab === 'clients') renderClients(); else if (G.currentTab === 'fees') renderFees();
 }
 
 function applyBosuFee(pKey, clientId, field, fee) {
