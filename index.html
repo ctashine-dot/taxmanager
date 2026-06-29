@@ -7450,6 +7450,41 @@ function savePeriodNote(pKey) {
 const PAYROLL_RATES = { np: 0.045, hi: 0.03545, ltc: 0.1295, ei: 0.009, local: 0.10 };
 const EMP_STATUS = ['재직', '휴직', '퇴직'];
 
+// 근로소득 간이세액 '추정'(월) — 공제대상가족수(본인 포함) 기준. 공식 간이세액표 근사치.
+function estimateIncomeTax(monthlyWage, family) {
+  family = Math.max(1, family || 1);
+  const annual = (monthlyWage || 0) * 12;
+  if (annual <= 0) return 0;
+  let edc; // 근로소득공제(연)
+  if (annual <= 5000000) edc = annual * 0.7;
+  else if (annual <= 15000000) edc = 3500000 + (annual - 5000000) * 0.4;
+  else if (annual <= 45000000) edc = 7500000 + (annual - 15000000) * 0.15;
+  else if (annual <= 100000000) edc = 12000000 + (annual - 45000000) * 0.05;
+  else edc = 14750000 + (annual - 100000000) * 0.02;
+  edc = Math.min(edc, 20000000);
+  const incomeAmt = annual - edc;
+  const pensionDed = annual * 0.045; // 국민연금 본인부담분 소득공제(간이 반영)
+  const base = incomeAmt - 1500000 * family - pensionDed; // 인적공제 + 연금보험료공제
+  if (base <= 0) return 0;
+  let tax; // 산출세액(연, 누진)
+  if (base <= 14000000) tax = base * 0.06;
+  else if (base <= 50000000) tax = 840000 + (base - 14000000) * 0.15;
+  else if (base <= 88000000) tax = 6240000 + (base - 50000000) * 0.24;
+  else if (base <= 150000000) tax = 15360000 + (base - 88000000) * 0.35;
+  else if (base <= 300000000) tax = 37060000 + (base - 150000000) * 0.38;
+  else if (base <= 500000000) tax = 94060000 + (base - 300000000) * 0.40;
+  else if (base <= 1000000000) tax = 174060000 + (base - 500000000) * 0.42;
+  else tax = 384060000 + (base - 1000000000) * 0.45;
+  let credit = tax <= 1300000 ? tax * 0.55 : 715000 + (tax - 1300000) * 0.30; // 근로소득세액공제
+  let cap;
+  if (annual <= 33000000) cap = 740000;
+  else if (annual <= 70000000) cap = Math.max(660000, 740000 - (annual - 33000000) * 0.008);
+  else cap = Math.max(500000, 660000 - (annual - 70000000) * 0.5);
+  credit = Math.min(credit, cap);
+  const annualTax = Math.max(0, tax - credit);
+  return Math.max(0, Math.floor(annualTax / 12 / 10) * 10); // 월 환산 + 10원 절사
+}
+
 function payrollCalc(empId, ym) {
   const e = G.employees.find(x => x.id === empId) || {};
   const rec = (G.payroll || {})[`${empId}_${ym}`] || {};
@@ -7514,6 +7549,7 @@ function openEmployeeModal(id) {
         <div style="flex:1">${f('입사일','hireDate',e?.hireDate,'type="date"')}</div>
         <div style="flex:1">${f('기본급','baseSalary',e?.baseSalary,'inputmode="numeric"')}</div>
       </div>
+      <div style="margin-bottom:10px">${f('공제대상가족수(본인 포함)','family',e?.family!=null?e.family:1,'inputmode="numeric" placeholder="간이세액 추정용"')}</div>
       <div style="margin-bottom:10px"><label class="flabel">상태</label>
         <select id="emp-status" class="fsel" style="width:100%">${EMP_STATUS.map(s=>`<option ${e?.status===s?'selected':''}>${s}</option>`).join('')}</select>
       </div>
@@ -7529,7 +7565,9 @@ function saveEmployeeFromForm(id) {
   const empNo = v('empNo'), name = v('name');
   if (!name) { toast('성명을 입력해주세요', 'warning'); return; }
   const data = { empNo, name, dept: v('dept'), position: v('position'), hireDate: v('hireDate'),
-    baseSalary: Number(v('baseSalary').replace(/[,\s]/g,''))||0, status: document.getElementById('emp-status')?.value || '재직' };
+    baseSalary: Number(v('baseSalary').replace(/[,\s]/g,''))||0,
+    family: Math.max(1, Number(v('family').replace(/[,\s]/g,''))||1),
+    status: document.getElementById('emp-status')?.value || '재직' };
   if (id) {
     const e = G.employees.find(x => x.id === id); if (e) Object.assign(e, data);
     _payrollLog('직원수정', id, '', 'name', name);
@@ -7586,9 +7624,23 @@ function renderPayroll() {
   </div>
 
   <div style="margin-bottom:8px;display:flex;gap:8px;flex-wrap:wrap">
-    <button class="btn-sm" style="background:#e8f0fe;color:#1565c0;border:1px solid #90caf9;font-weight:600" onclick="G.payrollEmpOpen=!G.payrollEmpOpen;renderPayroll()">${empOpen?'▾ 직원 관리 접기':'▸ 직원 관리'} (${emps.length}명)</button>
     <button class="btn-sm" style="background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;font-weight:600" onclick="openEmployeeModal(null)">+ 직원 추가</button>
+    <button class="btn-sm" style="background:#fff3e0;color:#e65100;border:1px solid #ffb74d;font-weight:600" onclick="payrollEstimateAll()" title="공제대상가족수 기준 간이세액 추정치(참고용)로 소득세 일괄 입력 — 공식 간이세액표와 다를 수 있음">⚡ 간이세액 추정(참고용)</button>
+    <button class="btn-sm" style="background:#e8f0fe;color:#1565c0;border:1px solid #90caf9;font-weight:600" onclick="exportPayrollCSV()">⬇ 엑셀(CSV)</button>
+    <button class="btn-sm" style="background:#ede7f6;color:#4a148c;border:1px solid #b39ddb;font-weight:600" onclick="printAllPayslips()">🖨 급여명세서</button>
+    <button class="btn-sm" style="background:#e8f0fe;color:#1565c0;border:1px solid #90caf9;font-weight:600" onclick="G.payrollEmpOpen=!G.payrollEmpOpen;renderPayroll()">${empOpen?'▾ 직원 관리 접기':'▸ 직원 관리'} (${emps.length}명)</button>
     <button class="btn-sm" style="background:#f3e5f5;color:#6a1b9a;border:1px solid #ce93d8;font-weight:600" onclick="G.payrollLogOpen=!G.payrollLogOpen;renderPayroll()">${logOpen?'▾ 변경 이력 접기':'▸ 변경 이력'}</button>
+  </div>
+
+  <div class="card" style="margin-bottom:14px;padding:12px;background:#faf7ff;border:1px solid #e1d5f5">
+    <div style="font-size:12px;font-weight:700;color:#4a148c;margin-bottom:6px">📑 원천세 신고용 합계 (${ym}) — 원천징수이행상황신고서 간이세액(A01)</div>
+    <div style="display:flex;gap:18px;flex-wrap:wrap;font-size:13px">
+      <span>인원 <b>${active.length}명</b></span>
+      <span>총지급액 <b style="color:#2e7d32">${won(sum.gross)}</b></span>
+      <span>소득세(A01) <b style="color:#6a1b9a">${won(sum.inc)}</b></span>
+      <span>지방소득세 <b style="color:#6a1b9a">${won(sum.loc)}</b></span>
+      <span>합계 <b>${won(sum.tax)}</b></span>
+    </div>
   </div>
 
   ${empOpen ? `<div class="tbl-wrap" style="margin-bottom:16px"><table>
@@ -7628,7 +7680,7 @@ function renderPayroll() {
       <td style="text-align:right">${pin(e.id,'bonus',c.bonus)}</td>
       ${td(`<b>${won(c.gross)}</b>`,'color:#2e7d32')}
       ${td(won(c.np),'color:#888')}${td(won(c.hi),'color:#888')}${td(won(c.ltc),'color:#888')}${td(won(c.ei),'color:#888')}
-      <td style="text-align:right">${pin(e.id,'incomeTax',c.incomeTax)}</td>
+      <td style="text-align:right">${pin(e.id,'incomeTax',c.incomeTax)}${(()=>{const est=estimateIncomeTax(c.gross,e.family);return (est && est!==c.incomeTax)?`<div onclick="updatePayrollField(${e.id},'${ym}','incomeTax',${est})" style="font-size:9px;color:#e65100;background:#fff3e0;border-radius:4px;padding:1px 4px;margin-top:2px;cursor:pointer;text-align:right" title="간이세액 추정(가족 ${e.family||1}명) 적용">⚡${won(est)}</div>`:'';})()}</td>
       ${td(won(c.localTax),'color:#888')}
       ${td(`<b>${won(c.deduction)}</b>`,'color:#e53935')}
       ${td(`<b>${won(c.net)}</b>`,'color:#1a1a2e;font-size:13px')}
@@ -7642,8 +7694,98 @@ function renderPayroll() {
     </tr>` : ''}
     </tbody>
   </table></div>
-  <div style="font-size:11px;color:#aaa;margin-top:8px">※ 4대보험 근로자부담 자동계산(국민연금 4.5% · 건강 3.545% · 장기요양 건강료의 12.95% · 고용 0.9%). 소득세는 간이세액표 기준으로 직접 입력하면 지방소득세(10%)는 자동 계산됩니다.</div>
+  <div style="font-size:11px;color:#aaa;margin-top:8px">※ 4대보험 근로자부담 자동계산(국민연금 4.5% · 건강 3.545% · 장기요양 건강료의 12.95% · 고용 0.9%). 지방소득세는 소득세의 10% 자동 계산.<br>※ ⚡소득세는 <b>추정치(참고용)</b>입니다 — 공제대상가족수 기준 근사값이며 공식 간이세액표와 차이가 있을 수 있으니 정확한 값은 홈택스 '근로소득 간이세액표'로 확인 후 직접 입력하세요.</div>
   `;
+}
+
+// 간이세액 일괄 추정 — 재직 직원 소득세를 추정치로 채움
+function payrollEstimateAll() {
+  const ym = G.payrollYM || currentYM();
+  const active = (G.employees||[]).filter(e => e.status==='재직' || e.status==='휴직');
+  if (!active.length) { toast('재직 직원이 없습니다','info'); return; }
+  if (!confirm(`재직 직원 ${active.length}명의 소득세를 간이세액 추정치로 채울까요?\n(공제대상가족수 기준 근사치이며, 이후 직접 수정 가능)`)) return;
+  let n = 0;
+  active.forEach(e => {
+    const c = payrollCalc(e.id, ym);
+    const est = estimateIncomeTax(c.gross, e.family);
+    const key = `${e.id}_${ym}`;
+    if (!G.payroll[key]) G.payroll[key] = {};
+    G.payroll[key].incomeTax = est;
+    n++;
+  });
+  _payrollLog('간이세액 일괄추정', '', ym, '인원', n);
+  saveToLS(); renderPayroll();
+  toast(`${n}명 소득세를 추정 적용했습니다`, 'success');
+}
+
+// 급여대장 CSV(엑셀) 내보내기
+function exportPayrollCSV() {
+  const ym = G.payrollYM || currentYM();
+  const active = (G.employees||[]).filter(e => e.status==='재직' || e.status==='휴직');
+  if (!active.length) { toast('내보낼 급여 데이터가 없습니다','warning'); return; }
+  const BOM = '﻿';
+  const head = ['사번','성명','부서','직위','기본급','수당','상여','지급계','국민연금','건강보험','장기요양','고용보험','소득세','지방소득세','공제계','실지급액'];
+  const lines = [head.join(',')];
+  active.forEach(e => {
+    const c = payrollCalc(e.id, ym);
+    const row = [e.empNo||'', e.name||'', e.dept||'', e.position||'', c.base, c.allowance, c.bonus, c.gross, c.np, c.hi, c.ltc, c.ei, c.incomeTax, c.localTax, c.deduction, c.net];
+    lines.push(row.map(v => '"'+String(v).replace(/"/g,'""')+'"').join(','));
+  });
+  const blob = new Blob([BOM + lines.join('\r\n')], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `급여대장_${ym}.csv`;
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+  toast('급여대장 CSV를 내보냈습니다', 'success');
+}
+
+// 급여명세서 인쇄/PDF — 재직 직원 전체(개별 페이지)
+function printAllPayslips() {
+  const ym = G.payrollYM || currentYM();
+  const active = (G.employees||[]).filter(e => e.status==='재직' || e.status==='휴직');
+  if (!active.length) { toast('인쇄할 급여 데이터가 없습니다','warning'); return; }
+  const s = G.settings || {};
+  const won = n => (n||0).toLocaleString();
+  const slip = (e) => {
+    const c = payrollCalc(e.id, ym);
+    const row = (label, val, neg) => `<tr><td>${label}</td><td style="text-align:right${neg?';color:#c0392b':''}">${neg?'-':''}${won(val)}</td></tr>`;
+    return `<div class="slip">
+      <div class="sh"><div class="title">급 여 명 세 서</div><div class="sub">${ym} · ${esc(s.name||'세무회계사무소')}</div></div>
+      <div class="meta"><span>성명: <b>${esc(e.name)}</b></span><span>사번: ${esc(e.empNo||'-')}</span><span>부서: ${esc(e.dept||'-')}</span><span>직위: ${esc(e.position||'-')}</span></div>
+      <div class="cols">
+        <table><thead><tr><th>지급 항목</th><th style="text-align:right">금액</th></tr></thead><tbody>
+          ${row('기본급', c.base)}${c.allowance?row('수당', c.allowance):''}${c.overtime?row('연장수당', c.overtime):''}${c.bonus?row('상여', c.bonus):''}
+          <tr class="tot"><td>지급 합계</td><td style="text-align:right">${won(c.gross)}</td></tr>
+        </tbody></table>
+        <table><thead><tr><th>공제 항목</th><th style="text-align:right">금액</th></tr></thead><tbody>
+          ${row('국민연금', c.np, 1)}${row('건강보험', c.hi, 1)}${row('장기요양', c.ltc, 1)}${row('고용보험', c.ei, 1)}${row('소득세', c.incomeTax, 1)}${row('지방소득세', c.localTax, 1)}${c.other?row('기타공제', c.other, 1):''}
+          <tr class="tot"><td>공제 합계</td><td style="text-align:right">-${won(c.deduction)}</td></tr>
+        </tbody></table>
+      </div>
+      <div class="net">실지급액 <b>${won(c.net)} 원</b></div>
+      <div class="foot">* 본 명세서는 세무사무소 업무관리 시스템에서 자동 생성되었습니다.</div>
+    </div>`;
+  };
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>급여명세서 ${ym}</title><style>
+    *{margin:0;padding:0;box-sizing:border-box}body{font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;padding:24px;color:#1a1a2e;font-size:13px}
+    .toolbar{display:flex;gap:8px;margin-bottom:16px}.toolbar button{padding:8px 18px;border-radius:8px;border:1.5px solid #ddd;background:#f5f5f5;font-weight:600;cursor:pointer;font-family:inherit}.toolbar button.primary{background:#4f8ef7;color:#fff;border-color:#4f8ef7}
+    .slip{border:1px solid #ccc;border-radius:8px;padding:20px;margin-bottom:20px;page-break-inside:avoid}
+    .sh{text-align:center;border-bottom:2px solid #1a1a2e;padding-bottom:10px;margin-bottom:12px}.title{font-size:20px;font-weight:800;letter-spacing:6px}.sub{font-size:12px;color:#888;margin-top:4px}
+    .meta{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:#444;margin-bottom:12px}
+    .cols{display:flex;gap:16px}.cols table{flex:1;border-collapse:collapse}
+    th{background:#f5f5f5;padding:7px 10px;text-align:left;font-size:11px;border-bottom:2px solid #e0e0e0}td{padding:6px 10px;border-bottom:1px solid #f0f0f0;font-size:12px}
+    .tot{font-weight:800;background:#eef3ff}
+    .net{text-align:right;font-size:16px;font-weight:800;margin-top:12px;padding:10px;background:#e8f0fe;border-radius:6px}.net b{color:#1565c0}
+    .foot{font-size:10px;color:#aaa;margin-top:8px}
+    @media print{body{padding:0}.toolbar{display:none}}
+  </style></head><body>
+    <div class="toolbar"><button onclick="window.close()">← 닫기</button><button class="primary" onclick="window.print()">🖨 인쇄 / PDF</button></div>
+    ${active.map(slip).join('')}
+  </body></html>`;
+  const w = window.open('', '_blank', 'width=820,height=1000');
+  if (!w) { toast('팝업이 차단되었습니다. 팝업 허용 후 다시 시도하세요.','warning'); return; }
+  w.document.write(html); w.document.close();
 }
 
 function renderAITools() {
