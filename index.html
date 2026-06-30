@@ -6026,17 +6026,6 @@ function toggleJulgaeGroupField(pKey, field, idsCsv) {
   if (_ct === 'fees') renderFees(); else if (_ct === 'dashboard') renderDashboard(); else renderJulgae();
 }
 
-// 그룹 유형 전환(공동사업자 ↔ 동일인) — 그룹 전원의 groupJoint 플래그 토글
-function toggleGroupJoint(idsCsv) {
-  const ids = String(idsCsv).split('-').map(Number).filter(Boolean);
-  const members = ids.map(id => G.clients.find(c => c.id === id)).filter(Boolean);
-  if (!members.length) return;
-  const turnOn = !members.every(m => m.groupJoint);
-  members.forEach(m => { m.groupJoint = turnOn; if (turnOn) m.jointBiz = true; });
-  saveToLS(); renderJulgae();
-  toast(turnOn ? '공동사업자 그룹으로 표시합니다 (매출·세금·수수료 별도/합산)' : '동일인 그룹으로 표시합니다', 'success', 2800);
-}
-
 // 신고 데이터 부분 갱신 헬퍼
 function _setJulgae(pKey, cid, patch) {
   if (!requireWrite()) return false;
