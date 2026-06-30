@@ -3366,12 +3366,20 @@ function doGroupEdit() {
     c.relatedGroup=''; c.soloGroup=true; c.groupJoint=false;
   } else {
     if (!name) { toast('그룹명을 입력해주세요','warning'); return; }
+    // 공동사업자로 지정하면 신고리스트(소득세·성실)에서도 묶이도록 공유 incomeGroupKey 부여
+    // (관계사 그룹 자체는 신고리스트 묶음 기준이 아니므로, 공동 지정 시에만 연결)
+    let _gk = '';
+    if (joint) {
+      const _ms = window._geMembers.map(id=>G.clients.find(x=>x.id===id)).filter(Boolean);
+      _gk = _ms.find(m=>m.incomeGroupKey)?.incomeGroupKey || ('pgk_'+Math.min(...window._geMembers));
+    }
     window._geMembers.forEach(id=>{
       const cl=G.clients.find(x=>x.id===id);
       if (cl) {
         cl.relatedGroup=name; cl.soloGroup=false; cl.groupMain=(id===window._geMainId);
         // 공동사업자 지정/해제 → 신고리스트 '공동' 표시와 동기화 (사업자번호가 같으면 지정과 무관하게 공동)
         cl.groupJoint = joint; cl.jointBiz = joint;
+        if (joint) cl.incomeGroupKey = _gk;
       }
     });
     if (origName) {
