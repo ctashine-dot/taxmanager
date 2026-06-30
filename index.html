@@ -3179,6 +3179,8 @@ function openGroupEditModal(id) {
   const byDate = [...memberIds].map(mid=>G.clients.find(x=>x.id===mid)).filter(Boolean)
     .sort((a,b)=>csk2(a).localeCompare(csk2(b))||a.name.localeCompare(b.name,'ko'));
   window._geMainId = (byDate.find(m=>m.groupMain)||byDate[0]||c).id;
+  // 공동사업자 여부: 멤버 중 하나라도 groupJoint면 ON
+  window._geJoint = memberIds.map(mid=>G.clients.find(x=>x.id===mid)).filter(Boolean).some(m=>m.groupJoint);
   renderGroupEditModal();
 }
 
@@ -3210,6 +3212,10 @@ function renderGroupEditModal() {
           </div>
         </div>`}).join('')}
     </div>
+    ${members.length>1?`<label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:9px 12px;background:#e0f2f1;border:1px solid #80cbc4;border-radius:8px;cursor:pointer;font-size:12px;color:#00695c;font-weight:600">
+      <input type="checkbox" id="ge-joint" ${window._geJoint?'checked':''} onchange="window._geJoint=this.checked" style="width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:#00897b">
+      <span>공동사업자 그룹 <span style="font-weight:400;color:#5a8e89">(같은 사업장을 여러 명이 공동운영) — 신고리스트에 <b>공동</b>으로 표시</span></span>
+    </label>`:''}
     <label class="flabel">업체 추가</label>
     <div class="search-box" style="margin-bottom:6px;background:#fff;border:1px solid #e0e0e0;border-radius:10px;padding:8px 12px">
       <span>🔍</span>
@@ -3355,13 +3361,18 @@ function doGroupEdit() {
   const name = (document.getElementById('ge-name')?.value||window._geGroupName||'').trim();
   const c = G.clients.find(x=>x.id===window._geClientId); if (!c) return;
   const origName = window._geOrigGroupName;
+  const joint = document.getElementById('ge-joint')?.checked ?? !!window._geJoint;
   if (window._geMembers.length<=1) {
-    c.relatedGroup=''; c.soloGroup=true;
+    c.relatedGroup=''; c.soloGroup=true; c.groupJoint=false;
   } else {
     if (!name) { toast('그룹명을 입력해주세요','warning'); return; }
     window._geMembers.forEach(id=>{
       const cl=G.clients.find(x=>x.id===id);
-      if (cl) { cl.relatedGroup=name; cl.soloGroup=false; cl.groupMain=(id===window._geMainId); }
+      if (cl) {
+        cl.relatedGroup=name; cl.soloGroup=false; cl.groupMain=(id===window._geMainId);
+        // 공동사업자 지정 → 신고리스트에서 '공동'으로 묶여 표시 (해제 시 동일인 자동판정으로 복귀)
+        cl.groupJoint = joint; if (joint) cl.jointBiz = true;
+      }
     });
     if (origName) {
       G.clients.forEach(cl=>{
@@ -3370,6 +3381,7 @@ function doGroupEdit() {
     }
   }
   saveToLS(); closeModal(); renderClients();
+  if (typeof renderJulgae==='function') renderJulgae();
 }
 
 function updateClientField(id, field, value, _skipCheck) {
@@ -4759,16 +4771,32 @@ function openIncomeGroupLink(clientId, forceJoint) {
   if (!client) return;
   const curKey = client.incomeGroupKey || '';
   const ns2 = s => (s||'').replace(/\s+/g,'').toLowerCase();
+  const nbz = s => (s||'').replace(/\D/g,'');
   const modal = document.getElementById('modal-container');
   const renderResults = (q) => {
-    const results = q
-      ? G.clients.filter(c => c.id !== clientId && c.status !== '해지' && c.status !== '폐업' &&
-          (ns2(c.name).includes(ns2(q)) || ns2(c.rep||'').includes(ns2(q)))).slice(0,12)
-      : [];
+    let results, isSuggest = false;
+    if (q) {
+      results = G.clients.filter(c => c.id !== clientId && c.status !== '해지' && c.status !== '폐업' &&
+          (ns2(c.name).includes(ns2(q)) || ns2(c.rep||'').includes(ns2(q)))).slice(0,12);
+    } else {
+      // 검색어 없을 때: 같은 상호·사업자번호·관계사그룹·대표자 후보를 자동 추천
+      isSuggest = true;
+      const myName = ns2(client.name), myBn = nbz(client.bizNo), myRg = client.relatedGroup, myRep = ns2(client.rep);
+      results = G.clients.filter(c => c.id !== clientId && c.status !== '해지' && c.status !== '폐업' && (
+        ns2(c.name) === myName ||
+        (myBn && nbz(c.bizNo) === myBn) ||
+        (myRg && c.relatedGroup === myRg) ||
+        (myRep && ns2(c.rep) === myRep)
+      )).slice(0,12);
+    }
     const el = document.getElementById('iglink-results');
     if (!el) return;
-    el.innerHTML = (!results.length&&q)?'<div style="color:#aaa;text-align:center;padding:12px">검색 결과 없음</div>':
-      results.map(tc => {
+    if (!results.length) {
+      el.innerHTML = `<div style="color:#aaa;text-align:center;padding:12px">${q?'검색 결과 없음':'추천 후보가 없습니다 — 위 검색창에서 거래처를 찾아 연결하세요'}</div>`;
+      return;
+    }
+    const header = isSuggest ? `<div style="font-size:11px;color:#00897b;font-weight:700;margin-bottom:6px">💡 추천 공동사업자 후보 (클릭하면 연결됩니다)</div>` : '';
+    el.innerHTML = header + results.map(tc => {
         const already = tc.incomeGroupKey && tc.incomeGroupKey===curKey;
         return `<div onclick="linkIncomeGroup(${clientId},${tc.id},document.getElementById('iglink-joint')?.checked);closeModal()" style="padding:9px 12px;border-radius:8px;cursor:pointer;border:1px solid ${already?'#e1bee7':'#f0f0f0'};margin-bottom:4px;background:${already?'#f3e5f5':'#fafbff'}" onmouseover="this.style.background='#e8f0fe'" onmouseout="this.style.background='${already?'#f3e5f5':'#fafbff'}'">
           <div style="font-weight:700;font-size:13px">${esc(tc.name)}${already?'<span style="font-size:10px;color:#7b1fa2;margin-left:6px">✓ 이미 같은 그룹</span>':''}</div>
@@ -4780,7 +4808,7 @@ function openIncomeGroupLink(clientId, forceJoint) {
   <div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)closeModal()">
     <div style="background:#fff;border-radius:16px;padding:24px;width:min(480px,95vw);max-height:85vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.25)">
       <div style="font-size:16px;font-weight:800;margin-bottom:4px">👤 개인 그룹 연결</div>
-      <div style="font-size:12px;color:#888;margin-bottom:14px">${esc(client.name)} (${esc(client.rep||'')}) — 동일인의 다른 사업체와 연결합니다</div>
+      <div style="font-size:12px;color:#888;margin-bottom:14px">${esc(client.name)} (${esc(client.rep||'')}) — 공동사업자/동일인의 다른 사업체를 골라 연결합니다</div>
       ${curKey?`<div style="margin-bottom:12px;padding:8px 12px;background:#f3e5f5;border-radius:8px;font-size:12px;color:#6a1b9a;display:flex;justify-content:space-between;align-items:center">
         <span>현재 그룹 키: <b>${esc(curKey)}</b></span>
         <button onclick="unlinkIncomeGroup(${clientId});closeModal()" style="padding:3px 10px;border-radius:6px;border:1px solid #e53935;background:#ffebee;color:#e53935;cursor:pointer;font-family:inherit;font-size:11px">그룹 해제</button>
@@ -5055,17 +5083,20 @@ function renderJulgae() {
   // 주민번호/법인등록번호 기준 그룹화 (소득세·법인세·성실·사업장 유형)
   // 자동 그룹화: ①명시적 incomeGroupKey ②동일인(같은 주민, 여러 사업장) ③공동사업자(같은 사업자번호, 여러 명)
   //             ④동일상호가 이미 그룹(incomeGroupKey)에 연결돼 있으면 같은 상호도 합류
-  const _juminCnt = {}, _bizCnt = {}, _nameToGK = {};
+  const _juminCnt = {}, _bizCnt = {}, _nameToGK = {}, _rgCnt = {};
   const _nmKey = s => (s||'').replace(/\s/g,'');
   clients.forEach(x => {
     const jn=(x.jumin||'').replace(/[-\s]/g,''); if(jn) _juminCnt[jn]=(_juminCnt[jn]||0)+1;
     const bn=(x.bizNo||'').replace(/\D/g,''); if(bn) _bizCnt[bn]=(_bizCnt[bn]||0)+1;
     const nm=_nmKey(x.name); if(nm && x.incomeGroupKey && !_nameToGK[nm]) _nameToGK[nm]=x.incomeGroupKey;
+    if(x.relatedGroup && !x.soloGroup) _rgCnt[x.relatedGroup]=(_rgCnt[x.relatedGroup]||0)+1;
   });
   const _jGrpNorm = c => {
     if (c.incomeGroupKey) return c.incomeGroupKey;
     const jn=(c.jumin||'').replace(/[-\s]/g,''); if(jn && _juminCnt[jn]>1) return 'jm:'+jn;
     const bn=(c.bizNo||'').replace(/\D/g,''); if(bn && bn.length>=10 && _bizCnt[bn]>1) return 'bz:'+bn;
+    // 관계사 그룹(거래처목록 '그룹 편집')으로 묶여 있으면 신고리스트에서도 함께 표시
+    if (c.relatedGroup && !c.soloGroup && _rgCnt[c.relatedGroup]>1) return 'rg:'+c.relatedGroup;
     // 동일상호가 이미 그룹에 연결돼 있으면 합류(사업자번호 없는 경우만 — 다른 사업장 오인 방지)
     const nm=_nmKey(c.name); if(nm && _nameToGK[nm] && !(bn && bn.length>=10)) return _nameToGK[nm];
     return '';
