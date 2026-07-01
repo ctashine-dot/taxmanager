@@ -1985,36 +1985,6 @@ function _renderDashboardInner() {
     </div>`;
   })():''}
 
-  ${(G.settings?.dashWidgets?.renewal!==false)?(()=>{
-    const today3=new Date();
-    const renewal=G.clients.filter(c=>{
-      if(c.status==='해지'||c.status==='폐업'||!c.contractDate)return false;
-      const cd=new Date(c.contractDate);
-      const months=(today3.getFullYear()-cd.getFullYear())*12+(today3.getMonth()-cd.getMonth());
-      return months>=11;
-    });
-    if(!renewal.length)return '';
-    const collapsedRenewal = _dashCollapsed('dash-renewal');
-    return `<div class="card" style="border-left:4px solid #ff9800">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:${collapsedRenewal?0:8}px">
-        ${sectionToggleBtn('dash-renewal')}
-        <div class="card-title" style="margin:0;color:#e65100">🔔 계약 갱신 검토 대상 (${renewal.length}개)</div>
-      </div>
-      <div style="${collapsedRenewal?'display:none':''}">
-        <div style="font-size:12px;color:#888;margin-bottom:10px">수임일로부터 11개월 이상 경과한 거래처입니다</div>
-        ${renewal.slice(0,10).map(c=>{
-          const cd=new Date(c.contractDate);
-          const months=(today3.getFullYear()-cd.getFullYear())*12+(today3.getMonth()-cd.getMonth());
-          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f5f5f5">
-            <div><span style="font-weight:700;font-size:13px">${esc(c.name)}</span><span style="font-size:11px;color:#888;margin-left:8px">${esc(c.rep||'')}</span></div>
-            <span style="font-size:12px;background:${months>=12?'#fdecea':'#fff3e0'};color:${months>=12?'#c62828':'#e65100'};padding:2px 8px;border-radius:8px">${months}개월 경과</span>
-          </div>`;
-        }).join('')}
-        ${renewal.length>10?`<div style="font-size:12px;color:#aaa;margin-top:8px">외 ${renewal.length-10}개...</div>`:''}
-      </div>
-    </div>`;
-  })():''}
-
   ${(G.settings?.dashWidgets?.growthChart!==false)?(()=>{
     const now4 = new Date();
     const months12 = Array.from({length:12},(_,i)=>{const d=new Date(now4.getFullYear(),now4.getMonth()-11+i,1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');});
@@ -3962,7 +3932,7 @@ function openForm(id) {
     contracts:getDefaultContracts('기장','개인','일반'),status:'정상',dataReceived:false,bookkeeping:false,approved:false,
     memo:'',contractDate:'',terminationDate:'',terminationReason:'',
     closureYear:'',closureTaxFiled:false,closureTaxApproved:false,
-    jointBiz:false,openDate:'',closeDate:'',route:'',routeDetail:''
+    jointBiz:false,openDate:'',closeDate:'',route:'세무사',routeDetail:''
   };
   if (isEdit && !c) { toast('거래처를 찾을 수 없습니다 (이미 삭제되었을 수 있습니다)', 'warning'); return; }
 
@@ -4393,6 +4363,8 @@ window.saveForm = function(id) {
   if (!d.managers) d.managers = [];
   d.dealType = d.dealTypes[0];
   d.manager = d.managers[0] || '';
+  // 수임경로가 '세무사'면 대상은 대표 세무사로 고정
+  if (d.route === '세무사') d.routeDetail = (G.settings && G.settings.rep) ? G.settings.rep : '대표 세무사';
   // If user explicitly set a group, clear solo flag
   if (d.relatedGroup && d.relatedGroup.trim()) d.soloGroup = false;
 
@@ -11796,7 +11768,7 @@ function openSettings() {
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
         ${[
           ['chart12','📊 12개월 추이 차트'],['growthChart','📈 수금 추이 선 그래프'],
-          ['clientChart','📊 거래처 증감 추이'],['renewal','🔔 계약 갱신 검토'],
+          ['clientChart','📊 거래처 증감 추이'],
           ['julgaeCard','📋 결재 현황 카드'],['managerStats','👤 담당자별 현황'],
         ].map(([k,l])=>`<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
           <input type="checkbox" id="set-widget-${k}" ${(s.dashWidgets||{})[k]!==false?'checked':''}> ${l}
@@ -13194,6 +13166,15 @@ function markJointBizV1() {
   if (count > 0) saveToLS();
   localStorage.setItem('tm_jointBizV1', '1');
 }
+// 기존 거래처의 수임경로를 기본 '세무사'(대표 세무사)로 지정 (1회)
+function defaultRouteSemusaV1() {
+  if (localStorage.getItem('tm_defaultRouteSemusaV1')) return;
+  const rep = (G.settings && G.settings.rep) ? G.settings.rep : '대표 세무사';
+  let count = 0;
+  G.clients.forEach(c => { if (!c.route) { c.route = '세무사'; c.routeDetail = rep; count++; } });
+  if (count > 0) saveToLS();
+  localStorage.setItem('tm_defaultRouteSemusaV1', '1');
+}
 function removeDuplicateClientsV1() {
   if (localStorage.getItem('tm_removeDuplicatesV1')) return;
   // name+rep 기준 중복 탐지: 낮은 ID(원본) 유지, 높은 ID(마이그레이션 추가분) 제거
@@ -13735,6 +13716,7 @@ async function loadFromFirebase() {
     createUnmatchedV1();
     removeDuplicateClientsV1();
     markJointBizV1();
+    defaultRouteSemusaV1();
     importCorp26DataV1();
     importCorp26DataV2();
     importVat25_2DataV1();
