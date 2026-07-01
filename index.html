@@ -5618,15 +5618,11 @@ function renderJulgae() {
         const _reps = [...new Set(gc.map(m=>m.rep).filter(Boolean))];
         const _mgrs = [...new Set(gc.flatMap(m=>getManagers(m)))];
         const numCell = `<td style="position:sticky;left:${_numLeft}px;z-index:1;background:${tBg};color:#aaa;font-size:11px">${_isSum?(++_rowN):''}</td>`;
-        // 동일인·관계사는 색으로 구분되므로 칩 생략. 공동사업자만 '공동' 표기(클릭 토글 없음 — 분류는 사업자번호/지정 기준).
-        const _typeChip = joint ? `<span style="margin-left:5px;font-size:9px;padding:1px 6px;border-radius:8px;background:${tint};color:${pc};border:1px solid ${pc};font-weight:700;white-space:nowrap">공동</span>` : '';
-        // 대표업체 상호(칩): 가볍게 탭=그룹 접기/펼치기, 길게 누르면=메모/이력
+        // 유형은 색으로만 구분(공동=teal / 동일인=보라 / 관계사=인디고) — 칩 텍스트 생략
+        // 대표업체 상호(칩): 가볍게 탭=그룹 접기/펼치기, 길게 누르면=메모/이력(묶기·풀기는 메모창에서)
         const _press = `onpointerdown="jgPressStart(${lead.id})" onpointerup="event.stopPropagation();jgPressEnd('${item.groupKey}')" onpointercancel="jgPressCancel()" onpointerleave="jgPressCancel()"`;
-        // 명시 연결(incomeGroupKey)로 묶인 그룹만 '풀기' 제공 (동일주민·동일사업자번호 자동묶음은 데이터 기반이라 제외)
-        const _manualKey = item.groupKey && !/^(jm:|bz:)/.test(item.groupKey);
-        const _unlinkBtn = _manualKey ? `<button onpointerdown="event.stopPropagation()" onpointerup="event.stopPropagation()" onclick="event.stopPropagation();unlinkIncomeGroupAll('${item.groupKey}')" style="margin-left:4px;font-size:9px;padding:1px 6px;border-radius:8px;border:1px solid #ef9a9a;background:#fff;color:#e53935;cursor:pointer;font-family:inherit;white-space:nowrap" title="이 그룹을 개별 업체로 분리">🔓풀기</button>` : '';
         const nameCell = _isSum
-          ? `<td class="j-sname" style="left:${_nameLeft}px;background:${tBg}"><div style="display:flex;align-items:center;min-width:0"><span ${_press} style="display:inline-flex;align-items:center;gap:5px;background:#fff;color:${pc};border:1.5px solid ${pc};border-radius:8px;padding:3px 10px;font-size:${julgaeName(lead.name).length>9?'10px':'12px'};font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;cursor:pointer" title="${esc(_glabelTitle)} 그룹 (${gc.length}개) · 탭=펼치기 / 길게=메모">${esc(julgaeName(lead.name))}${gc.length>1?` 외${gc.length-1}`:''}<span style="font-size:9px">▼</span></span>${_typeChip}${_unlinkBtn}</div></td>`
+          ? `<td class="j-sname" style="left:${_nameLeft}px;background:${tBg}"><div style="display:flex;align-items:center;min-width:0"><span ${_press} style="display:inline-flex;align-items:center;gap:5px;background:#fff;color:${pc};border:1.5px solid ${pc};border-radius:8px;padding:3px 10px;font-size:${julgaeName(lead.name).length>9?'10px':'12px'};font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;cursor:pointer" title="${esc(_glabelTitle)} 그룹 (${gc.length}개) · 탭=펼치기 / 길게=메모">${esc(julgaeName(lead.name))}${gc.length>1?` 외${gc.length-1}`:''}<span style="font-size:9px">▼</span></span></div></td>`
           : `<td class="j-sname" style="left:${_nameLeft}px;background:${tBg};font-size:11px;font-weight:700;color:${pc}">그룹 합계</td>`;
         const cell = (val,style='') => `<td style="text-align:right;padding:4px 8px;font-size:12px;font-weight:700;color:${pc};${style}">${val}</td>`;
         const emptyTd = (k,extra='') => `<td style="${hc[k]?'display:none':''};background:${tBg};${extra}">`;
@@ -5722,12 +5718,13 @@ function renderJulgae() {
       const _closedBadge = (c.status==='폐업'||c.status==='해지') ? `<span style="font-size:9px;padding:1px 5px;border-radius:4px;background:#fdecea;color:#c62828;margin-left:3px;flex-shrink:0;font-weight:700" title="${c.status} (귀속연도 영업분 신고대상)">${c.status}${clientCloseYear(c)?` ${String(clientCloseYear(c)).slice(2)}`:''}</span>` : '';
       const _ssDupBadge = (_isPlainIncome && !item.isGroupChild && (c.jumin||'').replace(/[-\s]/g,'') && _ssDupJumin.has((c.jumin||'').replace(/[-\s]/g,''))) ? `<span onclick="event.stopPropagation();moveToSeongsi(${c.id},'${pKey2}')" style="font-size:9px;padding:1px 5px;border-radius:4px;background:#ede7f6;color:#6a1b9a;margin-left:3px;flex-shrink:0;font-weight:700;cursor:pointer;border:1px solid #ce93d8" title="동일 주민번호가 성실신고 리스트에 있습니다. 클릭 → 성실신고 그룹으로 이동(성실신고 우선)">⚑성실중복</span>` : '';
       // 사업자번호·주민번호로 자동그룹 안 되지만 상호/대표자가 같은 거래처가 있으면 묶기 제안
-      const _nameGrpBadge = (isIncomeType && !item.isGroupHeader && !item.isGroupChild && !c._julgaeAdhoc && _jGrpNorm(c)==='' && (_nameCand[_nnm(c.name)]>1 || _repCand[_nnm(c.rep)]>1)) ? `<span onclick="event.stopPropagation();groupJulgaeByName(${c.id})" style="font-size:9px;padding:1px 5px;border-radius:4px;background:#e0f2f1;color:#00695c;margin-left:3px;flex-shrink:0;font-weight:700;cursor:pointer;border:1px solid #80cbc4" title="상호 또는 대표자가 같은 거래처를 한 그룹으로 묶습니다">🔗묶기</span>` : '';
+      // 묶기 버튼은 상호 탭 → 메모/이력 창의 '공동사업자 묶기'로 이동(인라인 배지 제거)
+      const _nameGrpBadge = '';
       return `<tr id="jr-${pKey2}-${c.id}" style="background:${rowBg}">
         ${G.julgaeBulkMode?`<td style="text-align:center;width:32px" onclick="event.stopPropagation();toggleJulgaeSelect(${c.id})"><input type="checkbox" ${(G.julgaeBulkSelected||[]).includes(c.id)?'checked':''} style="width:16px;height:16px;cursor:pointer" onclick="event.stopPropagation();toggleJulgaeSelect(${c.id})"></td>`:''}
         <td style="color:#aaa;font-size:11px;position:sticky;left:${_numLeft}px;z-index:1;background:${rowBg}">${++_rowN}</td>
         <td class="j-sname" onclick="${item.isGroupHeader?'':c._julgaeAdhoc?'':(`openClientNotes(${c.id})`)}" style="cursor:${c._julgaeAdhoc?'default':'pointer'};left:${_nameLeft}px;background:${rowBg}"${_memoTitle?` title="${_memoTitle}"`:''} >${item.isGroupHeader
-          ?(()=>{const _j=!!item.joint;const _ty=item.groupType||'same';const _pc=_j?'#00897b':_ty==='same'?'#8e24aa':'#5c6bc0';const _tt=_j?'공동사업자':_ty==='same'?'동일인':'관계사';const _press=`onpointerdown="jgPressStart(${c.id})" onpointerup="event.stopPropagation();jgPressEnd('${item.groupKey}')" onpointercancel="jgPressCancel()" onpointerleave="jgPressCancel()"`;const _manualKey=item.groupKey&&!/^(jm:|bz:)/.test(item.groupKey);const _unlinkBtn=_manualKey?`<button onpointerdown="event.stopPropagation()" onpointerup="event.stopPropagation()" onclick="event.stopPropagation();unlinkIncomeGroupAll('${item.groupKey}')" style="margin-left:4px;font-size:9px;padding:1px 6px;border-radius:8px;border:1px solid #ef9a9a;background:#fff;color:#e53935;cursor:pointer;font-family:inherit;white-space:nowrap" title="이 그룹을 개별 업체로 분리">🔓풀기</button>`:'';return`<div class="td-name" style="display:flex;align-items:center;gap:4px;min-width:0"><span ${_press} style="display:inline-flex;align-items:center;gap:5px;background:#fff;color:${_pc};border:1.5px solid ${_pc};border-radius:8px;padding:3px 10px;font-size:${julgaeName(c.name).length>9?'10px':'12px'};font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;cursor:pointer" title="${_tt} 그룹 · 탭=접기 / 길게=메모">${esc(julgaeName(c.name))}${item.groupClients.length>1?` 외${item.groupClients.length-1}`:''}<span style="font-size:9px">▲</span></span>${_j?`<span style="font-size:9px;padding:1px 6px;border-radius:8px;background:#e0f2f1;color:${_pc};border:1px solid ${_pc};font-weight:700;white-space:nowrap">공동</span>`:''}${_unlinkBtn}${_noteIcon}</div>`;})()
+          ?(()=>{const _j=!!item.joint;const _ty=item.groupType||'same';const _pc=_j?'#00897b':_ty==='same'?'#8e24aa':'#5c6bc0';const _tt=_j?'공동사업자':_ty==='same'?'동일인':'관계사';const _press=`onpointerdown="jgPressStart(${c.id})" onpointerup="event.stopPropagation();jgPressEnd('${item.groupKey}')" onpointercancel="jgPressCancel()" onpointerleave="jgPressCancel()"`;return`<div class="td-name" style="display:flex;align-items:center;gap:4px;min-width:0"><span ${_press} style="display:inline-flex;align-items:center;gap:5px;background:#fff;color:${_pc};border:1.5px solid ${_pc};border-radius:8px;padding:3px 10px;font-size:${julgaeName(c.name).length>9?'10px':'12px'};font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;cursor:pointer" title="${_tt} 그룹 · 탭=접기 / 길게=메모">${esc(julgaeName(c.name))}${item.groupClients.length>1?` 외${item.groupClients.length-1}`:''}<span style="font-size:9px">▲</span></span>${_noteIcon}</div>`;})()
           :item.isGroupChild
             ?`<div style="display:flex;align-items:center;gap:4px;padding-left:18px;min-width:0"><span style="color:#ccc;font-size:11px;flex-shrink:0">└</span><div class="td-name" style="font-size:${julgaeName(c.name).length>12?'10px':julgaeName(c.name).length>8?'11px':'12px'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${esc(julgaeName(c.name))}</div>${_revBadge}${_noteIcon}</div>`
             :`<div class="td-name" style="display:flex;align-items:center;gap:3px;min-width:0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font-size:${julgaeName(c.name).length>12?'10px':julgaeName(c.name).length>8?'11px':'12px'}">${esc(julgaeName(c.name))}</span>${_closedBadge}${_ssDupBadge}${_nameGrpBadge}${c._julgaeAdhoc?`<span style="background:#ff8f00;color:#fff;font-size:9px;border-radius:3px;padding:1px 4px;white-space:nowrap;flex-shrink:0">미등록</span>`:_revBadge}${c._julgaeAdhoc?`<button onclick="event.stopPropagation();deleteJulgaeAdhocEntry('${pKey2}',${c.id})" style="background:none;border:none;color:#ccc;cursor:pointer;font-size:12px;padding:0 2px;flex-shrink:0" title="리스트에서 제거">✕</button>`:_noteIcon}</div>`
@@ -10691,6 +10688,27 @@ function openClientNotes(id) {
   if (!c) return;
   const notes = (G.clientNotes||{})[id] || [];
   const feeHist = (G.feeChangeHistory||{})[id] || [];
+  // 공동사업자 그룹(묶기/풀기) — 메모/이력 창에서 관리
+  const _igk = c.incomeGroupKey || '';
+  const _grpMembers = _igk ? G.clients.filter(x=>x.incomeGroupKey===_igk) : [];
+  const _bnK = (c.bizNo||'').replace(/\D/g,''), _jnK = (c.jumin||'').replace(/[-\s]/g,'');
+  const _autoBiz = _bnK.length>=10 && G.clients.some(x=>x.id!==id && (x.bizNo||'').replace(/\D/g,'')===_bnK);
+  const _autoJum = _jnK && G.clients.some(x=>x.id!==id && (x.jumin||'').replace(/[-\s]/g,'')===_jnK);
+  const _btnJoin = `background:#fff;color:#00897b;border:1.5px solid #00897b`;
+  const _btnUnlink = `background:#fff;color:#e53935;border:1.5px solid #ef9a9a`;
+  const groupSection = `
+    <div style="margin-bottom:12px;padding:10px 12px;background:#f1faf9;border:1px solid #b2dfdb;border-radius:10px">
+      <div style="font-size:12px;font-weight:700;color:#00695c;margin-bottom:6px">👥 공동사업자 묶기</div>
+      ${_grpMembers.length>1
+        ? `<div style="font-size:11px;color:#00695c;margin-bottom:8px">현재 공동사업자 ${_grpMembers.length}곳: ${_grpMembers.map(m=>esc(m.name)+' ('+esc(m.rep||'-')+')').join(', ')}</div>
+           <button onclick="unlinkIncomeGroupAll('${_igk}');closeModal()" style="width:100%;padding:8px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;${_btnUnlink}">🔓 공동사업자 풀기 (개별 분리)</button>`
+        : _autoBiz
+          ? `<div style="font-size:11px;color:#00695c">같은 <b>사업자번호</b>의 다른 사업자가 있어 신고리스트(종소세·성실)에서 <b>공동사업자</b>로 자동 묶입니다. (자동 묶음이라 풀기는 사업자번호를 수정해야 합니다)</div>`
+        : _autoJum
+          ? `<div style="font-size:11px;color:#6a1b9a">같은 <b>주민번호</b>의 다른 사업장이 있어 소득세·종소세에서 <b>동일인</b>으로 자동 묶입니다.</div>`
+          : `<div style="font-size:11px;color:#888;margin-bottom:8px">같은 사업장을 공동 운영하는(사업자번호 미입력 등) 다른 사업자와 연결합니다.</div>
+             <button onclick="closeModal();openIncomeGroupLink(${id},true)" style="width:100%;padding:8px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;${_btnJoin}">🔗 공동사업자 연결(묶기)</button>`}
+    </div>`;
   showModal(`<div style="max-width:520px">
   <div class="modal-header"><h3>📝 ${esc(c.name)} — 메모/이력</h3><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end"><button onclick="closeModal();openClientFilingHistory(${id})" style="padding:4px 12px;background:#e8f0fe;color:#1565c0;border:1px solid #c5cae9;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">📋 신고이력</button><button onclick="closeModal();openForm(${id})" style="padding:4px 12px;background:#f0f4ff;color:#4f8ef7;border:1px solid #c5cae9;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">✏ 거래처 수정</button>${G.currentTab==='julgae'?`<button onclick="closeModal();openJulgaeListAdd(${id})" style="padding:4px 12px;background:#f3e5f5;color:#6a1b9a;border:1px solid #ce93d8;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">➕ 리스트 추가</button><button onclick="removeClientFromJulgaeList(${id})" style="padding:4px 12px;background:#fdecea;color:#c62828;border:1px solid #ef9a9a;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">🗑 리스트 제외</button>`:''}<button class="close-btn" onclick="closeModal()">✕</button></div></div>
   <div class="modal-body">
@@ -10701,6 +10719,7 @@ function openClientNotes(id) {
       </div>
       <button onclick="addClientNote(${id})" style="padding:8px 14px;background:#4f8ef7;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-size:13px;white-space:nowrap;align-self:flex-start">+ 추가</button>
     </div>
+    ${groupSection}
     ${notes.length===0?'<div style="text-align:center;color:#aaa;padding:20px">메모가 없습니다</div>':
       '<div style="display:flex;flex-direction:column;gap:8px">'+[...notes].reverse().map(n=>`
         <div style="background:#f8f9ff;border-radius:10px;padding:10px 14px;border-left:3px solid #4f8ef7">
