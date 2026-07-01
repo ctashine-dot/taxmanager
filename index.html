@@ -470,6 +470,7 @@ let G = {
   filterFeeStatuses: [],
   filterDealTypes: [],
   filterCMS: [],
+  filterRoutes: [],
   showTerminated: false,
   closureSearch: '',
   julgaeSearch: '',
@@ -1201,6 +1202,7 @@ function matchClient(c, F) {
   if (F.feeStatuses && F.feeStatuses.length && !F.feeStatuses.includes(c.feeStatus)) return false;
   if (F.dealTypes && F.dealTypes.length && !getDealTypes(c).some(d => F.dealTypes.includes(d))) return false;
   if (F.cms && F.cms.length && !F.cms.includes(c.cms ? '가입' : '미가입')) return false;
+  if (F.routes && F.routes.length && !F.routes.includes(c.route || '(없음)')) return false;
   if (F.tags && F.tags.length) {
     const ctags = (G.clientTags||{})[c.id] || [];
     if (!ctags.some(t => F.tags.includes(t))) return false;
@@ -1217,7 +1219,7 @@ function filteredClients() {
     if (!G.showTerminated && (c.status==='해지'||c.status==='폐업')) return false;
     return matchClient(c, {search:G.searchText, repSearch:G.clientRepSearch, managers:G.filterManagers,
       taxTypes:G.filterTaxTypes, vatTypes:G.filterVatTypes, feeStatuses:G.filterFeeStatuses,
-      dealTypes:G.filterDealTypes, cms:G.filterCMS, tags:G.filterTags, risk:G.filterRisk, grade:G.filterGrade});
+      dealTypes:G.filterDealTypes, cms:G.filterCMS, routes:G.filterRoutes, tags:G.filterTags, risk:G.filterRisk, grade:G.filterGrade});
   });
   if (G.showFavorites) list = list.filter(c=>(G.favorites||[]).includes(c.id));
 
@@ -1330,6 +1332,41 @@ function chk(val, onclick='') {
 function dealBadge(d) {
   const map={기장:'blue',신고대리:'purple',종소세대리:'orange',사업소득자:'teal',고문:'gray',신고:'purple',성실:'purple'};
   return badge(d||'기장', map[d]||'blue');
+}
+// 수임경로 배지 (세무사/직원/거래처/컨설팅업체 + 대상)
+function routeBadge(c) {
+  if (!c || !c.route) return '';
+  const icon = {세무사:'👤',직원:'🧑‍💼',거래처:'🤝',컨설팅업체:'🏢'}[c.route] || '📌';
+  const col  = {세무사:'#5c6bc0',직원:'#2e7d32',거래처:'#e65100',컨설팅업체:'#00838f'}[c.route] || '#888';
+  const detail = c.routeDetail ? ` · ${esc(c.routeDetail)}` : '';
+  return `<span style="display:inline-block;font-size:9px;padding:1px 6px;border-radius:8px;background:#fff;color:${col};border:1px solid ${col};font-weight:700;white-space:nowrap;margin-left:3px" title="수임경로: ${esc(c.route)}${detail}">${icon}${esc(c.route)}${detail}</span>`;
+}
+// 거래처 폼 — 수임경로 대상 입력(유형별 다른 UI)
+window._onRouteChange = function(v){
+  window._formData.route = v;
+  window._formData.routeDetail = (v === '세무사') ? ((G.settings && G.settings.rep) ? G.settings.rep : '대표 세무사') : '';
+  const box = document.getElementById('route-detail-box');
+  if (box) box.innerHTML = routeDetailInner();
+};
+function routeDetailInner(){
+  const fd = window._formData || {};
+  const r = fd.route || '';
+  const cur = fd.routeDetail || '';
+  if (r === '세무사') {
+    const nm = (G.settings && G.settings.rep) ? G.settings.rep : '대표 세무사';
+    return `<input class="finput" value="${esc(nm)}" disabled style="background:#f5f5f5;color:#555">`;
+  }
+  if (r === '직원') {
+    return `<select class="fsel" onchange="window._formData.routeDetail=this.value"><option value="">담당 직원 선택</option>${MANAGERS.slice(1).map(v=>`<option value="${esc(v)}"${cur===v?' selected':''}>${esc(v)}</option>`).join('')}</select>`;
+  }
+  if (r === '거래처') {
+    return `<input class="finput" list="route-client-list" placeholder="소개한 거래처명 검색" value="${esc(cur)}" oninput="window._formData.routeDetail=this.value"><datalist id="route-client-list">${G.clients.filter(cl=>cl.id!==fd.id).map(cl=>`<option value="${esc(cl.name)}">`).join('')}</datalist>`;
+  }
+  if (r === '컨설팅업체') {
+    const list = (G.settings && G.settings.consultingCompanies) ? G.settings.consultingCompanies : [];
+    return `<input class="finput" list="route-consult-list" placeholder="컨설팅업체명 입력/선택" value="${esc(cur)}" oninput="window._formData.routeDetail=this.value"><datalist id="route-consult-list">${list.map(v=>`<option value="${esc(v)}">`).join('')}</datalist>`;
+  }
+  return `<div style="font-size:12px;color:#aaa;padding:7px 2px">수임경로를 먼저 선택하세요</div>`;
 }
 
 // ══════════════════════════════════════════════════════
@@ -2076,6 +2113,78 @@ function latestFilingFees(c) {
   return { jojung, seongsi, singo };
 }
 
+// 거래처의 최근 신고 매출(수입금액) — 최신 기간부터 조회
+function latestClientRevenue(c) {
+  const byNew = [...G.periods].sort((a,b)=>String(b.id||'').localeCompare(String(a.id||'')));
+  for (const p of byNew) {
+    const v = (G.julgae[p.id]||{})[c.id]; if (!v) continue;
+    const rev = v.revenue || v.salesAmount || v.prevRevenue || 0;
+    if (rev > 0) return rev;
+  }
+  return 0;
+}
+// 복식부기 의무 기준(직전연도 수입금액, 업종별) — 이 금액 이상이면 기장(복식부기) 필요
+function bokThreshold(bizType) {
+  const t = bizType || '';
+  if (/서비스|임대|교육|보건|예술|스포츠|협회|수리|미용|이용|기타개인|부동산임대/.test(t)) return 75000000;
+  if (/도매|소매|도소매|농업|임업|어업|축산|부동산매매|광업/.test(t)) return 300000000;
+  return 150000000; // 제조·음식·숙박·건설·운수·통신 등
+}
+// 수임료 적정성 검토 — ①매출 대비 기장료 ②신고대리 중 기장 전환 후보
+function openFeeReview() {
+  const ym = currentYM();
+  const active = G.clients.filter(c => c.status==='정상' || c.status==='주의');
+  const won = n => (n||0).toLocaleString();
+  // ① 매출 대비 기장료 적정성 (기장·고문·성실 대상)
+  const feeRows = [];
+  active.filter(c => getDealTypes(c).some(d => ['기장','고문','성실'].includes(d))).forEach(c => {
+    const rev = latestClientRevenue(c);
+    if (!rev) return;
+    const cur = getFeeForYM(c, ym);
+    const rec = getJangRyo(rev, c.taxType);
+    if (!rec) return;
+    const diff = rec - cur;
+    let flag = null;
+    if (cur === 0) flag = {t:'미책정', col:'#c62828', bg:'#ffebee'};
+    else if (cur < rec * 0.8) flag = {t:'과소', col:'#e65100', bg:'#fff3e0'};
+    else if (cur > rec * 1.3) flag = {t:'과다', col:'#1565c0', bg:'#e3f2fd'};
+    if (!flag) return; // 적정 범위는 생략
+    feeRows.push({c, rev, cur, rec, diff, flag});
+  });
+  feeRows.sort((a,b)=>b.diff-a.diff); // 부족액 큰 순(인상 여지 큰 순)
+  // ② 신고대리 등 비기장 → 기장 전환 후보 (복식부기 의무 기준 초과)
+  const convRows = [];
+  active.filter(c => getDealTypes(c).some(d => ['신고대리','종소세대리','사업소득자','신고'].includes(d)) && !getDealTypes(c).some(d=>['기장','고문','성실'].includes(d))).forEach(c => {
+    const rev = latestClientRevenue(c);
+    const th = bokThreshold(c.bizType);
+    if (rev >= th) convRows.push({c, rev, th, rec:getJangRyo(rev, c.taxType)});
+  });
+  convRows.sort((a,b)=>b.rev-a.rev);
+  const feeHtml = feeRows.length ? feeRows.map(r=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid #f4f4f4;font-size:13px;cursor:pointer" onclick="closeModal();openFeeChangeModal(${r.c.id})">
+      <span style="flex:1;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.c.name)} <span style="font-size:10px;color:#aaa">${esc(getManagers(r.c).join(',')||'-')}</span></span>
+      <span style="font-size:11px;padding:1px 6px;border-radius:8px;background:${r.flag.bg};color:${r.flag.col};font-weight:700;white-space:nowrap">${r.flag.t}</span>
+      <span style="font-size:11px;color:#888;white-space:nowrap">매출 ${won(Math.round(r.rev/10000))}만</span>
+      <span style="font-size:12px;white-space:nowrap">현 <b>${won(r.cur)}</b> / 추천 <b style="color:#7b1fa2">${won(r.rec)}</b></span>
+    </div>`).join('') : '<div style="color:#aaa;text-align:center;padding:18px">적정 범위를 벗어난 업체가 없습니다</div>';
+  const convHtml = convRows.length ? convRows.map(r=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid #f4f4f4;font-size:13px;cursor:pointer" onclick="closeModal();openForm(${r.c.id})">
+      <span style="flex:1;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.c.name)} <span style="font-size:10px;color:#aaa">${esc(r.c.bizType||'')}·${esc(getDealTypes(r.c).join(',')||'-')}</span></span>
+      <span style="font-size:11px;color:#888;white-space:nowrap">매출 ${won(Math.round(r.rev/10000))}만 ≥ 기준 ${won(Math.round(r.th/10000))}만</span>
+      <span style="font-size:11px;padding:1px 6px;border-radius:8px;background:#e8f5e9;color:#2e7d32;font-weight:700;white-space:nowrap">기장추천 ${won(r.rec)}</span>
+    </div>`).join('') : '<div style="color:#aaa;text-align:center;padding:18px">복식부기 의무 기준을 초과하는 신고대리 업체가 없습니다</div>';
+  showModal(`<div style="max-width:640px;width:94vw;max-height:calc(100vh - 60px);display:flex;flex-direction:column">
+    <div class="modal-header"><h3>📈 수임료 적정성 검토</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body" style="overflow-y:auto;flex:1">
+      <div style="font-size:13px;font-weight:800;color:#e65100;margin:2px 0 8px">① 매출 대비 기장료 적정성 <span style="font-size:11px;font-weight:400;color:#888">(${feeRows.length}건 · 행 클릭 → 기장료 변경)</span></div>
+      ${feeHtml}
+      <div style="font-size:13px;font-weight:800;color:#2e7d32;margin:18px 0 8px">② 신고대리 → 기장 전환 검토 <span style="font-size:11px;font-weight:400;color:#888">(${convRows.length}건 · 복식부기 의무 기준 초과 · 행 클릭 → 거래처 수정)</span></div>
+      ${convHtml}
+      <div style="font-size:11px;color:#aaa;margin-top:14px;line-height:1.5">· 추천 기장료는 매출 구간별 보수표(getJangRyo) 기준입니다. 실제 업무량·난이도에 따라 조정하세요.<br>· 복식부기 의무 기준: 서비스·임대 0.75억 / 제조·음식·건설·운수 1.5억 / 도소매·농림 3억 (업종에 따라 상이).</div>
+    </div>
+  </div>`);
+}
+
 function clientFeeDisplay(c) {
   if (c.status!=='정상' && c.status!=='주의') return '-';
   const cym=currentYM();
@@ -2153,7 +2262,7 @@ function renderClients() {
       <button class="btn-sm" style="background:#f3e5f5;color:#6a1b9a;border:1.5px solid #ce93d8" onclick="openFilterPresets(this)">⭐ 프리셋${(G.filterPresets||[]).length?' ('+(G.filterPresets||[]).length+')':''}</button>
       <button class="btn-sm" style="background:#fff3e0;color:#e65100;border:1.5px solid #ffcc80" onclick="openNotesSearch()">🔍 메모검색</button>
       <button class="btn-sm" style="background:#fce4ec;color:#880e4f;border:1.5px solid #f48fb1" onclick="showNameRepDuplicates()">🔎 중복검색</button>
-      ${(()=>{const hasFilter=G.searchText||G.clientRepSearch||(G.filterManagers||[]).length||(G.filterTaxTypes||[]).length||(G.filterVatTypes||[]).length||(G.filterFeeStatuses||[]).length||(G.filterDealTypes||[]).length||(G.filterCMS||[]).length||(G.filterTags||[]).length||G.filterRisk||G.filterGrade||G.showFavorites;return hasFilter?`<button class="btn-sm" style="background:#fdecea;color:#c62828;border:1.5px solid #ef9a9a;font-weight:700" onclick="G.searchText='';G.clientRepSearch='';G.filterManagers=[];G.filterTaxTypes=[];G.filterVatTypes=[];G.filterFeeStatuses=[];G.filterDealTypes=[];G.filterCMS=[];G.filterTags=[];G.filterRisk='';G.filterGrade='';G.showFavorites=false;G.clientPage=0;renderClients()">✕ 필터초기화</button>`:'';})()}
+      ${(()=>{const hasFilter=G.searchText||G.clientRepSearch||(G.filterManagers||[]).length||(G.filterTaxTypes||[]).length||(G.filterVatTypes||[]).length||(G.filterFeeStatuses||[]).length||(G.filterDealTypes||[]).length||(G.filterCMS||[]).length||(G.filterRoutes||[]).length||(G.filterTags||[]).length||G.filterRisk||G.filterGrade||G.showFavorites;return hasFilter?`<button class="btn-sm" style="background:#fdecea;color:#c62828;border:1.5px solid #ef9a9a;font-weight:700" onclick="G.searchText='';G.clientRepSearch='';G.filterManagers=[];G.filterTaxTypes=[];G.filterVatTypes=[];G.filterFeeStatuses=[];G.filterDealTypes=[];G.filterCMS=[];G.filterRoutes=[];G.filterTags=[];G.filterRisk='';G.filterGrade='';G.showFavorites=false;G.clientPage=0;renderClients()">✕ 필터초기화</button>`:'';})()}
       <button class="btn-primary btn-sm" onclick="openForm(null)">+ 거래처 추가</button>
       <button class="btn-sm" style="background:#fff3e0;color:#bf360c;border:1.5px solid #ffab91" onclick="openTerminatedModal()">📁 해지폐업 관리${terminated?' ('+terminated+')':''}</button>
       <button class="btn-sm" style="background:#f0f8ff;color:#1565c0;border:1.5px solid #90caf9" onclick="openImportExportMenu(this)">⇅ 가져오기/내보내기</button>
@@ -2189,6 +2298,7 @@ function renderClients() {
           filterPill('filterTaxTypes','인격'),
           filterPill('filterVatTypes','과세유형'),
           filterPill('filterManagers','담당자'),
+          filterPill('filterRoutes','수임경로'),
           filterPill('filterCMS','CMS'),
           filterPill('filterFeeStatuses','수수료상태'),
         ].join('');
@@ -2256,7 +2366,7 @@ function renderClients() {
         ${G.bulkMode?`<td onclick="event.stopPropagation();toggleClientSelect(${c.id})" style="width:32px;text-align:center;cursor:pointer"><input type="checkbox" ${(G.selectedClients||[]).includes(c.id)?'checked':''} style="width:16px;height:16px;cursor:pointer" onclick="event.stopPropagation();toggleClientSelect(${c.id})"></td>`:''}
         <td><div class="td-name">${(()=>{const risk=clientRiskLevel(c);return risk==='red'?'<span title="위험" style="color:#e53935;margin-right:4px">●</span>':risk==='yellow'?'<span title="주의" style="color:#f57c00;margin-right:4px">●</span>':''})()}${groupDot}${esc(c.name)}<button onclick="event.stopPropagation();openQuickMemo(${c.id}, this)" style="margin-left:4px;padding:1px 5px;border-radius:5px;border:1px solid #e0e0e0;background:#f8f9ff;font-size:11px;cursor:pointer;vertical-align:middle" title="메모/이력">📝${(G.clientNotes||{})[c.id]?.length?` ${G.clientNotes[c.id].length}`:''}</button><button onclick="event.stopPropagation();toggleFavorite(${c.id})" style="margin-left:2px;padding:1px 4px;border-radius:5px;border:1px solid #e0e0e0;background:#fff;font-size:12px;cursor:pointer;vertical-align:middle" title="즐겨찾기">${(G.favorites||[]).includes(c.id)?'⭐':'☆'}</button>${isJuminLead ? `<button onclick="event.stopPropagation();toggleJuminGroup(${c.id})" id="jumin-btn-${c.id}" style="margin-left:4px;padding:1px 6px;border-radius:10px;background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;font-size:10px;font-weight:700;cursor:pointer;vertical-align:middle" title="같은 사업주의 다른 사업장">+${juminMembers.length}개 사업장</button>` : ''}${isRelatedLead ? `<button onclick="event.stopPropagation();toggleRelatedGroup(${c.id})" id="related-btn-${c.id}" style="margin-left:4px;padding:1px 6px;border-radius:10px;background:#ede7f6;color:#6a1b9a;border:1px solid #ce93d8;font-size:10px;font-weight:700;cursor:pointer;vertical-align:middle" title="관계사 그룹">+${relatedMembers.length}개의 그룹</button>` : ''}</div>${(c.bizType||c.bizCode||groupSub||_incSub)?`<div class="td-sub">${c.bizType?esc(c.bizType):''}${c.bizCode?` <span style="color:#aaa;font-size:10px">[${esc(c.bizCode)}]</span>`:''}${groupSub}${_incSub}</div>`:''}</td>
         <td data-label="대표자" style="font-size:12px;color:#444;${hc['c_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
-        <td data-label="수임유형" style="${hc['c_dealType']?'display:none':''}">${em?iSel('dealType',DEAL_TYPES.slice(1),getDealTypes(c)[0]):getDealTypes(c).map(d=>dealBadge(d)).join('')}</td>
+        <td data-label="수임유형" style="${hc['c_dealType']?'display:none':''}">${em?iSel('dealType',DEAL_TYPES.slice(1),getDealTypes(c)[0]):getDealTypes(c).map(d=>dealBadge(d)).join('')}${routeBadge(c)}</td>
         <td data-label="인격" style="${hc['c_taxType']?'display:none':''}">${em?iSel('taxType',TAX_TYPES.slice(1),c.taxType):badge(c.taxType,c.taxType==='법인'?'blue':'gray')}</td>
         <td data-label="과세유형" style="${hc['c_vatType']?'display:none':''}">${em?iSel('vatType',VAT_TYPES.slice(1),c.vatType):badge(c.vatType,c.vatType==='일반'?'blue':c.vatType==='간이'?'orange':c.vatType==='간세'?'teal':'gray')}</td>
         <td data-label="담당자" style="color:#555;font-size:12px;${hc['c_manager']?'display:none':''}">${em?iSel('manager',MANAGERS.slice(1),getManagers(c)[0]||''):esc(getManagers(c).join(', ')||'-')}</td>
@@ -2309,7 +2419,7 @@ function renderClients() {
           ${G.bulkMode?`<td onclick="event.stopPropagation();toggleClientSelect(${m.id})" style="width:32px;text-align:center;cursor:pointer"><input type="checkbox" ${(G.selectedClients||[]).includes(m.id)?'checked':''} style="width:16px;height:16px;cursor:pointer" onclick="event.stopPropagation();toggleClientSelect(${m.id})"></td>`:''}
           <td><div class="td-name"><span style="color:#4caf50;font-size:12px;margin-right:3px;vertical-align:middle">↳</span>${(()=>{const risk=clientRiskLevel(m);return risk==='red'?'<span style="color:#e53935;margin-right:4px">●</span>':risk==='yellow'?'<span style="color:#f57c00;margin-right:4px">●</span>':'';})()}${esc(m.name)}<button onclick="event.stopPropagation();openClientNotes(${m.id})" style="margin-left:4px;padding:1px 5px;border-radius:5px;border:1px solid #e0e0e0;background:#f8f9ff;font-size:11px;cursor:pointer;vertical-align:middle" title="메모/이력">📝${(G.clientNotes||{})[m.id]?.length?` ${G.clientNotes[m.id].length}`:''}</button><button onclick="event.stopPropagation();toggleFavorite(${m.id})" style="margin-left:2px;padding:1px 4px;border-radius:5px;border:1px solid #e0e0e0;background:#fff;font-size:12px;cursor:pointer;vertical-align:middle" title="즐겨찾기">${(G.favorites||[]).includes(m.id)?'⭐':'☆'}</button></div>${m.bizType||m.bizCode?`<div class="td-sub">${m.bizType?esc(m.bizType):''}${m.bizCode?` <span style="color:#aaa;font-size:10px">[${esc(m.bizCode)}]</span>`:''}</div>`:''}</td>
           <td data-label="대표자" style="font-size:12px;color:#444;${hc['c_rep']?'display:none':''}">${esc(m.rep)||'-'}</td>
-          <td data-label="수임유형" style="${hc['c_dealType']?'display:none':''}">${em?miSel('dealType',DEAL_TYPES.slice(1),getDealTypes(m)[0]):getDealTypes(m).map(d=>dealBadge(d)).join('')}</td>
+          <td data-label="수임유형" style="${hc['c_dealType']?'display:none':''}">${em?miSel('dealType',DEAL_TYPES.slice(1),getDealTypes(m)[0]):getDealTypes(m).map(d=>dealBadge(d)).join('')}${routeBadge(m)}</td>
           <td data-label="인격" style="${hc['c_taxType']?'display:none':''}">${em?miSel('taxType',TAX_TYPES.slice(1),m.taxType):badge(m.taxType,m.taxType==='법인'?'blue':'gray')}</td>
           <td data-label="과세유형" style="${hc['c_vatType']?'display:none':''}">${em?miSel('vatType',VAT_TYPES.slice(1),m.vatType):badge(m.vatType,m.vatType==='일반'?'blue':m.vatType==='간이'?'orange':m.vatType==='간세'?'teal':'gray')}</td>
           <td data-label="담당자" style="color:#555;font-size:12px;${hc['c_manager']?'display:none':''}">${em?miSel('manager',MANAGERS.slice(1),getManagers(m)[0]||''):esc(getManagers(m).join(', ')||'-')}</td>
@@ -2363,7 +2473,7 @@ function renderClients() {
           ${G.bulkMode?`<td onclick="event.stopPropagation();toggleClientSelect(${m.id})" style="width:32px;text-align:center;cursor:pointer"><input type="checkbox" ${(G.selectedClients||[]).includes(m.id)?'checked':''} style="width:16px;height:16px;cursor:pointer" onclick="event.stopPropagation();toggleClientSelect(${m.id})"></td>`:''}
           <td><div class="td-name"><span style="color:#9c27b0;font-size:12px;margin-right:3px;vertical-align:middle">↳</span>${(()=>{const risk=clientRiskLevel(m);return risk==='red'?'<span style="color:#e53935;margin-right:4px">●</span>':risk==='yellow'?'<span style="color:#f57c00;margin-right:4px">●</span>':'';})()}${esc(m.name)}<button onclick="event.stopPropagation();openClientNotes(${m.id})" style="margin-left:4px;padding:1px 5px;border-radius:5px;border:1px solid #e0e0e0;background:#f8f9ff;font-size:11px;cursor:pointer;vertical-align:middle" title="메모/이력">📝${(G.clientNotes||{})[m.id]?.length?` ${G.clientNotes[m.id].length}`:''}</button><button onclick="event.stopPropagation();toggleFavorite(${m.id})" style="margin-left:2px;padding:1px 4px;border-radius:5px;border:1px solid #e0e0e0;background:#fff;font-size:12px;cursor:pointer;vertical-align:middle" title="즐겨찾기">${(G.favorites||[]).includes(m.id)?'⭐':'☆'}</button></div>${m.bizType||m.bizCode?`<div class="td-sub">${m.bizType?esc(m.bizType):''}${m.bizCode?` <span style="color:#aaa;font-size:10px">[${esc(m.bizCode)}]</span>`:''}</div>`:''}</td>
           <td data-label="대표자" style="font-size:12px;color:#444;${hc['c_rep']?'display:none':''}">${esc(m.rep)||'-'}</td>
-          <td data-label="수임유형" style="${hc['c_dealType']?'display:none':''}">${em?miSel('dealType',DEAL_TYPES.slice(1),getDealTypes(m)[0]):getDealTypes(m).map(d=>dealBadge(d)).join('')}</td>
+          <td data-label="수임유형" style="${hc['c_dealType']?'display:none':''}">${em?miSel('dealType',DEAL_TYPES.slice(1),getDealTypes(m)[0]):getDealTypes(m).map(d=>dealBadge(d)).join('')}${routeBadge(m)}</td>
           <td data-label="인격" style="${hc['c_taxType']?'display:none':''}">${em?miSel('taxType',TAX_TYPES.slice(1),m.taxType):badge(m.taxType,m.taxType==='법인'?'blue':'gray')}</td>
           <td data-label="과세유형" style="${hc['c_vatType']?'display:none':''}">${em?miSel('vatType',VAT_TYPES.slice(1),m.vatType):badge(m.vatType,m.vatType==='일반'?'blue':m.vatType==='간이'?'orange':m.vatType==='간세'?'teal':'gray')}</td>
           <td data-label="담당자" style="color:#555;font-size:12px;${hc['c_manager']?'display:none':''}">${em?miSel('manager',MANAGERS.slice(1),getManagers(m)[0]||''):esc(getManagers(m).join(', ')||'-')}</td>
@@ -2896,6 +3006,7 @@ const _FP_OPTIONS = {
   filterVatTypes:    () => VAT_TYPES.slice(1),
   filterFeeStatuses: () => FEE_STATUSES.slice(1),
   filterCMS:         () => ['가입', '미가입'],
+  filterRoutes:      () => ['세무사', '직원', '거래처', '컨설팅업체', '(없음)'],
   julgaeManagers:    () => [...MANAGERS.slice(1), '(없음)'],
   feesDealFilter:    () => ['기장','고문','성실'],
   feesManagerFilter: () => [...MANAGERS.slice(1), '(없음)'],
@@ -2906,7 +3017,7 @@ const _FP_OPTIONS = {
 const _FP_TITLES = {
   filterDealTypes:'수임유형 필터', filterManagers:'담당자 필터',
   filterTaxTypes:'인격 필터', filterVatTypes:'과세유형 필터',
-  filterFeeStatuses:'수금상태 필터', filterCMS:'CMS 가입 필터', julgaeManagers:'담당자 필터',
+  filterFeeStatuses:'수금상태 필터', filterCMS:'CMS 가입 필터', filterRoutes:'수임경로 필터', julgaeManagers:'담당자 필터',
   feesDealFilter:'수임유형 필터', feesManagerFilter:'담당자 필터', filingManagerFilter:'담당자 필터',
   closureManagerFilter:'담당자 필터', scheduleManagerFilter:'담당자 필터',
 };
@@ -3851,7 +3962,7 @@ function openForm(id) {
     contracts:getDefaultContracts('기장','개인','일반'),status:'정상',dataReceived:false,bookkeeping:false,approved:false,
     memo:'',contractDate:'',terminationDate:'',terminationReason:'',
     closureYear:'',closureTaxFiled:false,closureTaxApproved:false,
-    jointBiz:false,openDate:'',closeDate:''
+    jointBiz:false,openDate:'',closeDate:'',route:'',routeDetail:''
   };
   if (isEdit && !c) { toast('거래처를 찾을 수 없습니다 (이미 삭제되었을 수 있습니다)', 'warning'); return; }
 
@@ -4021,6 +4132,20 @@ function openForm(id) {
           <option value="">-</option>
           ${MANAGERS.slice(1).map(v=>`<option value="${v}"${(window._formData.managers||[])[0]===v?' selected':''}>${v}</option>`).join('')}
         </select>
+      </div>
+    </div>
+
+    <div class="c3" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="ff">
+        <label class="ffl">수임경로</label>
+        <select class="fsel" id="f-route" onchange="_onRouteChange(this.value)">
+          <option value="">-</option>
+          ${['세무사','직원','거래처','컨설팅업체'].map(v=>`<option value="${v}"${(window._formData.route||'')===v?' selected':''}>${v}</option>`).join('')}
+        </select>
+      </div>
+      <div class="ff">
+        <label class="ffl">경로 대상</label>
+        <div id="route-detail-box" style="flex:1;min-width:0">${routeDetailInner()}</div>
       </div>
     </div>
 
@@ -4321,6 +4446,13 @@ window.saveForm = function(id) {
       if (sameInc || sameRG) { x.groupJoint = joint; x.jointBiz = joint; }
     });
   })();
+  // 새 컨설팅업체명은 목록에 저장(다음에 재선택 가능)
+  if (d.route === '컨설팅업체' && (d.routeDetail||'').trim()) {
+    if (!G.settings) G.settings = {};
+    if (!G.settings.consultingCompanies) G.settings.consultingCompanies = [];
+    const nm = d.routeDetail.trim();
+    if (!G.settings.consultingCompanies.includes(nm)) G.settings.consultingCompanies.push(nm);
+  }
   // Save client tags
   if (window._formTags) {
     if (!G.clientTags) G.clientTags = {};
@@ -7161,7 +7293,7 @@ function renderFees() {
     return `<tr style="background:${collected?'#e8f5e9':'#fff'}">
       <td><div style="font-weight:600;font-size:13px;display:flex;align-items:center;flex-wrap:wrap;gap:2px">${esc(c.name)}${streakBadge}<button onclick="event.stopPropagation();printFeeInvoice(${c.id})" style="margin-left:6px;padding:1px 7px;border-radius:5px;border:1px solid #c5cae9;background:#f0f4ff;font-size:10px;color:#4f8ef7;cursor:pointer;font-family:inherit" title="청구서 인쇄">🖨 청구서</button>${contactBtn}</div></td>
       <td style="font-size:12px;color:#444;${hc['fm_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
-      <td style="${hc['fm_dealType']?'display:none':''}">${getDealTypes(c).map(d=>dealBadge(d)).join('')}</td>
+      <td style="${hc['fm_dealType']?'display:none':''}">${getDealTypes(c).map(d=>dealBadge(d)).join('')}${routeBadge(c)}</td>
       <td style="color:#555;font-size:12px;${hc['fm_manager']?'display:none':''}">${esc(getManagers(c).join(', ')||'-')}</td>
       <td style="font-size:11px;color:#888;${hc['fm_contractDate']?'display:none':''}">${c.contractDate?c.contractDate.slice(0,7):'-'}</td>
       <td style="text-align:right;font-weight:700;color:#7b1fa2;${hc['fm_fee']?'display:none':''}">
@@ -7243,6 +7375,7 @@ function renderFees() {
   document.getElementById('page-fees').innerHTML = `
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
     <h2 style="font-size:20px;font-weight:800">💰 수수료 관리</h2>
+    <button onclick="openFeeReview()" style="padding:7px 14px;border-radius:9px;border:1.5px solid #7b1fa2;background:#fff;color:#7b1fa2;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">📈 수임료 적정성 검토</button>
   </div>
   <div class="card" style="margin-bottom:14px;border-left:4px solid #7b1fa2">
     <div style="display:flex;align-items:center;gap:8px;${G.feesToolsOpen?'margin-bottom:12px':''}">
@@ -12508,14 +12641,6 @@ function computeAlerts() {
     }
     if (uncollected>=3) alerts.push({type:'unpaid',label:'장기 미수금',detail:esc(c.name)+' '+uncollected+'개월 미수',color:'#c62828'});
   });
-  // 계약 갱신 필요 (11개월 이상)
-  const renewalClients = G.clients.filter(c=>{
-    if(c.status!=='정상'||!c.contractDate)return false;
-    const cd=new Date(c.contractDate);
-    const months=(today.getFullYear()-cd.getFullYear())*12+(today.getMonth()-cd.getMonth());
-    return months>=11;
-  });
-  if (renewalClients.length) alerts.push({type:'renewal',label:'계약 갱신 필요',detail:renewalClients.length+'개 거래처 (11개월 이상 경과)',color:'#e65100'});
   // 사업자번호 미입력
   const noBizNo = G.clients.filter(c=>!c.bizNo&&c.status==='정상').length;
   if (noBizNo>0) alerts.push({type:'missingBiz',label:'사업자번호 미입력',detail:noBizNo+'개 거래처 사업자번호 미입력',color:'#888'});
