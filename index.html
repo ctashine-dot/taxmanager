@@ -1369,6 +1369,24 @@ function routeDetailInner(){
   return `<div style="font-size:12px;color:#aaa;padding:7px 2px">수임경로를 먼저 선택하세요</div>`;
 }
 
+// 소득구분(복수 선택) — 거래처 상세에서 표시/토글
+const INCOME_CATS = ['사업','부동산','주택','금융','기타'];
+const INCOME_CAT_COL = {사업:'#1565c0',부동산:'#e65100',주택:'#2e7d32',금융:'#6a1b9a',기타:'#607d8b'};
+function incomeCatSection(c){
+  const sel = c.incomeCats || [];
+  return `<div style="flex-basis:100%"><div style="font-size:11px;color:#888;margin-bottom:5px">💼 소득구분 <span style="color:#bbb;font-weight:400">(복수 선택)</span></div><div style="display:flex;flex-wrap:wrap;gap:5px">${INCOME_CATS.map(cat=>{const on=sel.includes(cat);const col=INCOME_CAT_COL[cat];return `<button data-col="${col}" onclick="event.stopPropagation();toggleIncomeCat(${c.id},'${cat}',this)" style="padding:4px 13px;border-radius:12px;border:1.5px solid ${on?col:'#e0e0e0'};background:${on?col:'#f5f5f5'};color:${on?'#fff':'#888'};font-size:12px;cursor:pointer;font-family:inherit;font-weight:600">${cat}</button>`;}).join('')}</div></div>`;
+}
+window.toggleIncomeCat = function(id, cat, btn){
+  if (typeof requireWrite==='function' && !requireWrite()) return;
+  const c = G.clients.find(x=>x.id===id); if(!c) return;
+  if(!c.incomeCats) c.incomeCats = [];
+  const i = c.incomeCats.indexOf(cat);
+  const on = i < 0;
+  if(i>=0) c.incomeCats.splice(i,1); else c.incomeCats.push(cat);
+  saveToLS();
+  if(btn){ const col = btn.getAttribute('data-col')||'#4f8ef7'; btn.style.border='1.5px solid '+(on?col:'#e0e0e0'); btn.style.background=on?col:'#f5f5f5'; btn.style.color=on?'#fff':'#888'; }
+};
+
 // ══════════════════════════════════════════════════════
 // 탭 전환
 // ══════════════════════════════════════════════════════
@@ -2353,6 +2371,7 @@ function renderClients() {
               ${['A','B','C'].map(g=>{const cfg={A:{bg:'#e8f0fe',col:'#1565c0',bd:'#4f8ef7'},B:{bg:'#e8f5e9',col:'#2e7d32',bd:'#43a047'},C:{bg:'#f5f5f5',col:'#666',bd:'#bbb'}};const cv=cfg[g];const on=c.grade===g;return`<button onclick="event.stopPropagation();setClientGradeManual(${c.id},'${g}')" style="padding:3px 14px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:2px solid ${on?cv.bd:'#e0e0e0'};background:${on?cv.bg:'#fff'};color:${on?cv.col:'#ccc'};transition:all .12s">${g}</button>`;}).join('')}
               ${c.gradeManual?`<button onclick="event.stopPropagation();setClientGradeManual(${c.id},null)" style="padding:3px 10px;border-radius:8px;border:1.5px solid #ffcc80;background:#fff3e0;color:#e65100;font-size:11px;cursor:pointer;font-family:inherit;margin-left:4px">↺ 자동산출</button>`:`<span style="font-size:11px;color:#aaa;margin-left:4px">자동산출 중</span>`}
             </div>
+            ${incomeCatSection(c)}
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">연락처</div>${em?iInput('phone',c.phone,'placeholder="전화번호" style="width:140px"'):`<div style="font-weight:600">${c.phone?`<a href="tel:${esc(c.phone)}" style="color:#4f8ef7;text-decoration:none;font-weight:600">${esc(c.phone)}</a>`:'-'}</div>`}</div>
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">관할세무서</div>${em?iInput('taxOffice',c.taxOffice,'list="taxoffice-list" placeholder="세무서 선택·입력" style="width:150px"'):`<div style="font-weight:600">${esc(c.taxOffice||'-')}</div>`}</div>
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">수임일자</div>${em?iInput('contractDate',c.contractDate,'type="date"'):`<div style="font-weight:600">${esc(c.contractDate||'-')}</div>`}</div>
@@ -2407,6 +2426,7 @@ function renderClients() {
                 ${['A','B','C'].map(g=>{const cfg={A:{bg:'#e8f0fe',col:'#1565c0',bd:'#4f8ef7'},B:{bg:'#e8f5e9',col:'#2e7d32',bd:'#43a047'},C:{bg:'#f5f5f5',col:'#666',bd:'#bbb'}};const cv=cfg[g];const on=m.grade===g;return`<button onclick="event.stopPropagation();setClientGradeManual(${m.id},'${g}')" style="padding:3px 14px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:2px solid ${on?cv.bd:'#e0e0e0'};background:${on?cv.bg:'#fff'};color:${on?cv.col:'#ccc'};transition:all .12s">${g}</button>`;}).join('')}
                 ${m.gradeManual?`<button onclick="event.stopPropagation();setClientGradeManual(${m.id},null)" style="padding:3px 10px;border-radius:8px;border:1.5px solid #ffcc80;background:#fff3e0;color:#e65100;font-size:11px;cursor:pointer;font-family:inherit;margin-left:4px">↺ 자동산출</button>`:`<span style="font-size:11px;color:#aaa;margin-left:4px">자동산출 중</span>`}
               </div>
+              ${incomeCatSection(m)}
               <div><div style="font-size:11px;color:#888;margin-bottom:3px">연락처</div>${em?miInput('phone',m.phone,'placeholder="전화번호" style="width:140px"'):`<div style="font-weight:600">${m.phone?`<a href="tel:${esc(m.phone)}" style="color:#4f8ef7;text-decoration:none;font-weight:600">${esc(m.phone)}</a>`:'-'}</div>`}</div>
               <div><div style="font-size:11px;color:#888;margin-bottom:3px">관할세무서</div>${em?miInput('taxOffice',m.taxOffice,'list="taxoffice-list" placeholder="세무서 선택·입력" style="width:150px"'):`<div style="font-weight:600">${esc(m.taxOffice||'-')}</div>`}</div>
               <div><div style="font-size:11px;color:#888;margin-bottom:3px">수임일자</div>${em?miInput('contractDate',m.contractDate,'type="date"'):`<div style="font-weight:600">${esc(m.contractDate||'-')}</div>`}</div>
@@ -2460,6 +2480,7 @@ function renderClients() {
                 ${['A','B','C'].map(g=>{const cfg={A:{bg:'#e8f0fe',col:'#1565c0',bd:'#4f8ef7'},B:{bg:'#e8f5e9',col:'#2e7d32',bd:'#43a047'},C:{bg:'#f5f5f5',col:'#666',bd:'#bbb'}};const cv=cfg[g];const on=m.grade===g;return`<button onclick="event.stopPropagation();setClientGradeManual(${m.id},'${g}')" style="padding:3px 14px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:2px solid ${on?cv.bd:'#e0e0e0'};background:${on?cv.bg:'#fff'};color:${on?cv.col:'#ccc'};transition:all .12s">${g}</button>`;}).join('')}
                 ${m.gradeManual?`<button onclick="event.stopPropagation();setClientGradeManual(${m.id},null)" style="padding:3px 10px;border-radius:8px;border:1.5px solid #ffcc80;background:#fff3e0;color:#e65100;font-size:11px;cursor:pointer;font-family:inherit;margin-left:4px">↺ 자동산출</button>`:`<span style="font-size:11px;color:#aaa;margin-left:4px">자동산출 중</span>`}
               </div>
+              ${incomeCatSection(m)}
               <div><div style="font-size:11px;color:#888;margin-bottom:3px">연락처</div>${em?miInput('phone',m.phone,'placeholder="전화번호" style="width:140px"'):`<div style="font-weight:600">${m.phone?`<a href="tel:${esc(m.phone)}" style="color:#4f8ef7;text-decoration:none;font-weight:600">${esc(m.phone)}</a>`:'-'}</div>`}</div>
               <div><div style="font-size:11px;color:#888;margin-bottom:3px">관할세무서</div>${em?miInput('taxOffice',m.taxOffice,'list="taxoffice-list" placeholder="세무서 선택·입력" style="width:150px"'):`<div style="font-weight:600">${esc(m.taxOffice||'-')}</div>`}</div>
               <div><div style="font-size:11px;color:#888;margin-bottom:3px">수임일자</div>${em?miInput('contractDate',m.contractDate,'type="date"'):`<div style="font-weight:600">${esc(m.contractDate||'-')}</div>`}</div>
@@ -3932,7 +3953,7 @@ function openForm(id) {
     contracts:getDefaultContracts('기장','개인','일반'),status:'정상',dataReceived:false,bookkeeping:false,approved:false,
     memo:'',contractDate:'',terminationDate:'',terminationReason:'',
     closureYear:'',closureTaxFiled:false,closureTaxApproved:false,
-    jointBiz:false,openDate:'',closeDate:'',route:'세무사',routeDetail:''
+    jointBiz:false,openDate:'',closeDate:'',route:'세무사',routeDetail:'',incomeCats:[]
   };
   if (isEdit && !c) { toast('거래처를 찾을 수 없습니다 (이미 삭제되었을 수 있습니다)', 'warning'); return; }
 
