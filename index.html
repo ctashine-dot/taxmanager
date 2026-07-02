@@ -1387,6 +1387,18 @@ window.toggleIncomeCat = function(id, cat, btn){
   if(btn){ const col = btn.getAttribute('data-col')||'#4f8ef7'; btn.style.border='1.5px solid '+(on?col:'#e0e0e0'); btn.style.background=on?col:'#f5f5f5'; btn.style.color=on?'#fff':'#888'; }
 };
 
+// 원천세 신고주기(월별/반기) — 단일 선택, 기본 월별
+function withholdingSection(c){
+  const cur = c.withholdingType || '월별';
+  return `<div><div style="font-size:11px;color:#888;margin-bottom:5px">🧾 원천세</div><div style="display:flex;gap:5px">${['월별','반기'].map(o=>{const on=cur===o;return `<button data-wh="${c.id}" data-whval="${o}" onclick="event.stopPropagation();setWithholding(${c.id},'${o}')" style="padding:4px 14px;border-radius:12px;border:1.5px solid ${on?'#00838f':'#e0e0e0'};background:${on?'#00838f':'#f5f5f5'};color:${on?'#fff':'#888'};font-size:12px;cursor:pointer;font-family:inherit;font-weight:600">${o}</button>`;}).join('')}</div></div>`;
+}
+window.setWithholding = function(id, type){
+  if (typeof requireWrite==='function' && !requireWrite()) return;
+  const c = G.clients.find(x=>x.id===id); if(!c) return;
+  c.withholdingType = type; saveToLS();
+  document.querySelectorAll(`button[data-wh="${id}"]`).forEach(b=>{ const on=b.getAttribute('data-whval')===type; b.style.border='1.5px solid '+(on?'#00838f':'#e0e0e0'); b.style.background=on?'#00838f':'#f5f5f5'; b.style.color=on?'#fff':'#888'; });
+};
+
 // ══════════════════════════════════════════════════════
 // 탭 전환
 // ══════════════════════════════════════════════════════
@@ -2372,6 +2384,7 @@ function renderClients() {
               ${c.gradeManual?`<button onclick="event.stopPropagation();setClientGradeManual(${c.id},null)" style="padding:3px 10px;border-radius:8px;border:1.5px solid #ffcc80;background:#fff3e0;color:#e65100;font-size:11px;cursor:pointer;font-family:inherit;margin-left:4px">↺ 자동산출</button>`:`<span style="font-size:11px;color:#aaa;margin-left:4px">자동산출 중</span>`}
             </div>
             ${incomeCatSection(c)}
+            ${withholdingSection(c)}
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">연락처</div>${em?iInput('phone',c.phone,'placeholder="전화번호" style="width:140px"'):`<div style="font-weight:600">${c.phone?`<a href="tel:${esc(c.phone)}" style="color:#4f8ef7;text-decoration:none;font-weight:600">${esc(c.phone)}</a>`:'-'}</div>`}</div>
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">관할세무서</div>${em?iInput('taxOffice',c.taxOffice,'list="taxoffice-list" placeholder="세무서 선택·입력" style="width:150px"'):`<div style="font-weight:600">${esc(c.taxOffice||'-')}</div>`}</div>
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">수임일자</div>${em?iInput('contractDate',c.contractDate,'type="date"'):`<div style="font-weight:600">${esc(c.contractDate||'-')}</div>`}</div>
@@ -2379,6 +2392,7 @@ function renderClients() {
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">${c.taxType==='법인'?'법인등록번호':'주민번호'}</div>${em?iInput('jumin',c.jumin,'placeholder="000000-0000000" style="width:150px"'):`<div style="font-weight:600;font-family:monospace">${c.jumin?esc(c.jumin.slice(0,6)+'-'+c.jumin.slice(6,7)+'••••••'):'-'}</div>`}</div>
             ${c.openDate?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">개업연월일</div><div style="font-weight:600">${esc(c.openDate)}</div></div>`:''}
             ${c.jointBiz?`<div>${badge(c.vatPrimary===false?'공동(부가세제외)':'공동(부가세대표)','orange')}</div>`:''}
+            ${c.taxType==='법인'&&c.repIncomeTaxFiling?`<div>${badge('대표자 종소세 신고','purple')}${c.repJumin?`<span style="font-size:11px;color:#888;margin-left:6px;font-family:monospace">${esc(String(c.repJumin).slice(0,6))}-•••••••</span>`:''}</div>`:''}
             ${c.status==='해지'||c.status==='폐업'?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">수임해지일</div><div style="font-weight:600;color:#c62828">${esc(c.terminationDate||'-')}</div></div>`:''}
             ${c.status==='폐업'?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">폐업연월일</div><div style="font-weight:600;color:#c62828">${esc(c.closeDate||'-')}</div></div>`:''}
             ${contracts?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">수임항목</div><div style="font-size:12px;color:#555">${esc(contracts)}</div></div>`:''}
@@ -2427,6 +2441,7 @@ function renderClients() {
                 ${m.gradeManual?`<button onclick="event.stopPropagation();setClientGradeManual(${m.id},null)" style="padding:3px 10px;border-radius:8px;border:1.5px solid #ffcc80;background:#fff3e0;color:#e65100;font-size:11px;cursor:pointer;font-family:inherit;margin-left:4px">↺ 자동산출</button>`:`<span style="font-size:11px;color:#aaa;margin-left:4px">자동산출 중</span>`}
               </div>
               ${incomeCatSection(m)}
+              ${withholdingSection(m)}
               <div><div style="font-size:11px;color:#888;margin-bottom:3px">연락처</div>${em?miInput('phone',m.phone,'placeholder="전화번호" style="width:140px"'):`<div style="font-weight:600">${m.phone?`<a href="tel:${esc(m.phone)}" style="color:#4f8ef7;text-decoration:none;font-weight:600">${esc(m.phone)}</a>`:'-'}</div>`}</div>
               <div><div style="font-size:11px;color:#888;margin-bottom:3px">관할세무서</div>${em?miInput('taxOffice',m.taxOffice,'list="taxoffice-list" placeholder="세무서 선택·입력" style="width:150px"'):`<div style="font-weight:600">${esc(m.taxOffice||'-')}</div>`}</div>
               <div><div style="font-size:11px;color:#888;margin-bottom:3px">수임일자</div>${em?miInput('contractDate',m.contractDate,'type="date"'):`<div style="font-weight:600">${esc(m.contractDate||'-')}</div>`}</div>
@@ -2481,6 +2496,7 @@ function renderClients() {
                 ${m.gradeManual?`<button onclick="event.stopPropagation();setClientGradeManual(${m.id},null)" style="padding:3px 10px;border-radius:8px;border:1.5px solid #ffcc80;background:#fff3e0;color:#e65100;font-size:11px;cursor:pointer;font-family:inherit;margin-left:4px">↺ 자동산출</button>`:`<span style="font-size:11px;color:#aaa;margin-left:4px">자동산출 중</span>`}
               </div>
               ${incomeCatSection(m)}
+              ${withholdingSection(m)}
               <div><div style="font-size:11px;color:#888;margin-bottom:3px">연락처</div>${em?miInput('phone',m.phone,'placeholder="전화번호" style="width:140px"'):`<div style="font-weight:600">${m.phone?`<a href="tel:${esc(m.phone)}" style="color:#4f8ef7;text-decoration:none;font-weight:600">${esc(m.phone)}</a>`:'-'}</div>`}</div>
               <div><div style="font-size:11px;color:#888;margin-bottom:3px">관할세무서</div>${em?miInput('taxOffice',m.taxOffice,'list="taxoffice-list" placeholder="세무서 선택·입력" style="width:150px"'):`<div style="font-weight:600">${esc(m.taxOffice||'-')}</div>`}</div>
               <div><div style="font-size:11px;color:#888;margin-bottom:3px">수임일자</div>${em?miInput('contractDate',m.contractDate,'type="date"'):`<div style="font-weight:600">${esc(m.contractDate||'-')}</div>`}</div>
@@ -2565,6 +2581,8 @@ function openImportExportMenu(btnEl) {
   pop.innerHTML = `
     <div style="font-size:12px;font-weight:800;color:#333;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #f0f0f0">⇅ 가져오기 / 내보내기</div>
     <button onclick="document.getElementById('ie-popup')?.remove();openImportModal()" style="width:100%;text-align:left;padding:10px 12px;border-radius:8px;border:none;background:#f0f8ff;color:#1565c0;font-size:13px;cursor:pointer;font-family:inherit;margin-bottom:6px;display:block">📥 세무사랑 가져오기</button>
+    <button onclick="document.getElementById('ie-popup')?.remove();openReconcileTool()" style="width:100%;text-align:left;padding:10px 12px;border-radius:8px;border:none;background:#fff3e0;color:#e65100;font-size:13px;cursor:pointer;font-family:inherit;margin-bottom:6px;display:block">📋 엑셀 대조·반영(누락채움·담당자·신규)</button>
+    <button onclick="document.getElementById('ie-popup')?.remove();openRepIncomeTaxTool()" style="width:100%;text-align:left;padding:10px 12px;border-radius:8px;border:none;background:#eef3ff;color:#3949ab;font-size:13px;cursor:pointer;font-family:inherit;margin-bottom:6px;display:block">🏢 법인 대표자 종소세 정리</button>
     <button onclick="document.getElementById('ie-popup')?.remove();exportClientsToExcel()" style="width:100%;text-align:left;padding:10px 12px;border-radius:8px;border:none;background:#e8f5e9;color:#1b5e20;font-size:13px;cursor:pointer;font-family:inherit;display:block">📊 Excel 내보내기</button>`;
   document.body.appendChild(pop);
   const outside = e => { if(!pop.contains(e.target)&&e.target!==btnEl){pop.remove();document.removeEventListener('click',outside);} };
@@ -3953,7 +3971,8 @@ function openForm(id) {
     contracts:getDefaultContracts('기장','개인','일반'),status:'정상',dataReceived:false,bookkeeping:false,approved:false,
     memo:'',contractDate:'',terminationDate:'',terminationReason:'',
     closureYear:'',closureTaxFiled:false,closureTaxApproved:false,
-    jointBiz:false,openDate:'',closeDate:'',route:'세무사',routeDetail:'',incomeCats:[]
+    jointBiz:false,openDate:'',closeDate:'',route:'세무사',routeDetail:'',incomeCats:[],withholdingType:'월별',
+    repJumin:'',repIncomeTaxFiling:false
   };
   if (isEdit && !c) { toast('거래처를 찾을 수 없습니다 (이미 삭제되었을 수 있습니다)', 'warning'); return; }
 
@@ -4033,6 +4052,17 @@ function openForm(id) {
       </div>
     </div>
     <div id="bizno-msg" class="c3" style="font-size:10px;padding-left:4px;margin-top:-4px;min-height:0"></div>
+
+    <div class="c3" id="f-corp-rep" style="display:${c.taxType==='법인'?'grid':'none'};grid-template-columns:1fr auto;gap:10px;align-items:center;background:#eef3ff;border:1px solid #c5d4f5;border-radius:8px;padding:9px 11px">
+      <div class="ff" style="flex-direction:column;align-items:stretch;gap:3px">
+        <label class="ffl">대표자 주민번호</label>
+        <input class="finput" id="f-repJumin" value="${esc(c.repJumin||'')}" placeholder="000000-0000000" oninput="window._formData.repJumin=this.value" style="padding:3px 8px;font-size:12px">
+      </div>
+      <label class="ff" style="cursor:pointer;white-space:nowrap;gap:6px">
+        <input type="checkbox" id="f-repIncomeTax" ${c.repIncomeTaxFiling?'checked':''} onchange="window._formData.repIncomeTaxFiling=this.checked" style="width:15px;height:15px;flex-shrink:0;cursor:pointer;accent-color:#4f8ef7">
+        <span class="ffl">대표자 종소세 신고</span>
+      </label>
+    </div>
 
     <div class="ff">
       <label class="ffl">과세</label>
@@ -4212,6 +4242,8 @@ window.onFormSelect = function(field, val) {
   if (field === 'taxType') {
     const lbl = document.getElementById('f-jumin-label');
     if (lbl) lbl.textContent = val === '법인' ? '법인번호' : '주민번호';
+    const cr = document.getElementById('f-corp-rep');
+    if (cr) cr.style.display = val === '법인' ? 'grid' : 'none';
   }
   if (field==='taxType'||field==='vatType') {
     // remove incompatible contracts
@@ -8672,6 +8704,222 @@ function _applySyncChanges() {
   renderClients();
   setTimeout(()=>alert(`✅ ${cnt}개 거래처 정보가 업데이트됐습니다.`), 100);
 }
+
+// ══════════════════════════════════════════════════════
+// 엑셀 대조·반영 — 상호+대표자 매칭으로 누락정보 채움 / 담당자 변경 / 신규 추가 / 엑셀에 없는 업체 목록
+// ══════════════════════════════════════════════════════
+const _reconNorm = s => String(s==null?'':s).replace(/\s+/g,'').replace(/[()（）]/g,'').toLowerCase();
+const _reconDigits = s => String(s==null?'':s).replace(/\D/g,'');
+function openReconcileTool() {
+  window._reconExcel = null;
+  showModal(`<div style="max-width:720px;width:95vw;max-height:calc(100vh - 50px);display:flex;flex-direction:column">
+    <div class="modal-header"><h3>📋 엑셀 대조·반영</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body" style="overflow-y:auto;flex:1">
+      <div style="font-size:12px;color:#666;line-height:1.6;background:#fff8e1;border:1px solid #ffe082;border-radius:8px;padding:10px 12px;margin-bottom:12px">
+        거래처 엑셀(.xls/.xlsx)을 올리면 <b>상호 + 대표자</b>가 같은 업체끼리 대조합니다.<br>
+        ① 사업자번호·주민번호 등 <b>누락 정보 채움</b> · ② <b>담당자 변경</b> 반영 · ③ 엑셀에만 있는 <b>신규 업체 추가</b> · ④ 엑셀에 없는 업체 목록.<br>
+        <span style="color:#e65100">※ 이 파일은 브라우저에서만 처리되며 서버·저장소에 올라가지 않습니다.</span>
+      </div>
+      <input type="file" accept=".xls,.xlsx" onchange="reconcileParseFile(this.files[0])" style="font-size:13px;margin-bottom:12px">
+      <div id="recon-result"></div>
+    </div>
+  </div>`);
+}
+function reconcileParseFile(file) {
+  if (!file) return;
+  document.getElementById('recon-result').innerHTML = '<div style="color:#888;padding:12px">파일 읽는 중...</div>';
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      if (data.length < 2) { document.getElementById('recon-result').innerHTML = '<div style="color:#e53935;padding:12px">데이터가 없습니다.</div>'; return; }
+      const headers = data[0].map(h=>String(h).replace(/\s+/g,''));
+      const find = names => { for (const n of names){ const i=headers.findIndex(h=>h.includes(n)); if(i>=0) return i; } return -1; };
+      const col = {
+        name:find(['상호','법인명','업체명']), rep:find(['대표자명','대표자','성명']),
+        bizNo:find(['사업자등록번호','사업자번호']), corpNo:find(['법인등록번호']), jumin:find(['주민등록번호','주민번호']),
+        gubun:find(['구분','인격']), vatType:find(['과세유형']), phone:find(['연락처','전화','휴대']),
+        bizCode:find(['업종코드']), bizType:find(['업태']), item:find(['종목']),
+        openDate:find(['개업']), closeDate:find(['폐업']), income:find(['소득구분']),
+        joint:find(['공동사업자']), taxOffice:find(['세무서']), manager:find(['담당자']),
+        email:find(['이메일','메일']), withholding:find(['원천']), fee:find(['기장료']), memo:find(['메모'])
+      };
+      if (col.name < 0 || col.rep < 0) { document.getElementById('recon-result').innerHTML = '<div style="color:#e53935;padding:12px">상호/대표자 컬럼을 찾지 못했습니다. 헤더를 확인해주세요.</div>'; return; }
+      const g = (r,k) => col[k]>=0 ? String(r[col[k]]==null?'':r[col[k]]).trim() : '';
+      const rows = data.slice(1).map(r => {
+        const name = g(r,'name'), rep = g(r,'rep');
+        if (!name && !rep) return null;
+        const gubun = g(r,'gubun');
+        const isCorp = /법인/.test(gubun);
+        const jumin = _reconDigits(isCorp ? g(r,'corpNo') : g(r,'jumin')) || _reconDigits(g(r,'jumin')) || _reconDigits(g(r,'corpNo'));
+        const dt = s => { const v=g(r,'openDate'); return v; };
+        const norm = d => { const s=String(d||'').trim(); if(!s) return ''; const m=s.match(/(\d{4})[.\-\/]\s*(\d{1,2})[.\-\/]\s*(\d{1,2})/); return m?`${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`:s; };
+        const inc = g(r,'income').split(/[,\s/]+/).map(x=>x.trim()).filter(x=>['사업','부동산','주택','금융','기타'].includes(x));
+        const wh = /반기/.test(g(r,'withholding')) ? '반기' : (g(r,'withholding')?'월별':'');
+        return {
+          name, rep,
+          bizNo: g(r,'bizNo'), jumin,
+          taxType: isCorp?'법인':(gubun?'개인':''),
+          vatType: g(r,'vatType'), phone: g(r,'phone'),
+          bizCode: g(r,'bizCode'), bizType: g(r,'bizType'), item: g(r,'item'),
+          openDate: norm(g(r,'openDate')), closeDate: norm(g(r,'closeDate')),
+          incomeCats: inc, jointBiz: !!g(r,'joint'), taxOffice: g(r,'taxOffice'),
+          manager: g(r,'manager'), email: g(r,'email'), withholdingType: wh,
+          fee: Number(_reconDigits(g(r,'fee')))||0, memo: g(r,'memo'),
+          key: _reconNorm(name)+'|'+_reconNorm(rep)
+        };
+      }).filter(Boolean);
+      window._reconExcel = rows;
+      reconcileRender();
+    } catch(err) { document.getElementById('recon-result').innerHTML = `<div style="color:#e53935;padding:12px">파일 오류: ${esc(err.message)}</div>`; }
+  };
+  reader.readAsArrayBuffer(file);
+}
+function reconcileRender() {
+  const rows = window._reconExcel; if (!rows) return;
+  const el = document.getElementById('recon-result'); if (!el) return;
+  const appByKey = new Map();
+  G.clients.forEach(c => { const k=_reconNorm(c.name)+'|'+_reconNorm(c.rep); if(!appByKey.has(k)) appByKey.set(k, c); });
+  const excelKeys = new Set(rows.map(r=>r.key));
+  const FILL = ['bizNo','jumin','phone','taxOffice','bizCode','bizType','openDate'];
+  const fillList = [], mgrList = [], newList = [];
+  rows.forEach(r => {
+    const c = appByKey.get(r.key);
+    if (c) {
+      const fills = [];
+      FILL.forEach(f => { const cur=(f==='bizNo'||f==='jumin')?_reconDigits(c[f]):(c[f]||''); if(!cur && r[f]) fills.push(f); });
+      if (fills.length) fillList.push({c, r, fills});
+      const curMgr = getManagers(c)[0]||'';
+      if (r.manager && r.manager !== curMgr) mgrList.push({c, r, from:curMgr, to:r.manager});
+    } else {
+      newList.push(r);
+    }
+  });
+  const appOnly = G.clients.filter(c => !excelKeys.has(_reconNorm(c.name)+'|'+_reconNorm(c.rep)));
+  window._reconFill = fillList; window._reconMgr = mgrList; window._reconNew = newList; window._reconAppOnly = appOnly;
+  const fLabel = {bizNo:'사업자번호',jumin:'주민/법인번호',phone:'연락처',taxOffice:'세무서',bizCode:'업종코드',bizType:'업태',openDate:'개업일'};
+  el.innerHTML = `
+    <div style="font-size:12px;color:#555;margin-bottom:10px">엑셀 ${rows.length}건 · 앱 거래처 ${G.clients.length}개 대조 완료</div>
+    <div style="border:1px solid #ffe082;border-radius:10px;padding:10px 12px;margin-bottom:10px;background:#fffdf5">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b style="color:#e65100">① 누락 정보 채움 (${fillList.length}건)</b>${fillList.length?`<button onclick="reconcileApply('fill')" style="padding:5px 12px;border-radius:8px;border:1.5px solid #ff9800;background:#fff;color:#e65100;font-weight:700;cursor:pointer;font-family:inherit;font-size:12px">채우기 적용</button>`:''}</div>
+      ${fillList.length?`<div style="max-height:140px;overflow-y:auto;margin-top:8px;font-size:12px">${fillList.slice(0,50).map(x=>`<div style="padding:3px 0;border-bottom:1px solid #f5f5f5"><b>${esc(x.c.name)}</b> <span style="color:#888">${esc(x.c.rep||'')}</span> → ${x.fills.map(f=>`<span style="color:#e65100">${fLabel[f]}</span>`).join(', ')}</div>`).join('')}${fillList.length>50?`<div style="color:#aaa;padding:4px 0">외 ${fillList.length-50}건</div>`:''}</div>`:'<div style="color:#aaa;font-size:12px;margin-top:6px">채울 누락 정보가 없습니다</div>'}
+    </div>
+    <div style="border:1px solid #a5d6a7;border-radius:10px;padding:10px 12px;margin-bottom:10px;background:#f6fff7">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b style="color:#2e7d32">② 담당자 변경 (${mgrList.length}건)</b>${mgrList.length?`<button onclick="reconcileApply('mgr')" style="padding:5px 12px;border-radius:8px;border:1.5px solid #43a047;background:#fff;color:#2e7d32;font-weight:700;cursor:pointer;font-family:inherit;font-size:12px">담당자 변경 적용</button>`:''}</div>
+      ${mgrList.length?`<div style="max-height:140px;overflow-y:auto;margin-top:8px;font-size:12px">${mgrList.slice(0,50).map(x=>`<div style="padding:3px 0;border-bottom:1px solid #f5f5f5"><b>${esc(x.c.name)}</b> : <span style="color:#999">${esc(x.from||'(없음)')}</span> → <span style="color:#2e7d32;font-weight:700">${esc(x.to)}</span></div>`).join('')}${mgrList.length>50?`<div style="color:#aaa;padding:4px 0">외 ${mgrList.length-50}건</div>`:''}</div>`:'<div style="color:#aaa;font-size:12px;margin-top:6px">변경할 담당자가 없습니다</div>'}
+    </div>
+    <div style="border:1px solid #90caf9;border-radius:10px;padding:10px 12px;margin-bottom:10px;background:#f5faff">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b style="color:#1565c0">③ 엑셀에만 있는 신규 업체 (${newList.length}건)</b>${newList.length?`<button onclick="reconcileApply('add')" style="padding:5px 12px;border-radius:8px;border:1.5px solid #4f8ef7;background:#fff;color:#1565c0;font-weight:700;cursor:pointer;font-family:inherit;font-size:12px">선택 추가</button>`:''}</div>
+      ${newList.length?`<div style="margin-top:6px"><label style="font-size:11px;color:#888;cursor:pointer"><input type="checkbox" id="recon-new-all" checked onchange="document.querySelectorAll('.recon-new-cb').forEach(cb=>cb.checked=this.checked)"> 전체 선택</label></div><div style="max-height:180px;overflow-y:auto;margin-top:6px;font-size:12px">${newList.map((r,i)=>`<label style="display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid #f5f5f5;cursor:pointer"><input type="checkbox" class="recon-new-cb" data-i="${i}" checked><b>${esc(r.name)}</b> <span style="color:#888">${esc(r.rep||'')}</span> <span style="color:#aaa;margin-left:auto">${esc(r.manager||'')}${r.bizNo?' · '+esc(r.bizNo):''}</span></label>`).join('')}</div>`:'<div style="color:#aaa;font-size:12px;margin-top:6px">신규 업체가 없습니다</div>'}
+    </div>
+    <div style="border:1px solid #ce93d8;border-radius:10px;padding:10px 12px;background:#fdf7ff">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b style="color:#6a1b9a">④ 엑셀에 없고 앱에만 있는 업체 (${appOnly.length}개)</b>${appOnly.length?`<button onclick="reconcileExportAppOnly()" style="padding:5px 12px;border-radius:8px;border:1.5px solid #ab47bc;background:#fff;color:#6a1b9a;font-weight:700;cursor:pointer;font-family:inherit;font-size:12px">📊 Excel 내보내기</button>`:''}</div>
+      ${appOnly.length?`<div style="max-height:180px;overflow-y:auto;margin-top:8px;font-size:12px">${appOnly.map(c=>`<div style="padding:3px 0;border-bottom:1px solid #f5f5f5"><b>${esc(c.name)}</b> <span style="color:#888">${esc(c.rep||'')}</span> <span style="color:#aaa">· ${esc(getManagers(c).join(',')||'-')}${c.status&&c.status!=='정상'?' · '+esc(c.status):''}</span></div>`).join('')}</div>`:'<div style="color:#aaa;font-size:12px;margin-top:6px">엑셀에 없는 업체가 없습니다</div>'}
+    </div>`;
+}
+function reconcileApply(kind) {
+  if (typeof requireWrite==='function' && !requireWrite()) return;
+  if (kind === 'fill') {
+    const list = window._reconFill||[]; let n=0;
+    list.forEach(x => { x.fills.forEach(f => { if(f==='bizNo'||f==='jumin'){ x.c[f]=_reconDigits(x.r[f]); } else { x.c[f]=x.r[f]; } }); n+=x.fills.length; });
+    saveToLS(); toast(`${list.length}개 업체 누락정보 ${n}건 채움`, 'success', 3000); renderClients(); reconcileRender();
+  } else if (kind === 'mgr') {
+    const list = window._reconMgr||[];
+    list.forEach(x => {
+      const c=x.c, oldStr=getManagers(c).join(',');
+      c.manager=x.to; c.managers=[x.to];
+      if(!G.managerHistory) G.managerHistory={};
+      if(!G.managerHistory[c.id]) G.managerHistory[c.id]=[];
+      G.managerHistory[c.id].push({ date:new Date().toLocaleString('ko-KR'), from:oldStr, to:x.to });
+    });
+    saveToLS(); toast(`${list.length}개 업체 담당자 변경 완료`, 'success', 3000); renderClients(); reconcileRender();
+  } else if (kind === 'add') {
+    const list = window._reconNew||[];
+    const checked = [...document.querySelectorAll('.recon-new-cb')].filter(cb=>cb.checked).map(cb=>list[Number(cb.dataset.i)]).filter(Boolean);
+    if (!checked.length) { toast('추가할 업체를 선택하세요','info',2000); return; }
+    if (!confirm(`${checked.length}개 신규 업체를 거래처목록에 추가합니다. 계속할까요?`)) return;
+    const rep0 = (G.settings&&G.settings.rep)?G.settings.rep:'대표 세무사';
+    let base = Date.now();
+    checked.forEach((r,i) => {
+      G.clients.push({
+        id: base+i, name:r.name, rep:r.rep, bizNo:r.bizNo||'', jumin:r.jumin||'',
+        taxType:r.taxType||'개인', vatType:r.vatType||'일반', bizType:r.bizType||'', bizCode:r.bizCode||'',
+        taxOffice:r.taxOffice||'', phone:r.phone||'', email:r.email||'',
+        manager:r.manager||'', managers:r.manager?[r.manager]:[], dealType:'기장', dealTypes:['기장'],
+        fee:r.fee||0, feeStatus:'청구완료', status: r.closeDate?'폐업':'정상',
+        dataReceived:false, bookkeeping:false, approved:false, contracts:[],
+        memo:r.memo||'', contractDate:'', openDate:r.openDate||'', closeDate:r.closeDate||'',
+        jointBiz:!!r.jointBiz, incomeGroupKey:'', route:'세무사', routeDetail:rep0,
+        incomeCats:r.incomeCats||[], withholdingType:r.withholdingType||'월별'
+      });
+    });
+    saveToLS(); toast(`${checked.length}개 신규 업체 추가 완료`, 'success', 3500); renderClients(); reconcileRender();
+  }
+}
+function reconcileExportAppOnly() {
+  const list = window._reconAppOnly||[];
+  const headers = ['상호','대표자','담당자','수임유형','인격','사업자번호','상태','연락처'];
+  const rows = list.map(c => [c.name, c.rep||'', getManagers(c).join(',')||'', getDealTypes(c).join(',')||'', c.taxType||'', c.bizNo||'', c.status||'', c.phone||'']);
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '엑셀에없는업체');
+  XLSX.writeFile(wb, '엑셀에없는_거래처목록.xlsx');
+}
+
+// 법인 대표자 종소세 정리 — 법인 대표자와 상호가 같고 사업자번호 없이 등록된 거래처(대표자 개인 종소세 중복 등록)를
+// 찾아 법인에 '대표자 종소세 신고' 체크 + 대표자 주민번호 반영 후 중복 항목 삭제
+function openRepIncomeTaxTool() {
+  const corps = G.clients.filter(c => c.taxType === '법인' && (c.rep||'').trim());
+  const matches = [];
+  corps.forEach(corp => {
+    const rn = _reconNorm(corp.rep); if (!rn) return;
+    G.clients.forEach(c => {
+      if (c.id === corp.id) return;
+      if (_reconDigits(c.bizNo).length >= 10) return;      // 사업자번호 있으면 별개 사업장 → 제외
+      if (_reconNorm(c.name) === rn) matches.push({ corp, ph: c });
+    });
+  });
+  window._repMatches = matches;
+  const body = matches.length
+    ? `<div style="margin:6px 0"><label style="font-size:11px;color:#888;cursor:pointer"><input type="checkbox" id="rep-all" checked onchange="document.querySelectorAll('.rep-cb').forEach(cb=>cb.checked=this.checked)"> 전체 선택</label></div>
+       <div style="max-height:340px;overflow-y:auto;font-size:13px">${matches.map((x,i)=>`
+         <label style="display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid #f4f4f4;cursor:pointer">
+           <input type="checkbox" class="rep-cb" data-i="${i}" checked>
+           <div style="flex:1;min-width:0">
+             <div><b>${esc(x.corp.name)}</b> <span style="font-size:11px;color:#888">법인 · 대표 ${esc(x.corp.rep||'')}</span></div>
+             <div style="font-size:11px;color:#e65100">↳ 중복 개인항목 삭제: <b>${esc(x.ph.name)}</b> (${esc(x.ph.rep||'-')}${x.ph.jumin?' · 주민번호 있음':''})</div>
+           </div>
+         </label>`).join('')}</div>`
+    : '<div style="color:#aaa;text-align:center;padding:24px">대표자와 상호가 같고 사업자번호 없이 등록된 항목이 없습니다</div>';
+  showModal(`<div style="max-width:620px;width:94vw;max-height:calc(100vh - 60px);display:flex;flex-direction:column">
+    <div class="modal-header"><h3>🏢 법인 대표자 종소세 정리</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body" style="overflow-y:auto;flex:1">
+      <div style="font-size:12px;color:#666;line-height:1.6;background:#eef3ff;border:1px solid #c5d4f5;border-radius:8px;padding:10px 12px;margin-bottom:12px">
+        법인 대표자와 <b>상호가 같고 사업자번호 없이</b> 등록된 거래처(대표자 개인 종소세를 위해 중복 등록된 항목)를 찾았습니다.<br>
+        적용하면 해당 <b>법인에 '대표자 종소세 신고'가 체크</b>되고 대표자 주민번호가 반영되며, <b>중복 개인 항목은 목록에서 삭제</b>됩니다.
+      </div>
+      ${body}
+      ${matches.length?`<div class="btn-row" style="margin-top:14px"><button class="btn-secondary" onclick="closeModal()">취소</button><button class="btn-primary" onclick="repIncomeTaxApply()">✓ 대표자 종소세 체크 + 중복 삭제</button></div>`:''}
+    </div>
+  </div>`);
+}
+window.repIncomeTaxApply = function() {
+  if (typeof requireWrite==='function' && !requireWrite()) return;
+  const sel = [...document.querySelectorAll('.rep-cb')].filter(cb=>cb.checked).map(cb=>window._repMatches[Number(cb.dataset.i)]).filter(Boolean);
+  if (!sel.length) { toast('선택된 항목이 없습니다','info',2000); return; }
+  if (!confirm(`${sel.length}건: 법인에 '대표자 종소세 신고' 체크 + 대표자 주민번호 반영 후, 중복 등록된 대표자 개인 항목을 목록에서 삭제합니다. 계속할까요?`)) return;
+  const delIds = new Set();
+  sel.forEach(({corp, ph}) => {
+    corp.repIncomeTaxFiling = true;
+    if (!corp.repJumin && ph.jumin) corp.repJumin = ph.jumin;
+    delIds.add(ph.id);
+  });
+  G.clients = G.clients.filter(c => !delIds.has(c.id));
+  saveToLS(); renderClients(); closeModal();
+  toast(`${sel.length}개 법인 대표자 종소세 처리 · 중복 ${delIds.size}건 삭제`, 'success', 3500);
+};
 
 function openImportModal() {
   window._importRows = null;
