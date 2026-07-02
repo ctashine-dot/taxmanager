@@ -2392,6 +2392,7 @@ function renderClients() {
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">${c.taxType==='법인'?'법인등록번호':'주민번호'}</div>${em?iInput('jumin',c.jumin,'placeholder="000000-0000000" style="width:150px"'):`<div style="font-weight:600;font-family:monospace">${c.jumin?esc(c.jumin.slice(0,6)+'-'+c.jumin.slice(6,7)+'••••••'):'-'}</div>`}</div>
             ${c.openDate?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">개업연월일</div><div style="font-weight:600">${esc(c.openDate)}</div></div>`:''}
             ${c.jointBiz?`<div>${badge(c.vatPrimary===false?'공동(부가세제외)':'공동(부가세대표)','orange')}</div>`:''}
+            ${c.taxType==='법인'&&c.repIncomeTaxFiling?`<div>${badge('대표자 종소세 신고','purple')}${c.repJumin?`<span style="font-size:11px;color:#888;margin-left:6px;font-family:monospace">${esc(String(c.repJumin).slice(0,6))}-•••••••</span>`:''}</div>`:''}
             ${c.status==='해지'||c.status==='폐업'?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">수임해지일</div><div style="font-weight:600;color:#c62828">${esc(c.terminationDate||'-')}</div></div>`:''}
             ${c.status==='폐업'?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">폐업연월일</div><div style="font-weight:600;color:#c62828">${esc(c.closeDate||'-')}</div></div>`:''}
             ${contracts?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">수임항목</div><div style="font-size:12px;color:#555">${esc(contracts)}</div></div>`:''}
@@ -2581,6 +2582,7 @@ function openImportExportMenu(btnEl) {
     <div style="font-size:12px;font-weight:800;color:#333;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #f0f0f0">⇅ 가져오기 / 내보내기</div>
     <button onclick="document.getElementById('ie-popup')?.remove();openImportModal()" style="width:100%;text-align:left;padding:10px 12px;border-radius:8px;border:none;background:#f0f8ff;color:#1565c0;font-size:13px;cursor:pointer;font-family:inherit;margin-bottom:6px;display:block">📥 세무사랑 가져오기</button>
     <button onclick="document.getElementById('ie-popup')?.remove();openReconcileTool()" style="width:100%;text-align:left;padding:10px 12px;border-radius:8px;border:none;background:#fff3e0;color:#e65100;font-size:13px;cursor:pointer;font-family:inherit;margin-bottom:6px;display:block">📋 엑셀 대조·반영(누락채움·담당자·신규)</button>
+    <button onclick="document.getElementById('ie-popup')?.remove();openRepIncomeTaxTool()" style="width:100%;text-align:left;padding:10px 12px;border-radius:8px;border:none;background:#eef3ff;color:#3949ab;font-size:13px;cursor:pointer;font-family:inherit;margin-bottom:6px;display:block">🏢 법인 대표자 종소세 정리</button>
     <button onclick="document.getElementById('ie-popup')?.remove();exportClientsToExcel()" style="width:100%;text-align:left;padding:10px 12px;border-radius:8px;border:none;background:#e8f5e9;color:#1b5e20;font-size:13px;cursor:pointer;font-family:inherit;display:block">📊 Excel 내보내기</button>`;
   document.body.appendChild(pop);
   const outside = e => { if(!pop.contains(e.target)&&e.target!==btnEl){pop.remove();document.removeEventListener('click',outside);} };
@@ -3969,7 +3971,8 @@ function openForm(id) {
     contracts:getDefaultContracts('기장','개인','일반'),status:'정상',dataReceived:false,bookkeeping:false,approved:false,
     memo:'',contractDate:'',terminationDate:'',terminationReason:'',
     closureYear:'',closureTaxFiled:false,closureTaxApproved:false,
-    jointBiz:false,openDate:'',closeDate:'',route:'세무사',routeDetail:'',incomeCats:[],withholdingType:'월별'
+    jointBiz:false,openDate:'',closeDate:'',route:'세무사',routeDetail:'',incomeCats:[],withholdingType:'월별',
+    repJumin:'',repIncomeTaxFiling:false
   };
   if (isEdit && !c) { toast('거래처를 찾을 수 없습니다 (이미 삭제되었을 수 있습니다)', 'warning'); return; }
 
@@ -4049,6 +4052,17 @@ function openForm(id) {
       </div>
     </div>
     <div id="bizno-msg" class="c3" style="font-size:10px;padding-left:4px;margin-top:-4px;min-height:0"></div>
+
+    <div class="c3" id="f-corp-rep" style="display:${c.taxType==='법인'?'grid':'none'};grid-template-columns:1fr auto;gap:10px;align-items:center;background:#eef3ff;border:1px solid #c5d4f5;border-radius:8px;padding:9px 11px">
+      <div class="ff" style="flex-direction:column;align-items:stretch;gap:3px">
+        <label class="ffl">대표자 주민번호</label>
+        <input class="finput" id="f-repJumin" value="${esc(c.repJumin||'')}" placeholder="000000-0000000" oninput="window._formData.repJumin=this.value" style="padding:3px 8px;font-size:12px">
+      </div>
+      <label class="ff" style="cursor:pointer;white-space:nowrap;gap:6px">
+        <input type="checkbox" id="f-repIncomeTax" ${c.repIncomeTaxFiling?'checked':''} onchange="window._formData.repIncomeTaxFiling=this.checked" style="width:15px;height:15px;flex-shrink:0;cursor:pointer;accent-color:#4f8ef7">
+        <span class="ffl">대표자 종소세 신고</span>
+      </label>
+    </div>
 
     <div class="ff">
       <label class="ffl">과세</label>
@@ -4228,6 +4242,8 @@ window.onFormSelect = function(field, val) {
   if (field === 'taxType') {
     const lbl = document.getElementById('f-jumin-label');
     if (lbl) lbl.textContent = val === '법인' ? '법인번호' : '주민번호';
+    const cr = document.getElementById('f-corp-rep');
+    if (cr) cr.style.display = val === '법인' ? 'grid' : 'none';
   }
   if (field==='taxType'||field==='vatType') {
     // remove incompatible contracts
@@ -8851,6 +8867,59 @@ function reconcileExportAppOnly() {
   XLSX.utils.book_append_sheet(wb, ws, '엑셀에없는업체');
   XLSX.writeFile(wb, '엑셀에없는_거래처목록.xlsx');
 }
+
+// 법인 대표자 종소세 정리 — 법인 대표자와 상호가 같고 사업자번호 없이 등록된 거래처(대표자 개인 종소세 중복 등록)를
+// 찾아 법인에 '대표자 종소세 신고' 체크 + 대표자 주민번호 반영 후 중복 항목 삭제
+function openRepIncomeTaxTool() {
+  const corps = G.clients.filter(c => c.taxType === '법인' && (c.rep||'').trim());
+  const matches = [];
+  corps.forEach(corp => {
+    const rn = _reconNorm(corp.rep); if (!rn) return;
+    G.clients.forEach(c => {
+      if (c.id === corp.id) return;
+      if (_reconDigits(c.bizNo).length >= 10) return;      // 사업자번호 있으면 별개 사업장 → 제외
+      if (_reconNorm(c.name) === rn) matches.push({ corp, ph: c });
+    });
+  });
+  window._repMatches = matches;
+  const body = matches.length
+    ? `<div style="margin:6px 0"><label style="font-size:11px;color:#888;cursor:pointer"><input type="checkbox" id="rep-all" checked onchange="document.querySelectorAll('.rep-cb').forEach(cb=>cb.checked=this.checked)"> 전체 선택</label></div>
+       <div style="max-height:340px;overflow-y:auto;font-size:13px">${matches.map((x,i)=>`
+         <label style="display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid #f4f4f4;cursor:pointer">
+           <input type="checkbox" class="rep-cb" data-i="${i}" checked>
+           <div style="flex:1;min-width:0">
+             <div><b>${esc(x.corp.name)}</b> <span style="font-size:11px;color:#888">법인 · 대표 ${esc(x.corp.rep||'')}</span></div>
+             <div style="font-size:11px;color:#e65100">↳ 중복 개인항목 삭제: <b>${esc(x.ph.name)}</b> (${esc(x.ph.rep||'-')}${x.ph.jumin?' · 주민번호 있음':''})</div>
+           </div>
+         </label>`).join('')}</div>`
+    : '<div style="color:#aaa;text-align:center;padding:24px">대표자와 상호가 같고 사업자번호 없이 등록된 항목이 없습니다</div>';
+  showModal(`<div style="max-width:620px;width:94vw;max-height:calc(100vh - 60px);display:flex;flex-direction:column">
+    <div class="modal-header"><h3>🏢 법인 대표자 종소세 정리</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body" style="overflow-y:auto;flex:1">
+      <div style="font-size:12px;color:#666;line-height:1.6;background:#eef3ff;border:1px solid #c5d4f5;border-radius:8px;padding:10px 12px;margin-bottom:12px">
+        법인 대표자와 <b>상호가 같고 사업자번호 없이</b> 등록된 거래처(대표자 개인 종소세를 위해 중복 등록된 항목)를 찾았습니다.<br>
+        적용하면 해당 <b>법인에 '대표자 종소세 신고'가 체크</b>되고 대표자 주민번호가 반영되며, <b>중복 개인 항목은 목록에서 삭제</b>됩니다.
+      </div>
+      ${body}
+      ${matches.length?`<div class="btn-row" style="margin-top:14px"><button class="btn-secondary" onclick="closeModal()">취소</button><button class="btn-primary" onclick="repIncomeTaxApply()">✓ 대표자 종소세 체크 + 중복 삭제</button></div>`:''}
+    </div>
+  </div>`);
+}
+window.repIncomeTaxApply = function() {
+  if (typeof requireWrite==='function' && !requireWrite()) return;
+  const sel = [...document.querySelectorAll('.rep-cb')].filter(cb=>cb.checked).map(cb=>window._repMatches[Number(cb.dataset.i)]).filter(Boolean);
+  if (!sel.length) { toast('선택된 항목이 없습니다','info',2000); return; }
+  if (!confirm(`${sel.length}건: 법인에 '대표자 종소세 신고' 체크 + 대표자 주민번호 반영 후, 중복 등록된 대표자 개인 항목을 목록에서 삭제합니다. 계속할까요?`)) return;
+  const delIds = new Set();
+  sel.forEach(({corp, ph}) => {
+    corp.repIncomeTaxFiling = true;
+    if (!corp.repJumin && ph.jumin) corp.repJumin = ph.jumin;
+    delIds.add(ph.id);
+  });
+  G.clients = G.clients.filter(c => !delIds.has(c.id));
+  saveToLS(); renderClients(); closeModal();
+  toast(`${sel.length}개 법인 대표자 종소세 처리 · 중복 ${delIds.size}건 삭제`, 'success', 3500);
+};
 
 function openImportModal() {
   window._importRows = null;
