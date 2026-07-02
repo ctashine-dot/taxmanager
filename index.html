@@ -8871,37 +8871,49 @@ function reconcileExportAppOnly() {
 // 법인 대표자 종소세 정리 — 법인 대표자와 상호가 같고 사업자번호 없이 등록된 거래처(대표자 개인 종소세 중복 등록)를
 // 찾아 법인에 '대표자 종소세 신고' 체크 + 대표자 주민번호 반영 후 중복 항목 삭제
 function openRepIncomeTaxTool() {
+  // 대표자명 정규화(공백·괄호 제거 + '외1' 등 공동대표 표기 제거)
+  const norm = s => _reconNorm(s).replace(/외\s*\d*$/,'');
   const corps = G.clients.filter(c => c.taxType === '법인' && (c.rep||'').trim());
-  const matches = [];
-  corps.forEach(corp => {
-    const rn = _reconNorm(corp.rep); if (!rn) return;
-    G.clients.forEach(c => {
-      if (c.id === corp.id) return;
-      if (_reconDigits(c.bizNo).length >= 10) return;      // 사업자번호 있으면 별개 사업장 → 제외
-      if (_reconNorm(c.name) === rn) matches.push({ corp, ph: c });
-    });
+  const repMap = new Map();  // 정규화 대표자명 → 법인 목록
+  corps.forEach(corp => { const rn = norm(corp.rep); if (rn) { if(!repMap.has(rn)) repMap.set(rn, []); repMap.get(rn).push(corp); } });
+  // 사업자번호 없이 등록된 비(非)법인 거래처
+  const noBiz = G.clients.filter(c => c.taxType !== '법인' && _reconDigits(c.bizNo).length < 10);
+  const nameMatches = [], repMatches = [];
+  noBiz.forEach(c => {
+    const byName = repMap.get(norm(c.name));
+    const byRep  = repMap.get(norm(c.rep));
+    if (byName && byName.length) nameMatches.push({ corp: byName[0], ph: c, via: '상호' });
+    else if (byRep && byRep.length) repMatches.push({ corp: byRep[0], ph: c, via: '대표자' });
   });
+  const matches = [...nameMatches, ...repMatches];   // 상호일치 먼저, 대표자일치 다음
   window._repMatches = matches;
+  const rowHtml = (x, i, checked) => `
+    <label style="display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid #f4f4f4;cursor:pointer">
+      <input type="checkbox" class="rep-cb" data-i="${i}" ${checked?'checked':''}>
+      <div style="flex:1;min-width:0">
+        <div style="color:#c62828"><b>${esc(x.ph.name)}</b> <span style="font-size:11px;color:#888">${esc(x.ph.rep||'-')}${x.ph.jumin?' · 주민번호 있음':''}${(x.ph.status&&x.ph.status!=='정상')?' · '+esc(x.ph.status):''}</span> <span style="font-size:11px;color:#e53935">← 삭제 대상</span></div>
+        <div style="font-size:11px;color:#3949ab">↳ 법인 <b>${esc(x.corp.name)}</b> (대표 ${esc(x.corp.rep||'')})에 대표자 종소세 체크</div>
+      </div>
+    </label>`;
+  const secName = nameMatches.length
+    ? `<div style="font-size:12px;font-weight:800;color:#c62828;margin:4px 0 4px">Ⓐ 상호 = 법인 대표자명 (${nameMatches.length}건) <span style="font-weight:400;color:#888">· 기본 선택</span></div>
+       <div style="max-height:200px;overflow-y:auto">${nameMatches.map((x,i)=>rowHtml(x,i,true)).join('')}</div>` : '';
+  const secRep = repMatches.length
+    ? `<div style="font-size:12px;font-weight:800;color:#e65100;margin:12px 0 4px">Ⓑ 대표자명 = 법인 대표자명 (${repMatches.length}건) <span style="font-weight:400;color:#888">· 동명이인 주의, 확인 후 선택</span></div>
+       <div style="max-height:200px;overflow-y:auto">${repMatches.map((x,i)=>rowHtml(x,nameMatches.length+i,false)).join('')}</div>` : '';
   const body = matches.length
-    ? `<div style="margin:6px 0"><label style="font-size:11px;color:#888;cursor:pointer"><input type="checkbox" id="rep-all" checked onchange="document.querySelectorAll('.rep-cb').forEach(cb=>cb.checked=this.checked)"> 전체 선택</label></div>
-       <div style="max-height:340px;overflow-y:auto;font-size:13px">${matches.map((x,i)=>`
-         <label style="display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid #f4f4f4;cursor:pointer">
-           <input type="checkbox" class="rep-cb" data-i="${i}" checked>
-           <div style="flex:1;min-width:0">
-             <div><b>${esc(x.corp.name)}</b> <span style="font-size:11px;color:#888">법인 · 대표 ${esc(x.corp.rep||'')}</span></div>
-             <div style="font-size:11px;color:#e65100">↳ 중복 개인항목 삭제: <b>${esc(x.ph.name)}</b> (${esc(x.ph.rep||'-')}${x.ph.jumin?' · 주민번호 있음':''})</div>
-           </div>
-         </label>`).join('')}</div>`
-    : '<div style="color:#aaa;text-align:center;padding:24px">대표자와 상호가 같고 사업자번호 없이 등록된 항목이 없습니다</div>';
-  showModal(`<div style="max-width:620px;width:94vw;max-height:calc(100vh - 60px);display:flex;flex-direction:column">
+    ? `<div style="margin:2px 0 8px"><label style="font-size:11px;color:#888;cursor:pointer"><input type="checkbox" onchange="document.querySelectorAll('.rep-cb').forEach(cb=>cb.checked=this.checked)"> 전체 선택/해제</label></div>${secName}${secRep}`
+    : `<div style="color:#888;text-align:center;padding:20px;font-size:13px">사업자번호 없이 등록된 거래처 중 법인 대표자명과 일치하는 항목이 없습니다.<br><span style="font-size:11px;color:#aaa">(법인 ${corps.length}개 · 사업자번호 미등록 거래처 ${noBiz.length}개 스캔)</span></div>`;
+  showModal(`<div style="max-width:640px;width:94vw;max-height:calc(100vh - 60px);display:flex;flex-direction:column">
     <div class="modal-header"><h3>🏢 법인 대표자 종소세 정리</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
     <div class="modal-body" style="overflow-y:auto;flex:1">
       <div style="font-size:12px;color:#666;line-height:1.6;background:#eef3ff;border:1px solid #c5d4f5;border-radius:8px;padding:10px 12px;margin-bottom:12px">
-        법인 대표자와 <b>상호가 같고 사업자번호 없이</b> 등록된 거래처(대표자 개인 종소세를 위해 중복 등록된 항목)를 찾았습니다.<br>
-        적용하면 해당 <b>법인에 '대표자 종소세 신고'가 체크</b>되고 대표자 주민번호가 반영되며, <b>중복 개인 항목은 목록에서 삭제</b>됩니다.
+        스캔: 법인 <b>${corps.length}개</b> · 사업자번호 미등록 거래처 <b>${noBiz.length}개</b>.<br>
+        사업자번호 없이 등록된 거래처 중 <b>상호(Ⓐ) 또는 대표자(Ⓑ)가 법인 대표자와 같은 항목</b>을 찾습니다.<br>
+        적용하면 해당 <b>법인에 '대표자 종소세 신고' 체크</b> + 대표자 주민번호 반영, <b>선택한 개인 항목은 삭제</b>됩니다.
       </div>
       ${body}
-      ${matches.length?`<div class="btn-row" style="margin-top:14px"><button class="btn-secondary" onclick="closeModal()">취소</button><button class="btn-primary" onclick="repIncomeTaxApply()">✓ 대표자 종소세 체크 + 중복 삭제</button></div>`:''}
+      ${matches.length?`<div class="btn-row" style="margin-top:14px"><button class="btn-secondary" onclick="closeModal()">취소</button><button class="btn-primary" onclick="repIncomeTaxApply()">✓ 대표자 종소세 체크 + 선택 삭제</button></div>`:''}
     </div>
   </div>`);
 }
