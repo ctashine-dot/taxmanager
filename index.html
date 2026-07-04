@@ -14395,10 +14395,25 @@ const _dRJ = debounce(renderJulgae, 220);
 const _dRF = debounce(renderFees, 220);
 const _dGS = debounce(doGlobalSearch, 220);
 
-// PWA: Service Worker 등록
+// PWA: Service Worker 등록 + 새 버전 자동 반영
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      // 주기적으로 업데이트 확인
+      try { reg.update(); } catch(e){}
+      setInterval(() => { try { reg.update(); } catch(e){} }, 60*60*1000);
+      // 새 버전이 설치되면(기존 SW가 있는 경우 = 업데이트) 한 번 새로고침해 최신 반영
+      reg.addEventListener('updatefound', () => {
+        const nw = reg.installing; if (!nw) return;
+        nw.addEventListener('statechange', () => {
+          if (nw.state === 'installed' && navigator.serviceWorker.controller && !window._swReloaded) {
+            window._swReloaded = true;
+            toast('🔄 새 버전으로 업데이트합니다...', 'info', 1500);
+            setTimeout(() => location.reload(), 700);
+          }
+        });
+      });
+    }).catch(() => {});
   });
 }
 </script>
