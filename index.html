@@ -1435,6 +1435,7 @@ function switchTab(tab) {
   const page = document.getElementById('page-'+tab);
   page.style.display = 'block';
   G.currentTab = tab;
+  window._noScrollKeep = true; window._noJScrollKeep = true;   // 탭 전환은 스크롤 복원 안 함
   const renders = {dashboard:renderDashboard,clients:renderClients,schedule:renderSchedule,closure:renderClosure,julgae:renderJulgae,fees:renderFees,payroll:renderPayroll,aitools:renderAITools};
   renders[tab]?.();
 }
@@ -2227,6 +2228,9 @@ function clientFeeDisplayGroup(members) {
 }
 
 function renderClients() {
+  // 수정·메모·그룹편집 등으로 재렌더되어도 스크롤 위치 유지(페이지 이동 시엔 _noScrollKeep로 맨 위로)
+  const _sy = (G.currentTab==='clients' && !window._noScrollKeep) ? window.scrollY : 0;
+  window._noScrollKeep = false;
   const list = filteredClients();
   const terminated = G.clients.filter(c=>c.status==='해지'||c.status==='폐업').length;
   // _filterJuminGroups hides group sub-members from the list; count them to show real total
@@ -2539,10 +2543,11 @@ function renderClients() {
     <button onclick="openBulkFeeIncrease()" style="padding:6px 14px;background:#ab47bc;color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-weight:700">📈 수수료 인상</button>
     <button onclick="G.selectedClients=[];renderClients()" style="padding:6px 14px;background:rgba(255,255,255,.1);color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit">선택 해제</button>
   </div>` : ''}`;
+  if (_sy) requestAnimationFrame(()=>window.scrollTo(0, _sy));
 }
 
-function clientPageChange(dir) { G.clientPage += dir; renderClients(); window.scrollTo({top:0,behavior:'instant'}); }
-function julgaePageChange(dir) { G.julgaePage = (G.julgaePage||0) + dir; renderJulgae(); window.scrollTo({top:0,behavior:'instant'}); }
+function clientPageChange(dir) { window._noScrollKeep=true; G.clientPage += dir; renderClients(); window.scrollTo({top:0,behavior:'instant'}); }
+function julgaePageChange(dir) { window._noJScrollKeep=true; G.julgaePage = (G.julgaePage||0) + dir; renderJulgae(); window.scrollTo({top:0,behavior:'instant'}); }
 function toggleTerminated() { G.showTerminated=!G.showTerminated; renderClients(); }
 
 function openTerminatedModal() {
@@ -5075,6 +5080,8 @@ function unlinkIncomeGroupAll(key) {
 }
 
 function renderJulgae() {
+  const _jsy = (G.currentTab==='julgae' && !window._noJScrollKeep) ? window.scrollY : 0;
+  window._noJScrollKeep = false;
   const periods = G.periods;
   const idx = Math.min(G.julgaePeriodIdx, Math.max(0, periods.length - 1));
   const period = periods[idx];
@@ -6004,6 +6011,7 @@ function renderJulgae() {
   ` : ''}
   `}`;
   initJulgaeDragScroll();
+  if (_jsy) requestAnimationFrame(()=>window.scrollTo(0, _jsy));
 }
 
 function initJulgaeDragScroll() {
