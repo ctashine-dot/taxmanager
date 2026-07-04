@@ -1,4 +1,4 @@
-const CACHE_NAME = 'taxmanager-v3';
+const CACHE_NAME = 'taxmanager-v4';
 const STATIC_URLS = [
   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'
 ];
@@ -20,33 +20,38 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-  const url = event.request.url;
+  const req = event.request;
+  const url = req.url;
 
-  // Firebase와 Google Auth는 캐시 건너뜀
+  // Firebase / Google Auth는 캐시 건너뜀
   if (url.includes('firebase') || url.includes('google') || url.includes('gstatic')) return;
 
-  // index.html / 앱 셸 → 네트워크 우선, 실패 시 캐시 폴백
-  if (url.endsWith('/taxmanager/') || url.endsWith('/taxmanager/index.html') || url.endsWith('index.html')) {
+  // HTML 문서(페이지 내비게이션) → 항상 '네트워크 우선' → 배포 즉시 반영, 오프라인이면 캐시 폴백
+  //  경로에 상관없이 navigate/document/text/html 요청이면 최신 index.html을 받아온다.
+  const isHTML = req.mode === 'navigate'
+    || req.destination === 'document'
+    || ((req.headers.get('accept') || '').includes('text/html'));
+  if (isHTML) {
     event.respondWith(
-      fetch(event.request).then(resp => {
+      fetch(req).then(resp => {
         if (resp && resp.status === 200) {
           const clone = resp.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+          caches.open(CACHE_NAME).then(cache => cache.put(req, clone));
         }
         return resp;
-      }).catch(() => caches.match(event.request))
+      }).catch(() => caches.match(req).then(m => m || caches.match('index.html')))
     );
     return;
   }
 
   // 정적 자산(XLSX 등) → 캐시 우선
   event.respondWith(
-    caches.match(event.request).then(cached => {
+    caches.match(req).then(cached => {
       if (cached) return cached;
-      return fetch(event.request).then(resp => {
-        if (resp && resp.status === 200 && event.request.method === 'GET') {
+      return fetch(req).then(resp => {
+        if (resp && resp.status === 200 && req.method === 'GET') {
           const clone = resp.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+          caches.open(CACHE_NAME).then(cache => cache.put(req, clone));
         }
         return resp;
       }).catch(() => cached);
