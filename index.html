@@ -1494,6 +1494,10 @@ document.addEventListener('keydown', function(e) {
 // ══════════════════════════════════════════════════════
 // 대시보드
 // ══════════════════════════════════════════════════════
+// 담당자 미지정 체크 제외 수임유형(종소세대리·사업소득자)
+function managerCheckExempt(c) {
+  return getDealTypes(c).some(d => ['종소세대리','사업소득자'].includes(d));
+}
 function getMissingFields(c) {
   const f = [];
   if (!c.rep) f.push({field:'rep', label:'대표자'});
@@ -1834,7 +1838,7 @@ function _renderDashboardInner() {
     </div>
     <div class="stat-card" style="border-left:4px solid #f57f17;cursor:pointer" onclick="openAssignManagerModal()">
       <div class="stat-label">담당자 미지정</div>
-      <div class="stat-value" style="color:#f57f17">${G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&getManagers(c).length===0).length}</div>
+      <div class="stat-value" style="color:#f57f17">${G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&getManagers(c).length===0&&!managerCheckExempt(c)).length}</div>
       <div class="stat-sub">클릭해서 배정</div>
     </div>
     ${(()=>{
@@ -3806,7 +3810,7 @@ function applyBulkManagerChange() {
 
 function openAssignManagerModal() {
   const unassigned = G.clients
-    .filter(c => c.status!=='해지' && c.status!=='폐업' && getManagers(c).length===0)
+    .filter(c => c.status!=='해지' && c.status!=='폐업' && getManagers(c).length===0 && !managerCheckExempt(c))
     .sort((a,b) => a.name.localeCompare(b.name, 'ko'));
   if (!unassigned.length) { toast('담당자 미지정 거래처가 없습니다.','info'); return; }
   showModal(`<div style="max-width:520px;width:90vw">
