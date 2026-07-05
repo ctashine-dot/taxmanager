@@ -577,7 +577,7 @@ const REPORT_TYPE_FILTERS = {
   vat_hak_2:c => c.vatType === '일반' || c.vatType === '간이' || c.vatType === '간세',
   vat_yej:  c => c.taxType === '법인' && c.vatType === '일반',
   corp:     c => c.taxType === '법인',
-  income:   c => c.taxType === '개인' && !getDealTypes(c).includes('성실'),
+  income:   c => (c.taxType === '개인' && !getDealTypes(c).includes('성실')) || (c.taxType === '법인' && c.repIncomeTaxFiling),
   seongsi:  c => c.taxType === '개인' && getDealTypes(c).includes('성실'),
   sajup:    c => c.vatType === '면세',
 };
@@ -916,7 +916,10 @@ function buildContractAreaHTML() {
   const items = avail.flatMap(g=>g.items);
   const sel = window._formData.contracts||[];
   const seongsiOn = window._formData.seongsi ? 'on' : '';
-  return `<div class="contract-chips">${items.map(item=>`<button type="button" class="contract-chip ${sel.includes(item.key)?'on':''}" onclick="toggleContract('${item.key}')">${item.label}</button>`).join('')}<button type="button" class="contract-chip ${seongsiOn}" onclick="window._formData.seongsi=!window._formData.seongsi;this.classList.toggle('on',window._formData.seongsi)">성실신고확인대상</button></div>`;
+  const repInc = window._formData.taxType==='법인'
+    ? `<button type="button" class="contract-chip ${window._formData.repIncomeTaxFiling?'on':''}" onclick="window._formData.repIncomeTaxFiling=!window._formData.repIncomeTaxFiling;this.classList.toggle('on',window._formData.repIncomeTaxFiling)" title="체크 시 대표자 종합소득세 신고리스트에 포함">대표자 소득세신고</button>`
+    : '';
+  return `<div class="contract-chips">${items.map(item=>`<button type="button" class="contract-chip ${sel.includes(item.key)?'on':''}" onclick="toggleContract('${item.key}')">${item.label}</button>`).join('')}<button type="button" class="contract-chip ${seongsiOn}" onclick="window._formData.seongsi=!window._formData.seongsi;this.classList.toggle('on',window._formData.seongsi)">성실신고확인대상</button>${repInc}</div>`;
 }
 
 function availableContracts(vatType, taxType) {
@@ -3993,7 +3996,7 @@ function openForm(id) {
     memo:'',contractDate:'',terminationDate:'',terminationReason:'',
     closureYear:'',closureTaxFiled:false,closureTaxApproved:false,
     jointBiz:false,openDate:'',closeDate:'',route:'세무사',routeDetail:'',incomeCats:[],withholdingType:'월별',
-    repJumin:'',repIncomeTaxFiling:false
+    repJumin:'',repIncomeTaxFiling:false,personalAdjustFee:0
   };
   if (isEdit && !c) { toast('거래처를 찾을 수 없습니다 (이미 삭제되었을 수 있습니다)', 'warning'); return; }
 
@@ -4074,15 +4077,9 @@ function openForm(id) {
     </div>
     <div id="bizno-msg" class="c3" style="font-size:10px;padding-left:4px;margin-top:-4px;min-height:0"></div>
 
-    <div class="c3" id="f-corp-rep" style="display:${c.taxType==='법인'?'grid':'none'};grid-template-columns:1fr auto;gap:10px;align-items:center;background:#eef3ff;border:1px solid #c5d4f5;border-radius:8px;padding:9px 11px">
-      <div class="ff" style="flex-direction:column;align-items:stretch;gap:3px">
-        <label class="ffl">대표자 주민번호</label>
-        <input class="finput" id="f-repJumin" value="${esc(c.repJumin||'')}" placeholder="000000-0000000" oninput="window._formData.repJumin=this.value" style="padding:3px 8px;font-size:12px">
-      </div>
-      <label class="ff" style="cursor:pointer;white-space:nowrap;gap:6px">
-        <input type="checkbox" id="f-repIncomeTax" ${c.repIncomeTaxFiling?'checked':''} onchange="window._formData.repIncomeTaxFiling=this.checked" style="width:15px;height:15px;flex-shrink:0;cursor:pointer;accent-color:#4f8ef7">
-        <span class="ffl">대표자 종소세 신고</span>
-      </label>
+    <div class="c3" id="f-corp-rep" style="display:${c.taxType==='법인'?'flex':'none'};align-items:center;gap:8px;background:#eef3ff;border:1px solid #c5d4f5;border-radius:8px;padding:9px 11px">
+      <label class="ffl" style="white-space:nowrap">대표자 주민번호</label>
+      <input class="finput" id="f-repJumin" value="${esc(c.repJumin||'')}" placeholder="000000-0000000" oninput="window._formData.repJumin=this.value" style="flex:1;padding:3px 8px;font-size:12px">
     </div>
 
     <div class="ff">
@@ -4154,6 +4151,10 @@ function openForm(id) {
         <label class="ffl">${c.taxType==='법인'?'법인':'개인'}조정료</label>
         <input type="number" class="finput" id="f-adjustFee" value="${c.adjustFee||''}" placeholder="0" style="padding:3px 8px;font-size:12px" oninput="window._formData.adjustFee=Number(this.value)||0">
       </div>
+      ${c.taxType==='법인'?`<div class="ff" style="flex-direction:column;align-items:stretch;gap:2px">
+        <label class="ffl">개인조정료 <span style="font-weight:400;color:#aaa">(대표자 종소세)</span></label>
+        <input type="number" class="finput" id="f-personalAdjustFee" value="${c.personalAdjustFee||''}" placeholder="0" style="padding:3px 8px;font-size:12px" oninput="window._formData.personalAdjustFee=Number(this.value)||0">
+      </div>`:''}
       <div class="ff" style="flex-direction:column;align-items:stretch;gap:2px">
         <label class="ffl">성실신고확인비용</label>
         <input type="number" class="finput" id="f-seongsiConfirmFee" value="${c.seongsiConfirmFee||''}" placeholder="0" style="padding:3px 8px;font-size:12px" oninput="window._formData.seongsiConfirmFee=Number(this.value)||0">
@@ -4264,7 +4265,10 @@ window.onFormSelect = function(field, val) {
     const lbl = document.getElementById('f-jumin-label');
     if (lbl) lbl.textContent = val === '법인' ? '법인번호' : '주민번호';
     const cr = document.getElementById('f-corp-rep');
-    if (cr) cr.style.display = val === '법인' ? 'grid' : 'none';
+    if (cr) cr.style.display = val === '법인' ? 'flex' : 'none';
+    // 수임계약항목 다시 그려 '대표자 소득세신고' 칩 표시/숨김 갱신
+    const ca = document.getElementById('contract-area');
+    if (ca) ca.innerHTML = buildContractAreaHTML();
   }
   if (field==='taxType'||field==='vatType') {
     // remove incompatible contracts
@@ -8915,8 +8919,8 @@ function openRepIncomeTaxTool() {
     <label style="display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid #f4f4f4;cursor:pointer">
       <input type="checkbox" class="rep-cb" data-i="${i}" ${checked?'checked':''}>
       <div style="flex:1;min-width:0">
-        <div style="color:#c62828"><b>${esc(x.ph.name)}</b> <span style="font-size:11px;color:#888">${esc(x.ph.rep||'-')}${x.ph.jumin?' · 주민번호 있음':''}${(x.ph.status&&x.ph.status!=='정상')?' · '+esc(x.ph.status):''}</span> <span style="font-size:11px;color:#e53935">← 삭제 대상</span></div>
-        <div style="font-size:11px;color:#3949ab">↳ 법인 <b>${esc(x.corp.name)}</b> (대표 ${esc(x.corp.rep||'')})에 대표자 종소세 체크</div>
+        <div style="color:#c62828"><b>${esc(x.ph.name)}</b> <span style="font-size:11px;color:#888">${esc(x.ph.rep||'-')}${x.ph.jumin?' · 주민번호 있음':''}${(x.ph.adjustFee||x.ph.feeJojung)?` · 조정료 ${Number(x.ph.adjustFee||x.ph.feeJojung).toLocaleString()}`:''}${(x.ph.status&&x.ph.status!=='정상')?' · '+esc(x.ph.status):''}</span> <span style="font-size:11px;color:#e53935">← 삭제 대상</span></div>
+        <div style="font-size:11px;color:#3949ab">↳ 법인 <b>${esc(x.corp.name)}</b> (대표 ${esc(x.corp.rep||'')})에 대표자 소득세신고 체크${(x.ph.adjustFee||x.ph.feeJojung)?' + 개인조정료 이관':''}</div>
       </div>
     </label>`;
   const secName = nameMatches.length
@@ -8947,14 +8951,18 @@ window.repIncomeTaxApply = function() {
   if (!sel.length) { toast('선택된 항목이 없습니다','info',2000); return; }
   if (!confirm(`${sel.length}건: 법인에 '대표자 종소세 신고' 체크 + 대표자 주민번호 반영 후, 중복 등록된 대표자 개인 항목을 목록에서 삭제합니다. 계속할까요?`)) return;
   const delIds = new Set();
+  let feeMoved = 0;
   sel.forEach(({corp, ph}) => {
     corp.repIncomeTaxFiling = true;
     if (!corp.repJumin && ph.jumin) corp.repJumin = ph.jumin;
+    // 대표자 개인항목의 조정료를 법인 '개인조정료'로 옮김(없을 때만)
+    const phAdj = Number(ph.adjustFee || ph.feeJojung || 0);
+    if (phAdj > 0 && !corp.personalAdjustFee) { corp.personalAdjustFee = phAdj; feeMoved++; }
     delIds.add(ph.id);
   });
   G.clients = G.clients.filter(c => !delIds.has(c.id));
   saveToLS(); renderClients(); closeModal();
-  toast(`${sel.length}개 법인 대표자 종소세 처리 · 중복 ${delIds.size}건 삭제`, 'success', 3500);
+  toast(`${sel.length}개 법인 대표자 종소세 처리 · 개인조정료 ${feeMoved}건 이관 · 중복 ${delIds.size}건 삭제`, 'success', 3800);
 };
 
 function openImportModal() {
