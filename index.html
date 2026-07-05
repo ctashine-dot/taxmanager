@@ -5182,7 +5182,7 @@ function renderJulgae() {
       if (!prevMap1[cid]) prevMap1[cid] = {revenue:0, salesAmount:0, fee:0};
       prevMap1[cid].revenue     += (v&&v.revenue)||0;
       prevMap1[cid].salesAmount += (v&&v.salesAmount)||0;
-      prevMap1[cid].fee         += ((v&&v.fee)||0) + (isSeongsiType ? ((v&&v.feeSeongsi)||0) : 0);
+      prevMap1[cid].fee         += ((v&&v.fee)||0) + ((period && period.reportType==='seongsi') ? ((v&&v.feeSeongsi)||0) : 0);
     });
   });
   prevPeriods2.forEach(pp => {
