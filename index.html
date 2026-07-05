@@ -1237,7 +1237,7 @@ function filteredClients() {
     // 대표업체: groupMain=true 인 멤버, 없으면 수임일자 가장 빠른 멤버
     const lead = members.find(m=>m.groupMain) ||
       [...members].sort((a,b)=>csk(a).localeCompare(csk(b))||a.name.localeCompare(b.name,'ko'))[0];
-    groupSortKeys[k] = { dateKey: csk(lead), lead: lead.name, mainId: lead.id, dealRank: Math.min(...members.map(m=>dealSortRankForClient(m))) };
+    groupSortKeys[k] = { dateKey: csk(lead), lead: lead.name, mainId: lead.id, leadGrade: lead.grade||'', dealRank: Math.min(...members.map(m=>dealSortRankForClient(m))) };
   });
 
   // 검색 중일 때는 일치도 높은 순으로 정렬
@@ -1278,6 +1278,17 @@ function filteredClients() {
       if (field === 'f') { av = a.fee||0; bv = b.fee||0; return dir==='asc' ? av-bv : bv-av; }
       if (field === 'm') { av = getManagers(a)[0]||''; bv = getManagers(b)[0]||''; return dir==='asc' ? av.localeCompare(bv,'ko') : bv.localeCompare(av,'ko'); }
       if (field === 'o') { av = a.taxOffice||''; bv = b.taxOffice||''; return dir==='asc' ? av.localeCompare(bv,'ko') : bv.localeCompare(av,'ko'); }
+      if (field === 'g') {
+        // 등급 정렬: 그룹은 대표(공동사업자 대표 포함)의 등급 기준, 그룹 단위 유지·대표 먼저
+        const gr = x => ({A:0,B:1,C:2}[x] ?? 3);
+        const ka = getGroupKey(a), kb = getGroupKey(b);
+        const ra = gr(groupSortKeys[ka]?.leadGrade), rb = gr(groupSortKeys[kb]?.leadGrade);
+        if (ra !== rb) return dir==='asc' ? ra-rb : rb-ra;
+        if (ka !== kb) return (groupSortKeys[ka]?.lead||a.name||'').localeCompare(groupSortKeys[kb]?.lead||b.name||'','ko');
+        const mainId = groupSortKeys[ka]?.mainId;
+        if (a.id === mainId) return -1; if (b.id === mainId) return 1;
+        return (a.name||'').localeCompare(b.name||'','ko');
+      }
       return 0;
     });
     return _filterJuminGroups(list, getGroupKey);
@@ -2283,7 +2294,7 @@ function renderClients() {
       <span style="font-size:11px;color:#888;font-weight:600">정렬</span>
       ${(()=>{
         const sf = (G.clientSort||{}).field||'d', sd = (G.clientSort||{}).dir||'asc';
-        const opts = [{k:'c',l:'수임일자'},{k:'n',l:'업체명'},{k:'r',l:'대표자'},{k:'d',l:'수임유형'},{k:'f',l:'수수료'},{k:'m',l:'담당자'}];
+        const opts = [{k:'c',l:'수임일자'},{k:'n',l:'업체명'},{k:'r',l:'대표자'},{k:'d',l:'수임유형'},{k:'f',l:'수수료'},{k:'m',l:'담당자'},{k:'g',l:'등급'}];
         const btns = opts.map(({k,l})=>{
           const active = sf===k;
           const nextDir = active && sd==='asc' ? 'desc' : 'asc';
