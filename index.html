@@ -579,7 +579,8 @@ const REPORT_TYPE_FILTERS = {
   corp:     c => c.taxType === '법인',
   income:   c => (c.taxType === '개인' && !getDealTypes(c).includes('성실')) || (c.taxType === '법인' && c.repIncomeTaxFiling),
   seongsi:  c => c.taxType === '개인' && getDealTypes(c).includes('성실'),
-  sajup:    c => c.vatType === '면세',
+  // 사업장현황신고: 면세사업자 중 기장·고문·성실·신고대리 대상 (사업소득자·종소세대리는 원칙적으로 제외)
+  sajup:    c => c.vatType === '면세' && getDealTypes(c).some(d => ['기장','고문','성실','신고대리'].includes(d)) && !getDealTypes(c).some(d => ['사업소득자','종소세대리'].includes(d)),
 };
 
 // ── 보수표 기본값 (세무사보수기준표 2023 기준) ──────────────────────────────
@@ -1117,10 +1118,16 @@ function buildClientGroupMap(allClients) {
 function _onDealTypeChange(value) {
   window._formData.dealType = value;
   window._formData.dealTypes = value ? [value] : [];
-  if (!window._formIsNew) return;
-  window._formData.contracts = getDefaultContracts(value, window._formData.taxType, window._formData.vatType);
-  const a = document.getElementById('contract-area');
-  if (a) a.innerHTML = buildContractAreaHTML();
+  const rebuild = () => {
+    window._formData.contracts = getDefaultContracts(value, window._formData.taxType, window._formData.vatType);
+    const a = document.getElementById('contract-area');
+    if (a) a.innerHTML = buildContractAreaHTML();
+  };
+  if (window._formIsNew) { rebuild(); return; }
+  // 기존 거래처: 새 수임유형의 기본 수임계약항목과 다르면 재설정 여부 확인
+  const cur  = [...(window._formData.contracts||[])].sort().join(',');
+  const next = [...getDefaultContracts(value, window._formData.taxType, window._formData.vatType)].sort().join(',');
+  if (cur !== next && confirm(`수임유형을 '${value}'(으)로 변경했습니다.\n수임계약항목을 이 유형에 맞게 재설정할까요?\n(예: 종소세대리·사업소득자는 사업장현황신고 제외)`)) rebuild();
 }
 
 function _checkFeeWarning() {
@@ -3576,7 +3583,13 @@ function updateClientField(id, field, value, _skipCheck) {
     }
   }
   if (field==='fee') { setMonthlyFee(id, Number(value)||0, currentYM()); return; } // 적용월 이력 일관 처리
-  if (field==='dealType') { c.dealType=value; c.dealTypes=[value]; }
+  if (field==='dealType') {
+    c.dealType=value; c.dealTypes=[value];
+    // 새 수임유형의 기본 수임계약항목과 다르면 재설정 여부 확인
+    const cur  = [...(c.contracts||[])].sort().join(',');
+    const next = [...getDefaultContracts(value, c.taxType, c.vatType)].sort().join(',');
+    if (cur !== next && confirm(`수임계약항목을 '${value}'에 맞게 재설정할까요?\n(예: 종소세대리·사업소득자는 사업장현황신고 제외)`)) c.contracts = getDefaultContracts(value, c.taxType, c.vatType);
+  }
   else if (field==='manager') { c.manager=value; c.managers=value?[value]:[]; }
   else c[field] = value;
   saveToLS();
