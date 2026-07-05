@@ -5102,6 +5102,7 @@ function unlinkIncomeGroupAll(key) {
 function renderJulgae() {
   const _jsy = (G.currentTab==='julgae' && !window._noJScrollKeep) ? window.scrollY : 0;
   window._noJScrollKeep = false;
+  try {
   const periods = G.periods;
   const idx = Math.min(G.julgaePeriodIdx, Math.max(0, periods.length - 1));
   const period = periods[idx];
@@ -5759,7 +5760,7 @@ function renderJulgae() {
       <th style="width:44px;text-align:center;padding:3px;${_hcStyle('j_link')}"><div style="display:flex;align-items:center"><span style="font-size:11px">자료링크</span>${_hcBtn('j_link')}</div></th>
     </tr></thead>
     <tbody>
-    ${renderItems.map((item, i) => {
+    ${renderItems.map((item, i) => { try {
       if (item.isSeparator) return `<tr><td colspan="${totalCols}" style="background:#ede7f6;padding:5px 14px;font-size:12px;font-weight:700;color:#4a148c;letter-spacing:.5px;border-top:2px solid #ce93d8">${esc(item.label)}</td></tr>`;
       if (item.isGroupTotal || item.isGroupSummary) {
         const gc = item.groupClients;
@@ -5995,6 +5996,7 @@ function renderJulgae() {
           }
         </td>
       </tr>`;
+    } catch(_e){ console.error('신고리스트 행 표시 오류', item, _e); const _nm=(item&&item.c&&item.c.name)||(item&&item.groupClients&&item.groupClients[0]&&item.groupClients[0].name)||'?'; return `<tr><td colspan="${totalCols}" style="background:#fff3f3;color:#c62828;padding:7px 12px;font-size:12px">⚠ 표시 오류: ${esc(String(_nm))} — ${esc(String((_e&&_e.message)||''))}</td></tr>`; }
     }).join('')}
     ${renderItems.length===0?`<tr><td colspan="${totalCols}" style="text-align:center;padding:40px;color:#aaa">해당 조건의 거래처가 없습니다</td></tr>`:''}
     </tbody>
@@ -6031,6 +6033,11 @@ function renderJulgae() {
   ` : ''}
   `}`;
   initJulgaeDragScroll();
+  } catch(_jerr){
+    console.error('renderJulgae 오류', _jerr);
+    const pj = document.getElementById('page-julgae');
+    if (pj) pj.innerHTML = `<div style="padding:24px;color:#c62828;font-size:14px;line-height:1.7">⚠ 신고 및 결재 화면을 표시하는 중 오류가 발생했습니다.<br><span style="font-family:monospace;font-size:12px">${esc(String((_jerr&&_jerr.message)||_jerr))}</span><br><span style="font-size:12px;color:#888">개발자 콘솔(F12)에서 상세를 확인하거나, 담당자에게 이 메시지를 알려주세요.</span></div>`;
+  }
   if (_jsy) requestAnimationFrame(()=>window.scrollTo(0, _jsy));
 }
 
