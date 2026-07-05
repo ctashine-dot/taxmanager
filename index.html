@@ -1051,7 +1051,7 @@ function handleActualAmount(clientId, ym, input) {
       <div style="display:flex;flex-direction:column;gap:8px">
         <button onclick="window._applyActual(false)" class="btn-primary" style="padding:10px;text-align:left">${diff>0?`📌 차액 ${diff.toLocaleString()}원을 미수금으로 기록`:`💰 ${actualAmt.toLocaleString()}원으로 수납 처리`}</button>
         <button onclick="window._applyActual(true)" style="padding:10px;border-radius:8px;border:1px solid #e0e0e0;background:#f5f5f5;cursor:pointer;font-family:inherit;text-align:left">✏ 수수료를 ${actualAmt.toLocaleString()}원으로 변경 후 수납</button>
-        <button onclick="closeModal()" style="padding:8px;border-radius:8px;border:1px solid #e0e0e0;background:#fff;cursor:pointer;font-family:inherit;font-size:12px;color:#888">취소</button>
+        <button onclick="navBack()" style="padding:8px;border-radius:8px;border:1px solid #e0e0e0;background:#fff;cursor:pointer;font-family:inherit;font-size:12px;color:#888">취소</button>
       </div>
     </div>
   </div>`);
@@ -1535,7 +1535,7 @@ function showIncome26Unmatched() {
   <div style="padding:12px 16px;border-top:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center">
     <span style="font-size:12px;color:#888">생성 후 종소세 신고 리스트에 자동 반영됩니다</span>
     <div style="display:flex;gap:8px">
-      <button class="btn-secondary" onclick="closeModal()">닫기</button>
+      <button class="btn-secondary" onclick="navBack()">닫기</button>
       <button style="padding:8px 18px;border-radius:8px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#1565c0;font-size:13px;cursor:pointer;font-family:inherit;font-weight:600" onclick="exportIncome26Unmatched()">↓ 엑셀 다운로드</button>
       <button style="padding:8px 18px;border-radius:8px;border:none;background:#e53935;color:#fff;font-size:13px;cursor:pointer;font-family:inherit;font-weight:600" onclick="createIncome26UnmatchedClients()">일괄 생성 (${list.length}개)</button>
     </div>
@@ -1638,7 +1638,7 @@ function showMissingClientsModal() {
   }).join('')}
   </div>
   <div style="padding:12px 16px;border-top:1px solid #f0f0f0;display:flex;justify-content:flex-end">
-    <button class="btn-secondary" onclick="closeModal()">닫기</button>
+    <button class="btn-secondary" onclick="navBack()">닫기</button>
   </div>
   </div></div>`);
 }
@@ -3222,7 +3222,7 @@ function openGroupConnectModal(id) {
       <input class="finput" id="gc-reason" placeholder="예: 동일 대표자, 계열사, 가족 법인 등">
     </div>
     <div class="btn-row" style="margin-top:14px">
-      <button class="btn-secondary" onclick="closeModal()">취소</button>
+      <button class="btn-secondary" onclick="navBack()">취소</button>
       <button class="btn-primary" onclick="doGroupConnect()">🔗 연결</button>
     </div>
   </div>
@@ -3351,7 +3351,7 @@ function renderGroupEditModal() {
     </div>
     <div id="ge-search-results" style="max-height:150px;overflow-y:auto;margin-bottom:14px;border-radius:8px"></div>
     <div class="btn-row" style="margin-top:4px">
-      <button class="btn-secondary" onclick="closeModal()">취소</button>
+      <button class="btn-secondary" onclick="navBack()">취소</button>
       <button class="btn-primary" onclick="doGroupEdit()">💾 저장</button>
     </div>
   </div></div>`);
@@ -3632,15 +3632,15 @@ function openQuickSheet(id) {
   showModal(`<div style="max-width:320px;width:100%">
     <div class="modal-header"><h3>${esc(c.name)}</h3><button class="close-btn" onclick="navBack()">✕</button></div>
     <div class="modal-body" style="gap:10px">
-      <button onclick="closeModal();setTimeout(()=>openStatusModal(${id}),50)"
+      <button onclick="navReplace(()=>openStatusModal(${id}))"
         style="width:100%;padding:14px;border-radius:10px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#1565c0;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left">
         📋 상태 변경 &nbsp;<span style="font-size:12px;font-weight:400;color:#555">현재: ${esc(c.status||'-')}</span>
       </button>
-      <button onclick="toggleCMS(${id});closeModal()"
+      <button onclick="toggleCMS(${id});navBack()"
         style="width:100%;padding:14px;border-radius:10px;border:1.5px solid ${cmsBdr};background:${cmsBg};color:${cmsClr};font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left">
         🏦 CMS ${c.cms?'해지':'가입'} &nbsp;<span style="font-size:12px;font-weight:400;color:#555">현재: ${c.cms?'가입':'미가입'}</span>
       </button>
-      <button onclick="closeModal()"
+      <button onclick="navBack()"
         style="width:100%;padding:12px;border-radius:10px;border:1.5px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:14px;cursor:pointer;font-family:inherit">
         취소
       </button>
@@ -3716,7 +3716,7 @@ function openStatusModal(id) {
         <div style="font-size:11px;color:#888;margin-top:6px">해지·휴업·폐업 사유가 발생한 날짜를 입력하세요</div>
       </div>
       <div style="display:flex;gap:8px">
-        <button onclick="closeModal()" style="flex:1;padding:10px;border-radius:8px;border:1.5px solid #e0e0e0;background:#f5f5f5;font-size:14px;cursor:pointer;font-family:inherit">취소</button>
+        <button onclick="navBack()" style="flex:1;padding:10px;border-radius:8px;border:1.5px solid #e0e0e0;background:#f5f5f5;font-size:14px;cursor:pointer;font-family:inherit">취소</button>
         <button onclick="applyStatusChange(${id})" style="flex:2;padding:10px;border-radius:8px;border:none;background:#4f8ef7;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">변경 저장</button>
       </div>
     </div>
@@ -4988,20 +4988,20 @@ function openIncomeGroupLink(clientId, forceJoint) {
     const header = isSuggest ? `<div style="font-size:11px;color:#00897b;font-weight:700;margin-bottom:6px">💡 추천 공동사업자 후보 (클릭하면 연결됩니다)</div>` : '';
     el.innerHTML = header + results.map(tc => {
         const already = tc.incomeGroupKey && tc.incomeGroupKey===curKey;
-        return `<div onclick="linkIncomeGroup(${clientId},${tc.id},document.getElementById('iglink-joint')?.checked);closeModal()" style="padding:9px 12px;border-radius:8px;cursor:pointer;border:1px solid ${already?'#e1bee7':'#f0f0f0'};margin-bottom:4px;background:${already?'#f3e5f5':'#fafbff'}" onmouseover="this.style.background='#e8f0fe'" onmouseout="this.style.background='${already?'#f3e5f5':'#fafbff'}'">
+        return `<div onclick="linkIncomeGroup(${clientId},${tc.id},document.getElementById('iglink-joint')?.checked);navBack()" style="padding:9px 12px;border-radius:8px;cursor:pointer;border:1px solid ${already?'#e1bee7':'#f0f0f0'};margin-bottom:4px;background:${already?'#f3e5f5':'#fafbff'}" onmouseover="this.style.background='#e8f0fe'" onmouseout="this.style.background='${already?'#f3e5f5':'#fafbff'}'">
           <div style="font-weight:700;font-size:13px">${esc(tc.name)}${already?'<span style="font-size:10px;color:#7b1fa2;margin-left:6px">✓ 이미 같은 그룹</span>':''}</div>
           <div style="font-size:11px;color:#888">${esc(tc.rep||'-')} · ${getManagers(tc).join(', ')||'-'}${tc.incomeGroupKey&&!already?' <span style="color:#7b1fa2">[그룹:'+esc(tc.incomeGroupKey)+']</span>':''}</div>
         </div>`;
       }).join('');
   };
   modal.innerHTML = `
-  <div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)closeModal()">
+  <div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)navBack()">
     <div style="background:#fff;border-radius:16px;padding:24px;width:min(480px,95vw);max-height:85vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.25)">
       <div style="font-size:16px;font-weight:800;margin-bottom:4px">👤 개인 그룹 연결</div>
       <div style="font-size:12px;color:#888;margin-bottom:14px">${esc(client.name)} (${esc(client.rep||'')}) — 공동사업자/동일인의 다른 사업체를 골라 연결합니다</div>
       ${curKey?`<div style="margin-bottom:12px;padding:8px 12px;background:#f3e5f5;border-radius:8px;font-size:12px;color:#6a1b9a;display:flex;justify-content:space-between;align-items:center">
         <span>현재 그룹 키: <b>${esc(curKey)}</b></span>
-        <button onclick="unlinkIncomeGroup(${clientId});closeModal()" style="padding:3px 10px;border-radius:6px;border:1px solid #e53935;background:#ffebee;color:#e53935;cursor:pointer;font-family:inherit;font-size:11px">그룹 해제</button>
+        <button onclick="unlinkIncomeGroup(${clientId});navBack()" style="padding:3px 10px;border-radius:6px;border:1px solid #e53935;background:#ffebee;color:#e53935;cursor:pointer;font-family:inherit;font-size:11px">그룹 해제</button>
       </div>`:''}
       <label style="display:flex;align-items:center;gap:7px;margin-bottom:10px;padding:8px 12px;background:#e0f2f1;border:1px solid #80cbc4;border-radius:8px;cursor:pointer;font-size:13px;color:#00695c;font-weight:600">
         <input id="iglink-joint" type="checkbox" ${(forceJoint||client.groupJoint)?'checked':''} style="width:16px;height:16px;cursor:pointer">
@@ -5011,7 +5011,7 @@ function openIncomeGroupLink(clientId, forceJoint) {
         oninput="(function(){const v=document.getElementById('iglink-q').value;window._iglinkRender&&window._iglinkRender(v);})()"
         style="width:100%;padding:9px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:10px">
       <div id="iglink-results" style="max-height:240px;overflow-y:auto"></div>
-      <button onclick="closeModal()" style="margin-top:12px;width:100%;padding:10px;border-radius:10px;border:1px solid #e0e0e0;background:#f5f5f5;cursor:pointer;font-family:inherit;font-size:13px">닫기</button>
+      <button onclick="navBack()" style="margin-top:12px;width:100%;padding:10px;border-radius:10px;border:1px solid #e0e0e0;background:#f5f5f5;cursor:pointer;font-family:inherit;font-size:13px">닫기</button>
     </div>
   </div>`;
   window._iglinkRender = renderResults;
@@ -6361,7 +6361,7 @@ function openUnpaidSMSBuilder() {
       <textarea id="unpaid-sms-area" readonly style="width:100%;height:300px;border:1px solid #e0e0e0;border-radius:8px;padding:10px;font-size:12px;font-family:inherit;resize:vertical;line-height:1.6">${combined.replace(/</g,'&lt;')}</textarea>
       <div style="display:flex;gap:8px;margin-top:10px">
         <button onclick="(()=>{const el=document.getElementById('unpaid-sms-area');el.select();document.execCommand('copy');toast('복사됨','success')})()" style="flex:1;padding:8px;border-radius:8px;border:none;background:#4f8ef7;color:#fff;font-weight:700;cursor:pointer;font-family:inherit">📋 전체 복사</button>
-        <button onclick="closeModal()" style="padding:8px 16px;border-radius:8px;border:1.5px solid #e0e0e0;background:#f5f5f5;cursor:pointer;font-family:inherit">닫기</button>
+        <button onclick="navBack()" style="padding:8px 16px;border-radius:8px;border:1.5px solid #e0e0e0;background:#f5f5f5;cursor:pointer;font-family:inherit">닫기</button>
       </div>
     </div>
   </div>`);
@@ -6462,7 +6462,7 @@ function openBulkFeeIncrease() {
       <div style="font-size:12px;color:#888;margin-bottom:14px">※ fee 필드(기장·고문·성실 월정수수료)에 적용됩니다.</div>
       <div style="display:flex;gap:8px">
         <button onclick="applyBulkFeeIncrease()" style="flex:1;padding:10px;border-radius:8px;border:none;background:#9c27b0;color:#fff;font-weight:700;cursor:pointer;font-family:inherit">인상 적용</button>
-        <button onclick="closeModal()" style="padding:10px 16px;border-radius:8px;border:1.5px solid #e0e0e0;background:#f5f5f5;cursor:pointer;font-family:inherit">취소</button>
+        <button onclick="navBack()" style="padding:10px 16px;border-radius:8px;border:1.5px solid #e0e0e0;background:#f5f5f5;cursor:pointer;font-family:inherit">취소</button>
       </div>
     </div>
   </div>`);
@@ -6751,7 +6751,7 @@ function openEnrollModal(pKey) {
         <div style="font-size:18px;font-weight:800">업체 선택</div>
         <div style="font-size:12px;color:#aaa;margin-top:2px">${esc(period.label)} — 대상 ${pool.length}개 업체</div>
       </div>
-      <button onclick="closeModal()" style="font-size:22px;border:none;background:none;cursor:pointer;color:#aaa">✕</button>
+      <button onclick="navBack()" style="font-size:22px;border:none;background:none;cursor:pointer;color:#aaa">✕</button>
     </div>
 
     <div style="display:flex;flex-wrap:wrap;gap:4px;padding:8px 10px;background:#f8f9ff;border-radius:10px;margin-bottom:10px;align-items:center">
@@ -6782,7 +6782,7 @@ function openEnrollModal(pKey) {
       <span id="enroll_count" style="font-size:13px;color:#666;align-self:center">
         ${enrolled.size > 0 ? enrolled.size + '개 선택됨' : '(전체 포함)'}
       </span>
-      <button onclick="closeModal()" style="padding:9px 20px;border-radius:10px;border:1.5px solid #e0e0e0;background:#f5f5f5;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">취소</button>
+      <button onclick="navBack()" style="padding:9px 20px;border-radius:10px;border:1.5px solid #e0e0e0;background:#f5f5f5;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">취소</button>
       <button onclick="saveEnrollment('${pKey}')" class="btn-primary" style="padding:9px 20px">저장</button>
     </div>
   </div>`);
@@ -7137,7 +7137,7 @@ function openAdHocFeeModal(clientId) {
       </div>
       <div style="display:flex;gap:8px">
         <button onclick="saveAdHocFee()" class="btn-primary" style="flex:1;padding:10px">청구 추가</button>
-        <button onclick="closeModal()" style="padding:10px 16px;border-radius:8px;border:1px solid #e0e0e0;background:#fff;cursor:pointer;font-family:inherit">취소</button>
+        <button onclick="navBack()" style="padding:10px 16px;border-radius:8px;border:1px solid #e0e0e0;background:#fff;cursor:pointer;font-family:inherit">취소</button>
       </div>
     </div>
   </div>`);
@@ -7673,7 +7673,7 @@ function openAddPeriod() {
       </div>
     </div>
     <div class="btn-row" style="margin-top:14px">
-      <button class="btn-secondary" onclick="closeModal()">취소</button>
+      <button class="btn-secondary" onclick="navBack()">취소</button>
       <button class="btn-primary" onclick="savePeriod()">추가</button>
     </div>
   </div></div>`);
@@ -8668,7 +8668,7 @@ function _showSyncModal(updates, unmatched, matched) {
       <div style="padding:10px 14px;display:flex;gap:8px;border-top:1px solid #e0e0e0;flex-wrap:wrap">
         <button onclick="_syncDownloadCSV(window._syncUnmatched,'미매칭_업체.csv')" style="padding:9px 12px;border-radius:8px;border:1.5px solid #e0e0e0;background:#f5f5f5;font-size:12px;cursor:pointer;font-family:inherit">⬇ 미매칭 다운로드</button>
         <button onclick="_syncDownloadCSV(window._syncMatched,'동일_업체.csv')" style="padding:9px 12px;border-radius:8px;border:1.5px solid #e0e0e0;background:#f5f5f5;font-size:12px;cursor:pointer;font-family:inherit">⬇ 동일 다운로드</button>
-        <button onclick="closeModal()" style="flex:1;padding:9px;border-radius:8px;border:1.5px solid #e0e0e0;background:#f5f5f5;font-size:13px;cursor:pointer;font-family:inherit">취소</button>
+        <button onclick="navBack()" style="flex:1;padding:9px;border-radius:8px;border:1.5px solid #e0e0e0;background:#f5f5f5;font-size:13px;cursor:pointer;font-family:inherit">취소</button>
         <button onclick="_applySyncChanges()" style="flex:2;padding:9px;border-radius:8px;border:none;background:#1565c0;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">✓ ${updates.length}개 적용</button>
       </div>
     </div>
@@ -8921,7 +8921,7 @@ function openRepIncomeTaxTool() {
         적용하면 해당 <b>법인에 '대표자 종소세 신고' 체크</b> + 대표자 주민번호 반영, <b>선택한 개인 항목은 삭제</b>됩니다.
       </div>
       ${body}
-      ${matches.length?`<div class="btn-row" style="margin-top:14px"><button class="btn-secondary" onclick="closeModal()">취소</button><button class="btn-primary" onclick="repIncomeTaxApply()">✓ 대표자 종소세 체크 + 선택 삭제</button></div>`:''}
+      ${matches.length?`<div class="btn-row" style="margin-top:14px"><button class="btn-secondary" onclick="navBack()">취소</button><button class="btn-primary" onclick="repIncomeTaxApply()">✓ 대표자 종소세 체크 + 선택 삭제</button></div>`:''}
     </div>
   </div>`);
 }
@@ -9078,7 +9078,7 @@ function showImportPreview() {
     </div>
     ${rows.length>8?`<div style="font-size:11px;color:#aaa;margin-bottom:8px">...외 ${rows.length-8}행</div>`:''}`}
     <div class="btn-row" style="margin-top:4px">
-      <button class="btn-secondary" onclick="closeModal()">취소</button>
+      <button class="btn-secondary" onclick="navBack()">취소</button>
       <button class="btn-primary" onclick="doImport()" ${mappedFields.length===0?'disabled style="opacity:.5"':''}>
         📥 ${rows.length}개 가져오기
       </button>
@@ -11095,13 +11095,13 @@ function openClientNotes(id) {
       <div style="font-size:12px;font-weight:700;color:#00695c;margin-bottom:6px">👥 공동사업자 묶기</div>
       ${_grpMembers.length>1
         ? `<div style="font-size:11px;color:#00695c;margin-bottom:8px">현재 공동사업자 ${_grpMembers.length}곳: ${_grpMembers.map(m=>esc(m.name)+' ('+esc(m.rep||'-')+')').join(', ')}</div>
-           <button onclick="unlinkIncomeGroupAll('${_igk}');closeModal()" style="width:100%;padding:8px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;${_btnUnlink}">🔓 공동사업자 풀기 (개별 분리)</button>`
+           <button onclick="unlinkIncomeGroupAll('${_igk}');navBack()" style="width:100%;padding:8px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;${_btnUnlink}">🔓 공동사업자 풀기 (개별 분리)</button>`
         : _autoBiz
           ? `<div style="font-size:11px;color:#00695c">같은 <b>사업자번호</b>의 다른 사업자가 있어 신고리스트(종소세·성실)에서 <b>공동사업자</b>로 자동 묶입니다. (자동 묶음이라 풀기는 사업자번호를 수정해야 합니다)</div>`
         : _autoJum
           ? `<div style="font-size:11px;color:#6a1b9a">같은 <b>주민번호</b>의 다른 사업장이 있어 소득세·종소세에서 <b>동일인</b>으로 자동 묶입니다.</div>`
           : `<div style="font-size:11px;color:#888;margin-bottom:8px">같은 사업장을 공동 운영하는(사업자번호 미입력 등) 다른 사업자와 연결합니다.</div>
-             <button onclick="closeModal();openIncomeGroupLink(${id},true)" style="width:100%;padding:8px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;${_btnJoin}">🔗 공동사업자 연결(묶기)</button>`}
+             <button onclick="navReplace(()=>openIncomeGroupLink(${id},true))" style="width:100%;padding:8px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:700;${_btnJoin}">🔗 공동사업자 연결(묶기)</button>`}
     </div>`;
   showModal(`<div style="max-width:520px">
   <div class="modal-header"><h3>📝 ${esc(c.name)} — 메모/이력</h3><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end"><button onclick="navReplace(()=>openClientFilingHistory(${id}))" style="padding:4px 12px;background:#e8f0fe;color:#1565c0;border:1px solid #c5cae9;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">📋 신고이력</button><button onclick="navReplace(()=>openForm(${id}))" style="padding:4px 12px;background:#f0f4ff;color:#4f8ef7;border:1px solid #c5cae9;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">✏ 거래처 수정</button>${G.currentTab==='julgae'?`<button onclick="closeModal();openJulgaeListAdd(${id})" style="padding:4px 12px;background:#f3e5f5;color:#6a1b9a;border:1px solid #ce93d8;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">➕ 리스트 추가</button><button onclick="removeClientFromJulgaeList(${id})" style="padding:4px 12px;background:#fdecea;color:#c62828;border:1px solid #ef9a9a;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">🗑 리스트 제외</button>`:''}<button class="close-btn" onclick="navBack()">✕</button></div></div>
@@ -11596,7 +11596,7 @@ function openFeeRaiseHelper() {
     <div id="raise-preview" style="max-height:300px;overflow-y:auto;border:1px solid #f0f0f0;border-radius:8px"></div>
     <div style="display:flex;gap:8px;margin-top:14px">
       <button onclick="applyFeeRaise()" style="flex:1;padding:11px;background:#e53935;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">⚡ 일괄 적용</button>
-      <button onclick="closeModal()" style="padding:11px 20px;background:#f5f5f5;color:#555;border:none;border-radius:10px;font-size:14px;cursor:pointer;font-family:inherit">취소</button>
+      <button onclick="navBack()" style="padding:11px 20px;background:#f5f5f5;color:#555;border:none;border-radius:10px;font-size:14px;cursor:pointer;font-family:inherit">취소</button>
     </div>
   </div></div>`);
   previewFeeRaise();
@@ -12065,7 +12065,7 @@ function openSettings() {
       </div>
     </div>
     <div style="background:#f8f9ff;border-radius:10px;padding:14px;font-size:12px;color:#555;line-height:2;border:1px dashed #c5cae9" id="settings-preview"></div>
-    <div class="btn-row"><button class="btn-secondary" onclick="closeModal()">취소</button><button class="btn-primary" onclick="saveSettings()">저장</button></div>
+    <div class="btn-row"><button class="btn-secondary" onclick="navBack()">취소</button><button class="btn-primary" onclick="saveSettings()">저장</button></div>
   </div></div>`);
   updateSettingsPreview();
   updateSettingsBadge();
@@ -12294,7 +12294,7 @@ function openBosuTable() {
     </div>
     <div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end">
       <button onclick="resetBosuTable()" class="btn-secondary" style="padding:8px 16px">초기화</button>
-      <button onclick="closeModal()" class="btn-secondary" style="padding:8px 16px">취소</button>
+      <button onclick="navBack()" class="btn-secondary" style="padding:8px 16px">취소</button>
       <button onclick="saveBosuTable()" class="btn-primary" style="padding:8px 16px">저장</button>
     </div>
   </div></div>`);
@@ -12722,7 +12722,7 @@ function openManagerTransferModal() {
       </div>
       <div id="mgr-transfer-count" style="font-size:12px;color:#888;margin-bottom:10px"></div>
       <div style="display:flex;gap:8px">
-        <button onclick="closeModal()" style="flex:1;padding:10px;border-radius:8px;border:1.5px solid #e0e0e0;background:#f5f5f5;font-size:14px;cursor:pointer;font-family:inherit">취소</button>
+        <button onclick="navBack()" style="flex:1;padding:10px;border-radius:8px;border:1.5px solid #e0e0e0;background:#f5f5f5;font-size:14px;cursor:pointer;font-family:inherit">취소</button>
         <button onclick="applyManagerTransfer()" style="flex:2;padding:10px;border-radius:8px;border:none;background:#4f8ef7;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">이동 적용</button>
       </div>
     </div>
@@ -12865,7 +12865,7 @@ function showNoDataModal() {
       </table>
     </div>
     <div style="padding:10px 16px;border-top:1px solid #f0f0f0;display:flex;justify-content:flex-end">
-      <button class="btn-secondary" onclick="closeModal()">닫기</button>
+      <button class="btn-secondary" onclick="navBack()">닫기</button>
     </div>
   </div>`);
 }
@@ -13070,7 +13070,7 @@ function openWithholdingModal() {
     </table>
     </div>
     <div style="font-size:12px;color:#aaa;margin-top:10px;text-align:center">셀을 클릭하면 신고 완료 여부가 자동 저장됩니다</div>
-    <div class="btn-row"><button class="btn-secondary" onclick="closeModal()">닫기</button></div>
+    <div class="btn-row"><button class="btn-secondary" onclick="navBack()">닫기</button></div>
   </div></div>`);
 }
 
@@ -13116,7 +13116,7 @@ function showModal(html) {
   if (!window._navStepping) window._modalStack = [];
   window._navStepping = false;
   const mc = document.getElementById('modal-container');
-  mc.innerHTML = `<div class="overlay" onclick="if(event.target===this)closeModal()">${html}</div>`;
+  mc.innerHTML = `<div class="overlay" onclick="if(event.target===this)navBack()">${html}</div>`;
 }
 function _canCloseModal() {
   if (window._formDataSnapshot !== undefined) {
@@ -13644,7 +13644,7 @@ function openAuditSeongsiReport() {
     </div>
   </div>`;
   document.body.appendChild(ov);
-  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  ov.addEventListener('click', e => { if (e.target === ov) { window._modalStack = []; ov.remove(); } });
 }
 
 const _DUP_MODES = [
@@ -13710,7 +13710,7 @@ function showNameRepDuplicates(mode) {
     </div>
   </div>`;
   document.body.appendChild(ov);
-  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  ov.addEventListener('click', e => { if (e.target === ov) { window._modalStack = []; ov.remove(); } });
 }
 
 function createUnmatchedV1() {
