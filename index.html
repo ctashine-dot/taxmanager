@@ -1499,7 +1499,8 @@ function getMissingFields(c) {
   if (!c.rep) f.push({field:'rep', label:'대표자'});
   if (!c.taxType) f.push({field:'taxType', label:'인격'});
   if (!c.vatType || c.vatType==='선택') f.push({field:'vatType', label:'과세유형'});
-  if (!c.bizNo) f.push({field:'bizNo', label:'사업자번호'});
+  // 사업소득자는 사업자번호가 없을 수 있으므로 누락에서 제외
+  if (!c.bizNo && !getDealTypes(c).includes('사업소득자')) f.push({field:'bizNo', label:'사업자번호'});
   if (!c.contractDate) f.push({field:'contractDate', label:'수임일자'});
   if (!getDealTypes(c).length) f.push({field:'dealTypes', label:'수임유형'});
   return f;
@@ -12902,8 +12903,8 @@ function computeAlerts() {
     }
     if (uncollected>=3) alerts.push({type:'unpaid',label:'장기 미수금',detail:esc(c.name)+' '+uncollected+'개월 미수',color:'#c62828'});
   });
-  // 사업자번호 미입력
-  const noBizNo = G.clients.filter(c=>!c.bizNo&&c.status==='정상').length;
+  // 사업자번호 미입력 (사업소득자는 번호가 없을 수 있어 제외)
+  const noBizNo = G.clients.filter(c=>!c.bizNo&&c.status==='정상'&&!getDealTypes(c).includes('사업소득자')).length;
   if (noBizNo>0) alerts.push({type:'missingBiz',label:'사업자번호 미입력',detail:noBizNo+'개 거래처 사업자번호 미입력',color:'#888'});
   // 메모 알림 날짜
   const todayStr = new Date().toISOString().slice(0,10);
