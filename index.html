@@ -5595,33 +5595,36 @@ function renderJulgae() {
           `</div>${arrow}</div>`;
       }).join('')}
     </div>` : ''}
-  </div>`:''}
-
-  ${prevPeriods1.length > 0 ? (()=>{
-    const open = G._yrCompareOpen !== false;
-    const prevPeriodLabel = prevPeriods1[0]?.label || '';
+  </div>
+  ${(()=>{
+    // 전년도 비교 — 모든 신고리스트에 적용. 전년 동일유형 리스트가 있으면 그 데이터(prevMap1)를,
+    // 없으면 각 업체에 저장된 직전연도 값(prevRevenue·fee25)을 사용한다.
+    const hasPrevPeriod = prevPeriods1.length > 0;
+    const prevPeriodLabel = hasPrevPeriod ? (prevPeriods1[0]?.label || '') : '';
+    const labelTxt = hasPrevPeriod ? esc(prevPeriodLabel.replace(/^\d{2}년 /,'')) : '전년도';
     const curRevTotal = clients.reduce((a,c)=>{
       const v2=julgaeVal(pKey2,c.id);
       return a+(isVatType?(v2.salesAmount||0):(v2.revenue||0));
     },0);
     const prevRevTotal1 = clients.reduce((a,c)=>{
-      const p1=prevMap1[c.id];
-      return a+(isVatType?(p1?.salesAmount||0):(p1?.revenue||0));
+      if (hasPrevPeriod) { const p1=prevMap1[c.id]; return a+(isVatType?(p1?.salesAmount||0):(p1?.revenue||0)); }
+      return a+(julgaeVal(pKey2,c.id).prevRevenue||0);
     },0);
     const curFeeTotal = clients.reduce((a,c)=>a+_jFeeSum(c),0);
-    const prevFeeTotal1 = clients.reduce((a,c)=>a+(prevMap1[c.id]?.fee||0),0);
+    const prevFeeTotal1 = clients.reduce((a,c)=>{
+      if (hasPrevPeriod) return a+(prevMap1[c.id]?.fee||0);
+      return a+(julgaeVal(pKey2,c.id).fee25||0);
+    },0);
     const revDiff = prevRevTotal1 ? ((curRevTotal-prevRevTotal1)/prevRevTotal1*100).toFixed(1) : null;
     const feeDiff = prevFeeTotal1 ? ((curFeeTotal-prevFeeTotal1)/prevFeeTotal1*100).toFixed(1) : null;
     const prevDoneClients1 = prevPeriods1.flatMap(pp=>Object.entries(G.julgae[pp.id]||{}).filter(([,v2])=>v2?.a).map(([cid])=>Number(cid)));
     const prevDoneSet = new Set(prevDoneClients1);
     const curDone = doneCount; const curTotal = total;
     const prevDone = clients.filter(c=>prevDoneSet.has(c.id)).length;
-    return `<div class="card" style="margin-bottom:12px;cursor:pointer" onclick="G._yrCompareOpen=G._yrCompareOpen===false?true:false;renderJulgae()">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <div class="card-title" style="margin-bottom:0">📊 전년도 비교 (${esc(prevPeriodLabel.replace(/^\d{2}년 /,''))})</div>
-        <span style="font-size:12px;color:#888">${open?'▲ 접기':'▼ 열기'}</span>
-      </div>
-      ${open ? `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px">
+    const hasAnyPrev = hasPrevPeriod || prevRevTotal1>0 || prevFeeTotal1>0;
+    return `<div style="margin-top:6px;margin-bottom:12px;padding:10px 12px;background:#fbfcff;border:1px solid #eef1f8;border-radius:12px">
+      <div class="card-title" style="margin-bottom:8px;font-size:13px">📊 전년도 비교 (${labelTxt})</div>
+      ${hasAnyPrev ? `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
         <div style="background:#f8f9ff;border-radius:10px;padding:10px">
           <div style="font-size:11px;color:#888;margin-bottom:4px">수입금액 (전년→올해)</div>
           <div style="font-size:14px;font-weight:700;color:#1565c0">${curRevTotal.toLocaleString()}원</div>
@@ -5637,12 +5640,13 @@ function renderJulgae() {
         <div style="background:#f0f7f0;border-radius:10px;padding:10px">
           <div style="font-size:11px;color:#888;margin-bottom:4px">결재완료 (전년→올해)</div>
           <div style="font-size:14px;font-weight:700;color:#2e7d32">${curDone}/${curTotal}</div>
-          <div style="font-size:11px;color:#aaa">전년 ${prevDone}/${curTotal}</div>
-          <div style="font-size:12px;color:#888;margin-top:3px">${curTotal?Math.round(curDone/curTotal*100):0}% vs ${curTotal?Math.round(prevDone/curTotal*100):0}%</div>
+          <div style="font-size:11px;color:#aaa">전년 ${hasPrevPeriod?`${prevDone}/${curTotal}`:'-'}</div>
+          <div style="font-size:12px;color:#888;margin-top:3px">${curTotal?Math.round(curDone/curTotal*100):0}%${hasPrevPeriod?` vs ${curTotal?Math.round(prevDone/curTotal*100):0}%`:''}</div>
         </div>
-      </div>` : ''}
+      </div>` : `<div style="font-size:12px;color:#aaa;padding:6px 8px;background:#fafafa;border-radius:8px">전년도 데이터가 없습니다.</div>`}
     </div>`;
-  })() : ''}
+  })()}
+  `:''}
 
   <div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap">
     <button class="btn-sm" onclick="G.julgaeToolsOpen=!G.julgaeToolsOpen;renderJulgae()" style="background:#e8f0fe;color:#1565c0;border:1px solid #90caf9;font-weight:600">${G.julgaeToolsOpen?'▾ 도구 접기':'▸ 도구 펼치기'}</button>
