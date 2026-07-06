@@ -13909,50 +13909,64 @@ const _DUP_MODES = [
   {k:'namePartial', label:'상호 일부일치', by:'name', partial:true},
   {k:'repPartial',  label:'대표자 일부일치', by:'rep',  partial:true},
 ];
-function showNameRepDuplicates(mode) {
-  if (mode === undefined) window._modalStack = [];   // 툴바에서 새로 열면 뒤로가기 스택 초기화
-  mode = mode || window._dupMode || 'nameExact';
-  window._dupMode = mode;
-  const cfg = _DUP_MODES.find(m=>m.k===mode) || _DUP_MODES[0];
+function toggleDupMode(k) {
+  const s = new Set(window._dupModes && window._dupModes.length ? window._dupModes : ['nameExact']);
+  if (s.has(k)) { if (s.size > 1) s.delete(k); } // 최소 1개는 유지
+  else s.add(k);
+  window._dupModes = [...s];
+  showNameRepDuplicates(window._dupModes);
+}
+function showNameRepDuplicates(opt) {
+  if (opt === undefined) window._modalStack = [];   // 툴바에서 새로 열면 뒤로가기 스택 초기화
+  if (Array.isArray(opt)) window._dupModes = opt.length ? opt : ['nameExact'];
+  else if (typeof opt === 'string') window._dupModes = [opt];   // 이전 단일 모드 호출 호환
+  let modes = (window._dupModes && window._dupModes.length) ? window._dupModes : ['nameExact'];
+  window._dupModes = modes;
+  const cfgs = modes.map(k=>_DUP_MODES.find(m=>m.k===k)).filter(Boolean);
   const norm = s => (s||'').replace(/\s+/g,'').replace(/[()（）]/g,'').toLowerCase();
-  const valOf = c => cfg.by==='rep' ? norm(c.rep) : norm(c.name);
   // 해지·폐업 업체도 포함해서 중복 검색(거래처목록 ↔ 해지폐업목록 교차 중복도 찾기)
-  const items = G.clients.filter(c => valOf(c));
-  let groups = [];
-  if (!cfg.partial) {
-    const seen = new Map();
-    items.forEach(c => { const k=valOf(c); if(!seen.has(k)) seen.set(k,[]); seen.get(k).push(c); });
-    groups = [...seen.values()].filter(a => a.length > 1);
-  } else {
-    // 부분 일치: 한 쪽 값이 다른 쪽에 포함되면 같은 묶음(union-find, 짧은 값 2자 이상)
-    const vals = items.map(valOf);
-    const parent = items.map((_,i)=>i);
-    const find = x => { while(parent[x]!==x){ parent[x]=parent[parent[x]]; x=parent[x]; } return x; };
-    for (let i=0;i<items.length;i++) for (let j=i+1;j<items.length;j++) {
-      const a=vals[i], b=vals[j]; const s=a.length<=b.length?a:b;
-      if (s.length<2) continue;
-      if (a===b || (a.length>=b.length ? a.includes(b) : b.includes(a))) parent[find(i)]=find(j);
-    }
-    const cl = new Map();
-    items.forEach((c,i)=>{ const r=find(i); if(!cl.has(r)) cl.set(r,[]); cl.get(r).push(c); });
-    groups = [...cl.values()].filter(a => a.length > 1);
+  const items = G.clients.slice();
+  const nName = items.map(c=>norm(c.name));
+  const nRep  = items.map(c=>norm(c.rep));
+  // 선택한 모든 기준을 동시에 만족(AND)하는 쌍만 같은 묶음으로 — union-find
+  const pairMatch = (i,j) => cfgs.every(cfg => {
+    const va = cfg.by==='rep' ? nRep[i] : nName[i];
+    const vb = cfg.by==='rep' ? nRep[j] : nName[j];
+    if (!va || !vb) return false;
+    if (!cfg.partial) return va === vb;
+    const sh = va.length <= vb.length ? va : vb;
+    if (sh.length < 2) return false;
+    return va === vb || (va.length >= vb.length ? va.includes(vb) : vb.includes(va));
+  });
+  const parent = items.map((_,i)=>i);
+  const find = x => { while(parent[x]!==x){ parent[x]=parent[parent[x]]; x=parent[x]; } return x; };
+  for (let i=0;i<items.length;i++) for (let j=i+1;j<items.length;j++) {
+    if (pairMatch(i,j)) parent[find(i)]=find(j);
   }
+  const cl = new Map();
+  items.forEach((c,i)=>{ const r=find(i); if(!cl.has(r)) cl.set(r,[]); cl.get(r).push(c); });
+  let groups = [...cl.values()].filter(a => a.length > 1);
   groups.sort((a,b)=> b.length-a.length || (a[0].name||'').localeCompare(b[0].name||'','ko'));
   const totalDup = groups.reduce((s,a)=>s+a.length,0);
+  const labelStr = cfgs.map(c=>c.label).join(' + ');
+  const multi = cfgs.length > 1;
   document.getElementById('dup-overlay')?.remove();
   const ov = document.createElement('div');
   ov.className = 'overlay'; ov.id = 'dup-overlay';
-  const chips = _DUP_MODES.map(m=>`<button onclick="showNameRepDuplicates('${m.k}')" style="padding:5px 11px;border-radius:16px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap;border:1.5px solid ${m.k===mode?'#c2185b':'#e0b0c4'};background:${m.k===mode?'#fce4ec':'#fff'};color:${m.k===mode?'#880e4f':'#a06078'};font-weight:${m.k===mode?'700':'400'}">${m.label}</button>`).join('');
+  const chips = _DUP_MODES.map(m=>{ const on = modes.includes(m.k);
+    return `<button onclick="toggleDupMode('${m.k}')" style="padding:5px 11px;border-radius:16px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap;border:1.5px solid ${on?'#c2185b':'#e0b0c4'};background:${on?'#fce4ec':'#fff'};color:${on?'#880e4f':'#a06078'};font-weight:${on?'700':'400'}">${on?'☑':'☐'} ${m.label}</button>`;
+  }).join('');
   ov.innerHTML = `<div class="modal">
     <div class="modal-header">
-      <h3>🔎 중복 검색 — ${esc(cfg.label)} (${groups.length}묶음 · ${totalDup}건)</h3>
+      <h3>🔎 중복 검색 — ${esc(labelStr)} (${groups.length}묶음 · ${totalDup}건)</h3>
       <button class="close-btn" onclick="window._modalStack=[];this.closest('.overlay').remove()">✕</button>
     </div>
     <div class="modal-body" style="max-height:72vh;overflow-y:auto">
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">${chips}</div>
-      ${groups.length===0?`<p style="color:#888;text-align:center;padding:24px">${esc(cfg.label)} 중복 거래처가 없습니다.</p>`:
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">${chips}</div>
+      <div style="font-size:11px;color:#a06078;margin-bottom:12px">${multi?'✓ 선택한 기준을 <b>모두</b> 만족하는 중복만 표시합니다 (예: 상호 완전일치 + 대표자 완전일치 = 상호·대표자가 모두 같은 업체)':'기준을 여러 개 선택하면 모두 만족하는 중복만 찾습니다'}</div>
+      ${groups.length===0?`<p style="color:#888;text-align:center;padding:24px">${esc(labelStr)} 중복 거래처가 없습니다.</p>`:
       groups.map(arr=>{
-        const title = cfg.by==='rep' ? (arr[0].rep||'(대표자없음)') : arr[0].name;
+        const title = arr[0].name + (arr[0].rep?` (${arr[0].rep})`:'');
         return `<div style="border:1px solid #e0e0e0;border-radius:8px;padding:10px;margin-bottom:8px">
         <div style="font-weight:700;font-size:13px;margin-bottom:6px">📋 ${esc(title)} — ${arr.length}건</div>
         ${arr.map(c=>`<div style="font-size:12px;color:#555;padding:3px 0;border-top:1px solid #f0f0f0;display:flex;gap:8px;align-items:center">
@@ -13962,7 +13976,7 @@ function showNameRepDuplicates(mode) {
           <span style="color:#aaa">${c.bizNo||'사업자번호없음'}</span>
           <span style="color:#aaa">${esc((getDealTypes(c)[0])||'')}</span>
           ${(c.status==='해지'||c.status==='폐업')?`<span style="font-size:10px;padding:1px 6px;border-radius:6px;background:#fdecea;color:#c62828;font-weight:700">${esc(c.status)}</span>`:''}
-          <button onclick="navTo(()=>showNameRepDuplicates(window._dupMode),()=>openClientNotes(${c.id}))" style="margin-left:auto;font-size:11px;padding:2px 8px;border-radius:5px;border:1px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;cursor:pointer;font-family:inherit">보기</button>
+          <button onclick="navTo(()=>showNameRepDuplicates(window._dupModes),()=>openClientNotes(${c.id}))" style="margin-left:auto;font-size:11px;padding:2px 8px;border-radius:5px;border:1px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;cursor:pointer;font-family:inherit">보기</button>
         </div>`).join('')}
       </div>`;}).join('')}
     </div>
