@@ -949,9 +949,13 @@ function buildContractAreaHTML() {
 }
 
 function availableContracts(vatType, taxType) {
+  // 비사업자(사업소득자·종소세대리)는 부가세 구분이 계약항목과 매칭되지 않으므로
+  // 과세유형 필터는 건너뛰고, 인격(개인/법인)에 해당하는 모든 항목을 선택 가능하게 함
+  // (기본값은 소득세만이지만 다른 신고도 수동 선택 가능)
+  const nonBiz = vatType === '비사업자';
   return CONTRACT_GROUPS.map(g => ({
     ...g,
-    items: g.items.filter(i => i.vat.includes(vatType) && i.tax.includes(taxType))
+    items: g.items.filter(i => i.tax.includes(taxType) && (nonBiz || i.vat.includes(vatType)))
   })).filter(g => g.items.length > 0);
 }
 
