@@ -5566,17 +5566,17 @@ function renderJulgae() {
   <div style="margin-bottom:8px"><button class="btn-sm" onclick="G.julgaeSummaryOpen=!G.julgaeSummaryOpen;renderJulgae()" style="background:#e0f7fa;color:#00838f;border:1px solid #80deea;font-weight:600">${G.julgaeSummaryOpen?'▾ 요약 접기':'▸ 요약'} — 업체 ${total} · 청구 ${feeTotal.toLocaleString()}원</button></div>
   ${G.julgaeSummaryOpen?`
   <div style="display:flex;align-items:stretch;gap:8px;margin-bottom:12px;overflow-x:auto">
-    <div class="stat-card" style="border-left:3px solid #4f8ef7;flex:0 0 auto;min-width:130px;padding:8px 12px">
+    <div class="stat-card" style="border-left:3px solid #4f8ef7;flex:1 1 0;min-width:150px;padding:8px 12px">
       <div class="stat-label" style="font-size:11px">대상 업체</div>
       <div style="font-size:18px;font-weight:800">${total}<span style="font-size:12px;color:#aaa;font-weight:400"> 개</span></div>
       <div class="stat-sub" style="font-size:10px">${(reportLabel[period.reportType]||'전체')} · ${hasEnroll?'수동':'자동'}</div>
     </div>
-    <div class="stat-card" style="border-left:3px solid #7b1fa2;flex:0 0 auto;min-width:170px;padding:8px 12px">
+    <div class="stat-card" style="border-left:3px solid #7b1fa2;flex:1 1 0;min-width:150px;padding:8px 12px">
       <div class="stat-label" style="font-size:11px">수수료 청구</div>
       <div style="font-size:16px;font-weight:800;color:#7b1fa2">${feeTotal.toLocaleString()}원</div>
       <div class="stat-sub" style="font-size:10px">수금 ${feeCollected.toLocaleString()} · 미수금 ${(feeTotal-feeCollected).toLocaleString()}</div>
     </div>
-    ${total > 0 ? `<div style="display:flex;align-items:center;gap:0;flex:1;background:#f8f9ff;border-radius:12px;padding:8px 10px;min-width:0">
+    ${total > 0 ? `<div style="display:flex;align-items:center;gap:0;flex:2 1 0;background:#f8f9ff;border-radius:12px;padding:8px 10px;min-width:280px">
       ${[
         {label:'전체',count:total,color:'#607d8b',icon:'👥'},
         {label:'상담',count:consulCount,color:'#1565c0',icon:'💬'},
