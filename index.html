@@ -3371,6 +3371,14 @@ function doGroupConnect() {
 }
 
 // ── 그룹 편집 모달 (통합) ──────────────────────────────────────────
+// 거래처 수정 폼에서 '그룹 편집'을 열어 그룹편집 버튼과 동일하게 연결/제거하도록 함
+function openGroupEditFromForm(id) {
+  if (window._formDataSnapshot !== undefined && JSON.stringify(window._formData) !== window._formDataSnapshot) {
+    if (!confirm('그룹 편집으로 이동하면 저장하지 않은 다른 변경사항은 반영되지 않습니다.\n그룹 편집을 계속할까요?')) return;
+  }
+  window._formDataSnapshot = undefined;   // 폼 닫힘 시 미저장 경고 방지
+  navTo(() => openForm(id), () => openGroupEditModal(id));
+}
 function openGroupEditModal(id) {
   const c = G.clients.find(x=>x.id===id); if (!c) return;
   const getGroupKey = buildClientGroupMap(G.clients);
@@ -4287,6 +4295,7 @@ function openForm(id) {
           ${c.relatedGroup||c.soloGroup?`<button type="button" onclick="document.getElementById('f-relatedGroup').value='';window._formData.relatedGroup='';window._formData.soloGroup=false" style="padding:3px 8px;border-radius:6px;border:1px solid #fca5a5;background:#fef2f2;color:#e53935;cursor:pointer;font-family:inherit;font-size:11px;white-space:nowrap">✕</button>`:''}
         </div>
       </div>
+      ${isEdit?`<button type="button" onclick="openGroupEditFromForm(${c.id})" style="width:100%;margin-bottom:6px;padding:6px 10px;border-radius:8px;border:1.5px solid #90caf9;background:#e8f0fe;color:#1565c0;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">🔗 그룹 편집 (연결·제거) — 그룹편집과 동일</button>`:''}
       ${_groupMembers.length>0?`<div style="margin-bottom:5px"><button type="button" id="members-toggle" onclick="(function(){var d=document.getElementById('members-list');var s=d.style.display==='none';d.style.display=s?'flex':'none';document.getElementById('members-toggle').textContent=s?'▲ 그룹원 (${_groupMembers.length}명)':'▼ 그룹원 (${_groupMembers.length}명)'})()" style="font-size:11px;color:#888;background:none;border:1px solid #e0e4f0;border-radius:6px;padding:3px 10px;cursor:pointer;font-family:inherit;width:100%;text-align:left">▼ 그룹원 (${_groupMembers.length}명)</button><div id="members-list" style="display:none;flex-wrap:wrap;gap:3px;align-items:center;padding-top:5px">${_groupMembers.map(cl=>`<span style="background:#e8f0fe;color:#4f8ef7;border-radius:8px;padding:1px 8px;font-size:11px">👥 ${esc(cl.name)}</span>`).join('')}</div></div>`:''}
       ${_allGroups.length>0?`
         <button type="button" id="groups-toggle" onclick="(function(){var d=document.getElementById('groups-list');var s=d.style.display==='none';d.style.display=s?'flex':'none';document.getElementById('groups-toggle').textContent=s?'▲ 접기':'▼ 기존 그룹 (${_allGroups.length}개)'})()" style="font-size:11px;color:#4f8ef7;background:none;border:1px solid #c5cae9;border-radius:6px;padding:3px 10px;cursor:pointer;font-family:inherit;width:100%;text-align:left">▼ 기존 그룹 (${_allGroups.length}개)</button>
@@ -13950,6 +13959,20 @@ function showNameRepDuplicates(opt) {
   const totalDup = groups.reduce((s,a)=>s+a.length,0);
   const labelStr = cfgs.map(c=>c.label).join(' + ');
   const multi = cfgs.length > 1;
+  // 그룹(관계사) 소속 업체는 연결된 대표그룹명 표시
+  const _getGK = buildClientGroupMap(G.clients);
+  const _gkCount = {};
+  G.clients.forEach(cl=>{ const k=_getGK(cl); _gkCount[k]=(_gkCount[k]||0)+1; });
+  const groupLabelOf = c => {
+    if (c.relatedGroup && c.relatedGroup.trim()) return c.relatedGroup.trim();
+    const k=_getGK(c);
+    if (_gkCount[k]>1 && !c.soloGroup) {
+      const mem=G.clients.filter(x=>_getGK(x)===k && !x.soloGroup);
+      const lead=mem.find(x=>x.groupMain)||mem[0];
+      return lead ? lead.name : '';
+    }
+    return '';
+  };
   document.getElementById('dup-overlay')?.remove();
   const ov = document.createElement('div');
   ov.className = 'overlay'; ov.id = 'dup-overlay';
@@ -13975,6 +13998,7 @@ function showNameRepDuplicates(opt) {
           <span style="color:#888">${esc(c.rep)||'-'}</span>
           <span style="color:#aaa">${c.bizNo||'사업자번호없음'}</span>
           <span style="color:#aaa">${esc((getDealTypes(c)[0])||'')}</span>
+          ${(()=>{const g=groupLabelOf(c);return g?`<span style="font-size:10px;padding:1px 7px;border-radius:6px;background:#e8f0fe;color:#1565c0;font-weight:700;white-space:nowrap">👥 ${esc(g)}</span>`:'';})()}
           ${(c.status==='해지'||c.status==='폐업')?`<span style="font-size:10px;padding:1px 6px;border-radius:6px;background:#fdecea;color:#c62828;font-weight:700">${esc(c.status)}</span>`:''}
           <button onclick="navTo(()=>showNameRepDuplicates(window._dupModes),()=>openClientNotes(${c.id}))" style="margin-left:auto;font-size:11px;padding:2px 8px;border-radius:5px;border:1px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;cursor:pointer;font-family:inherit">보기</button>
         </div>`).join('')}
