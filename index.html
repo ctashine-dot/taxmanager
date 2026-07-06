@@ -461,6 +461,8 @@ let G = {
   payroll: {},        // 급여 기록 — key: `${empId}_${YYYY-MM}`
   payrollLog: [],     // 급여 변경 감사로그(append-only)
   payrollYM: '',      // 급여관리 현재 조회월
+  bonuses: {},        // 상여 기록 — G.bonuses[empId][occasionKey][year] = 실지급액
+  bonusYear: 0,       // 상여관리 현재 조회 연도
   currentTab: 'dashboard',
   searchText: '',
   clientRepSearch: '',
@@ -799,6 +801,7 @@ function saveToLS() {
     localStorage.setItem('tm_employees', JSON.stringify(G.employees||[]));
     localStorage.setItem('tm_payroll', JSON.stringify(G.payroll||{}));
     localStorage.setItem('tm_payrollLog', JSON.stringify(G.payrollLog||[]));
+    localStorage.setItem('tm_bonuses', JSON.stringify(G.bonuses||{}));
     if (G.julgaeSelectedPeriods) localStorage.setItem('tm_julgaeSelectedPeriods', JSON.stringify(G.julgaeSelectedPeriods));
     if (G.julgaeSelectedYears) localStorage.setItem('tm_julgaeSelectedYears', JSON.stringify(G.julgaeSelectedYears));
     if (G.pinnedPeriods) localStorage.setItem('tm_pinnedPeriods', JSON.stringify(G.pinnedPeriods));
@@ -841,6 +844,7 @@ function saveToLS() {
       employees: JSON.stringify(G.employees||[]),
       payroll: JSON.stringify(G.payroll||{}),
       payrollLog: JSON.stringify(G.payrollLog||[]),
+      bonuses: JSON.stringify(G.bonuses||{}),
     }).then(() => true).catch(e => {
       console.error('Firebase 저장 실패:', e);
       showSaveError('클라우드 저장 실패 — 로컬에만 저장됨');
@@ -859,6 +863,27 @@ function showSaveError(msg) {
 
 let MANAGERS = ['전체','이슬빈','이현주','정여주','최수이'];
 let _tempMgrs = [];
+// 상여 지급 항목 — 신고(부가세확정·법인세·소득세·성실신고) + 명절(설날·추석). rt: 매칭 신고유형(reportType)
+const BONUS_OCCASIONS = [
+  { key:'vat',     label:'부가세 확정신고', icon:'📑', rt:['vat','vat_hak_1','vat_hak_2','vat_yej'] },
+  { key:'corp',    label:'법인세',          icon:'🏢', rt:['corp'] },
+  { key:'income',  label:'소득세',          icon:'👤', rt:['income'] },
+  { key:'seongsi', label:'성실신고',        icon:'📋', rt:['seongsi'] },
+  { key:'seollal', label:'설날',            icon:'🌙', rt:[] },
+  { key:'chuseok', label:'추석',            icon:'🍁', rt:[] },
+];
+function bonusOccByReportType(rt){ return rt ? BONUS_OCCASIONS.find(o=>o.rt.includes(rt)) : null; }
+function bonusVal(empId, occKey, year){
+  return ((G.bonuses||{})[empId]||{})[occKey]?.[year] || 0;
+}
+function setBonusVal(empId, occKey, year, amount){
+  if (!G.bonuses) G.bonuses = {};
+  if (!G.bonuses[empId]) G.bonuses[empId] = {};
+  if (!G.bonuses[empId][occKey]) G.bonuses[empId][occKey] = {};
+  const n = Number(String(amount).replace(/[,\s]/g,''))||0;
+  if (n) G.bonuses[empId][occKey][year] = n;
+  else delete G.bonuses[empId][occKey][year];
+}
 const TAX_TYPES = ['전체','법인','개인'];
 const VAT_TYPES = ['전체','일반','영세','겸영','간이','간세','면세','비사업자'];
 const FEE_STATUSES = ['전체','수금완료','청구완료','미수금'];
@@ -7797,6 +7822,19 @@ function applyPeriodTemplate(tplKey) {
   saveToLS();
   closeModal();
   renderJulgae();
+  bonusPeriodReminder(t.reportType, yr);
+}
+// 신고리스트 생성 시 해당 신고가 상여 지급 대상이면 안내 + 전년 지급액(예상액) 표시
+function bonusPeriodReminder(reportType, yr) {
+  const occ = bonusOccByReportType(reportType);
+  if (!occ) return;
+  const emps = (G.employees||[]).filter(e => e.status==='재직' || e.status==='휴직');
+  if (!emps.length) return;
+  let prevTotal = 0; emps.forEach(e => { prevTotal += bonusVal(e.id, occ.key, yr-1); });
+  const msg = prevTotal > 0
+    ? `💰 '${occ.label}' 상여 지급 대상 — 전년(${yr-1}) 지급 합계 ${prevTotal.toLocaleString()}원. 급여관리 › 💰 상여 관리에서 실지급액을 입력하세요.`
+    : `💰 '${occ.label}' 상여 지급 대상입니다. 급여관리 › 💰 상여 관리에서 확인·입력하세요.`;
+  toast(msg, 'info', 5500);
 }
 
 function savePeriod() {
@@ -7819,6 +7857,7 @@ function savePeriod() {
   saveToLS();
   closeModal();
   renderJulgae();
+  if (reportType) { const _yrM2 = label.match(/^(\d{2})년/); bonusPeriodReminder(reportType, _yrM2 ? 2000 + Number(_yrM2[1]) : new Date().getFullYear()); }
 }
 
 function _pDelDown(el, id) {
@@ -8058,6 +8097,18 @@ function openEmployeeModal(id) {
   showModal(`<div style="max-width:460px;width:100%">
     <div class="modal-header"><h3>${e?'직원 수정':'직원 추가'}</h3><button class="close-btn" onclick="navBack()">✕</button></div>
     <div class="modal-body">
+      ${!e ? (()=>{
+        const empNames = new Set((G.employees||[]).map(x=>x.name));
+        const avail = MANAGERS.slice(1).filter(m=>!empNames.has(m));
+        return `<div style="margin-bottom:12px;background:#eef4ff;border:1px solid #cdddff;border-radius:8px;padding:10px 12px">
+          <label class="flabel" style="color:#1565c0">담당자에서 선택 <span style="font-size:11px;color:#888;font-weight:400">(⚙ 설정 &gt; 담당자 관리에 등록된 담당자)</span></label>
+          <select id="emp-mgrpick" onchange="if(this.value){document.getElementById('emp-name').value=this.value;}" style="width:100%;border:1px solid #cdddff;border-radius:8px;padding:9px;font-size:14px;box-sizing:border-box;font-family:inherit;background:#fff">
+            <option value="">${avail.length?'담당자 선택…':'미등록 담당자 없음 (모두 직원으로 등록됨)'}</option>
+            ${avail.map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join('')}
+          </select>
+          <div style="font-size:11px;color:#888;margin-top:5px">담당자를 선택하면 성명이 자동 입력됩니다. 새 담당자는 설정에서 추가하면 여기에 나타납니다.</div>
+        </div>`;
+      })() : ''}
       <div style="display:flex;gap:8px">
         <div style="flex:1">${f('사번','empNo',e?.empNo)}</div>
         <div style="flex:1">${f('성명','name',e?.name)}</div>
@@ -8118,6 +8169,67 @@ function deleteEmployee(id) {
   toast('직원 삭제됨', 'info');
 }
 
+// ── 상여 관리 ──────────────────────────────────────────
+function openBonusModal(year) {
+  const curYr = new Date().getFullYear();
+  const yr = year || G.bonusYear || curYr;
+  G.bonusYear = yr;
+  const emps = (G.employees||[]).filter(e => e.status==='재직' || e.status==='휴직');
+  const won = n => (n||0).toLocaleString();
+  const yearOpts = []; for (let y = curYr+1; y >= curYr-3; y--) yearOpts.push(y);
+
+  const occTotals = BONUS_OCCASIONS.map(o => {
+    let prev=0, cur=0;
+    emps.forEach(e => { prev += bonusVal(e.id,o.key,yr-1); cur += bonusVal(e.id,o.key,yr); });
+    return { prev, cur };
+  });
+  const grandPrev = occTotals.reduce((a,t)=>a+t.prev,0);
+  const grandCur  = occTotals.reduce((a,t)=>a+t.cur,0);
+
+  const headCells = BONUS_OCCASIONS.map(o=>`<th style="padding:6px;text-align:center;font-size:11px;border-left:1px solid #eef;white-space:nowrap">${o.icon}<br>${o.label}</th>`).join('');
+  const rows = emps.map(e=>{
+    const cells = BONUS_OCCASIONS.map(o=>{
+      const prev = bonusVal(e.id,o.key,yr-1), cur = bonusVal(e.id,o.key,yr);
+      return `<td style="padding:4px 6px;text-align:right;border-left:1px solid #f5f5f5">
+        <input type="text" inputmode="numeric" value="${cur?won(cur):''}" placeholder="0"
+          onfocus="this.value=this.value.replace(/,/g,'');this.select()"
+          onblur="const n=Number(this.value.replace(/,/g,''))||0;this.value=n?n.toLocaleString():''"
+          onchange="updateBonus(${e.id},'${o.key}',${yr},this.value)"
+          style="width:86px;text-align:right;border:1px solid #e0e0e0;border-radius:5px;padding:3px 5px;font-size:12px;font-family:inherit;box-sizing:border-box">
+        <div style="font-size:10px;color:#aaa;margin-top:2px" title="전년(${yr-1}) 지급액 = 예상액">예상 ${prev?won(prev):'-'}</div>
+      </td>`;
+    }).join('');
+    const eCur = BONUS_OCCASIONS.reduce((a,o)=>a+bonusVal(e.id,o.key,yr),0);
+    const ePrev = BONUS_OCCASIONS.reduce((a,o)=>a+bonusVal(e.id,o.key,yr-1),0);
+    return `<tr><td style="padding:5px 8px;font-weight:600;white-space:nowrap;position:sticky;left:0;background:#fff;z-index:1">${esc(e.name)}</td>${cells}<td style="padding:5px 8px;text-align:right;font-weight:700;background:#fafbff">${won(eCur)}<div style="font-size:10px;color:#aaa;font-weight:400">예상 ${won(ePrev)}</div></td></tr>`;
+  }).join('');
+  const footCells = occTotals.map(t=>`<td style="padding:5px 6px;text-align:right;font-weight:700;border-left:1px solid #f0f0f0">${won(t.cur)}<div style="font-size:10px;color:#aaa;font-weight:400">예상 ${won(t.prev)}</div></td>`).join('');
+
+  showModal(`<div style="max-width:min(940px,97vw);width:100%">
+    <div class="modal-header"><h3>💰 상여 관리</h3><button class="close-btn" onclick="navBack()">✕</button></div>
+    <div class="modal-body">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+        <label style="font-size:13px;font-weight:600;color:#555">연도</label>
+        <select onchange="openBonusModal(Number(this.value))" style="font-size:13px;padding:5px 10px;border-radius:8px;border:1.5px solid #ffc79a;font-family:inherit;cursor:pointer;font-weight:600;color:#c0500f">${yearOpts.map(y=>`<option value="${y}"${y===yr?' selected':''}>${y}년</option>`).join('')}</select>
+        <span style="font-size:12px;color:#888">예상(전년) 합계 <b style="color:#1565c0">${won(grandPrev)}</b> · ${yr}년 실지급 합계 <b style="color:#2e7d32">${won(grandCur)}</b></span>
+      </div>
+      <div style="font-size:12px;color:#7a5230;background:#fff8ef;border:1px solid #ffe0c2;border-radius:8px;padding:8px 12px;margin-bottom:12px;line-height:1.6">
+        💡 각 칸 아래 <b>예상</b> 금액은 전년도(${yr-1}년) 실지급액입니다. 올해 실지급액을 입력해 기록·관리하세요.<br>부가세확정신고·법인세·소득세·성실신고 리스트를 만들 때, 그리고 설날·추석에 지급 대상으로 안내됩니다.
+      </div>
+      ${emps.length ? `<div class="tbl-wrap" style="max-height:58vh;overflow:auto"><table style="min-width:780px">
+        <thead><tr><th style="padding:6px 8px;text-align:left;position:sticky;left:0;background:#f8f9ff;z-index:2">직원</th>${headCells}<th style="padding:6px;text-align:right;background:#fafbff">합계</th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr style="background:#f5f5f5"><td style="padding:5px 8px;font-weight:700;position:sticky;left:0;background:#f5f5f5">합계</td>${footCells}<td style="padding:5px 8px;text-align:right;font-weight:800">${won(grandCur)}<div style="font-size:10px;color:#aaa;font-weight:400">예상 ${won(grandPrev)}</div></td></tr></tfoot>
+      </table></div>` : `<div style="text-align:center;padding:30px;color:#aaa">재직 중인 직원이 없습니다. 먼저 '직원 추가'로 등록하세요.</div>`}
+    </div>
+  </div>`);
+}
+function updateBonus(empId, occKey, year, val) {
+  setBonusVal(empId, occKey, year, val);
+  saveToLS();
+  openBonusModal(year);
+}
+
 function renderPayroll() {
   if (!G.payrollYM) G.payrollYM = currentYM();
   const ym = G.payrollYM;
@@ -8153,12 +8265,28 @@ function renderPayroll() {
 
   <div style="margin-bottom:8px;display:flex;gap:8px;flex-wrap:wrap">
     <button class="btn-sm" style="background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;font-weight:600" onclick="openEmployeeModal(null)">+ 직원 추가</button>
+    <button class="btn-sm" style="background:#fff2e5;color:#c0500f;border:1px solid #ffc79a;font-weight:600" onclick="openBonusModal()">💰 상여 관리</button>
     <button class="btn-sm" style="background:#fff3e0;color:#e65100;border:1px solid #ffb74d;font-weight:600" onclick="payrollEstimateAll()" title="공제대상가족수 기준 간이세액 추정치(참고용)로 소득세 일괄 입력 — 공식 간이세액표와 다를 수 있음">⚡ 간이세액 추정(참고용)</button>
     <button class="btn-sm" style="background:#e8f0fe;color:#1565c0;border:1px solid #90caf9;font-weight:600" onclick="exportPayrollCSV()">⬇ 엑셀(CSV)</button>
     <button class="btn-sm" style="background:#ede7f6;color:#4a148c;border:1px solid #b39ddb;font-weight:600" onclick="printAllPayslips()">🖨 급여명세서</button>
     <button class="btn-sm" style="background:#e8f0fe;color:#1565c0;border:1px solid #90caf9;font-weight:600" onclick="G.payrollEmpOpen=!G.payrollEmpOpen;renderPayroll()">${empOpen?'▾ 직원 관리 접기':'▸ 직원 관리'} (${emps.length}명)</button>
     <button class="btn-sm" style="background:#f3e5f5;color:#6a1b9a;border:1px solid #ce93d8;font-weight:600" onclick="G.payrollLogOpen=!G.payrollLogOpen;renderPayroll()">${logOpen?'▾ 변경 이력 접기':'▸ 변경 이력'}</button>
   </div>
+  ${(()=>{
+    const empNames=new Set((G.employees||[]).map(x=>x.name));
+    const missing=MANAGERS.slice(1).filter(m=>!empNames.has(m));
+    return missing.length?`<div style="background:#eef4ff;border:1px solid #cdddff;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#1565c0;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>👥 직원 미등록 담당자: <b>${missing.map(esc).join(', ')}</b></span><button class="btn-sm" style="background:#fff;color:#1565c0;border:1px solid #90caf9;font-weight:600;height:24px;padding:0 8px" onclick="openEmployeeModal(null)">+ 직원으로 추가</button></div>`:'';
+  })()}
+  ${(()=>{
+    const bEmps=(G.employees||[]).filter(e=>e.status==='재직'||e.status==='휴직');
+    if(!bEmps.length) return '';
+    const byr=new Date().getFullYear();
+    const pend=BONUS_OCCASIONS.filter(o=>o.key==='seollal'||o.key==='chuseok').map(o=>{
+      let prev=0,cur=0; bEmps.forEach(e=>{prev+=bonusVal(e.id,o.key,byr-1);cur+=bonusVal(e.id,o.key,byr);});
+      return {o,prev,cur};
+    }).filter(x=>x.prev>0 && x.cur===0);
+    return pend.length?`<div style="background:#fff8ef;border:1px solid #ffddb0;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#b45f10;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>${pend.map(x=>`${x.o.icon} <b>${x.o.label}</b> 상여 미입력 (예상 ${x.prev.toLocaleString()}원)`).join(' · ')}</span><button class="btn-sm" style="background:#fff;color:#c0500f;border:1px solid #ffc79a;font-weight:600;height:24px;padding:0 8px" onclick="openBonusModal()">💰 상여 관리</button></div>`:'';
+  })()}
 
   <div class="card" style="margin-bottom:14px;padding:12px;background:#faf7ff;border:1px solid #e1d5f5">
     <div style="font-size:12px;font-weight:700;color:#4a148c;margin-bottom:6px">📑 원천세 신고용 합계 (${ym}) — 원천징수이행상황신고서 간이세액(A01)</div>
@@ -14076,6 +14204,7 @@ function applyCloudSnapshot(data) {
   G.employees = P(data.employees, []);
   G.payroll = P(data.payroll, {});
   G.payrollLog = P(data.payrollLog, []);
+  G.bonuses = P(data.bonuses, G.bonuses||{});
   if (data.pinnedPeriods) G.pinnedPeriods = P(data.pinnedPeriods, G.pinnedPeriods||[]);
   if (data.julgaeSelectedPeriods) G.julgaeSelectedPeriods = P(data.julgaeSelectedPeriods, G.julgaeSelectedPeriods);
   if (data.julgaeSelectedYears) G.julgaeSelectedYears = P(data.julgaeSelectedYears, G.julgaeSelectedYears);
@@ -14148,6 +14277,7 @@ async function loadFromFirebase() {
         G.employees = JSON.parse(localStorage.getItem('tm_employees')||'[]');
         G.payroll = JSON.parse(localStorage.getItem('tm_payroll')||'{}');
         G.payrollLog = JSON.parse(localStorage.getItem('tm_payrollLog')||'[]');
+        G.bonuses = JSON.parse(localStorage.getItem('tm_bonuses')||'{}');
         const sjsp = localStorage.getItem('tm_julgaeSelectedPeriods'); if(sjsp) G.julgaeSelectedPeriods = JSON.parse(sjsp);
         const sjsy = localStorage.getItem('tm_julgaeSelectedYears'); if(sjsy) G.julgaeSelectedYears = JSON.parse(sjsy);
         const _pp = localStorage.getItem('tm_pinnedPeriods'); if(_pp) G.pinnedPeriods = JSON.parse(_pp);
