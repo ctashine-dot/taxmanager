@@ -2321,49 +2321,34 @@ function renderClients() {
   <div style="margin-bottom:10px">
     <h2 style="font-size:20px;font-weight:800;margin:0 0 8px">거래처 목록</h2>
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap">
-      <button class="btn-sm" onclick="G.clientsToolsOpen=!G.clientsToolsOpen;renderClients()" style="background:#e8f0fe;color:#1565c0;border:1px solid #90caf9;font-weight:600">${G.clientsToolsOpen?'▾ 도구 접기':'▸ 도구 펼치기'}</button>
-      <button class="btn-sm" onclick="G.clientsSearchOpen=!G.clientsSearchOpen;renderClients()" style="background:#e0f7fa;color:#00838f;border:1px solid #80deea;font-weight:600">${G.clientsSearchOpen?'▾ 검색 및 필터 접기':'▸ 검색 및 필터'}</button>
+      <button class="btn-sm" onclick="G.clientsToolsOpen=!G.clientsToolsOpen;renderClients()" style="background:#e8f0fe;color:#1565c0;border:1px solid #90caf9;font-weight:600">${G.clientsToolsOpen?'▾ 도구':'▸ 도구'}</button>
     </div>
     ${G.clientsToolsOpen?`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
       ${hiddenChips}
       <button class="btn-sm" style="background:${G.editMode?'#e8f5e9':'#f0faf1'};color:${G.editMode?'#2e7d32':'#5a9b65'};border:2px solid ${G.editMode?'#43a047':'#c3e6c8'}" onclick="toggleEditMode()">${G.editMode?'✓ 수정모드 ON':'✏ 수정모드'}</button>
-      <button class="btn-sm" style="background:${G.filterRisk==='위험'?'#fdecea':G.filterRisk==='주의'?'#fff3e0':'#fdf5f5'};color:${G.filterRisk==='위험'?'#c62828':G.filterRisk==='주의'?'#e65100':'#b07070'};border:1.5px solid ${G.filterRisk==='위험'?'#ef9a9a':G.filterRisk==='주의'?'#ffcc80':'#f0c0c0'}" onclick="G.filterRisk=G.filterRisk===''?'위험':G.filterRisk==='위험'?'주의':'';G.clientPage=0;renderClients()">● 위험도${G.filterRisk?' ('+G.filterRisk+')':' (전체)'}</button>
-      <button class="btn-sm" style="background:${G.filterGrade==='A'?'#e8f0fe':G.filterGrade==='B'?'#e8f5e9':G.filterGrade==='C'?'#f5f5f5':'#f0f2ff'};color:${G.filterGrade==='A'?'#1565c0':G.filterGrade==='B'?'#2e7d32':G.filterGrade==='C'?'#888':'#7080c8'};border:1.5px solid ${G.filterGrade==='A'?'#4f8ef7':G.filterGrade==='B'?'#43a047':G.filterGrade==='C'?'#bbb':'#c5cef0'};font-weight:${G.filterGrade?'700':'400'}" onclick="G.filterGrade=G.filterGrade===''?'A':G.filterGrade==='A'?'B':G.filterGrade==='B'?'C':'';G.clientPage=0;renderClients()">등급${G.filterGrade?' ('+G.filterGrade+')':''}</button>
-      <button class="btn-sm" style="background:${G.showFavorites?'#fff8e1':'#fefae0'};color:${G.showFavorites?'#f57c00':'#a08028'};border:2px solid ${G.showFavorites?'#ffd54f':'#e8d870'}" onclick="G.showFavorites=!G.showFavorites;G.clientPage=0;renderClients()">⭐ 즐겨찾기${G.showFavorites?' ON':''}</button>
-      <button class="btn-sm" style="background:${(G.filterTags||[]).length?'#e8f0fe':'#f0f4ff'};color:${(G.filterTags||[]).length?'#4f8ef7':'#5878cc'};border:1.5px solid ${(G.filterTags||[]).length?'#4f8ef7':'#b8c8f8'}" onclick="openTagFilterDropdown(this)">🏷 태그${(G.filterTags||[]).length?' ('+G.filterTags.length+')':''}</button>
-      <button class="btn-sm" style="background:#f3e5f5;color:#6a1b9a;border:1.5px solid #ce93d8" onclick="openFilterPresets(this)">⭐ 프리셋${(G.filterPresets||[]).length?' ('+(G.filterPresets||[]).length+')':''}</button>
-      <button class="btn-sm" style="background:#fff3e0;color:#e65100;border:1.5px solid #ffcc80" onclick="openNotesSearch()">🔍 메모검색</button>
-      <button class="btn-sm" style="background:#fce4ec;color:#880e4f;border:1.5px solid #f48fb1" onclick="showNameRepDuplicates()">🔎 중복검색</button>
-      ${(()=>{const hasFilter=G.searchText||G.clientRepSearch||(G.filterManagers||[]).length||(G.filterTaxTypes||[]).length||(G.filterVatTypes||[]).length||(G.filterFeeStatuses||[]).length||(G.filterDealTypes||[]).length||(G.filterCMS||[]).length||(G.filterRoutes||[]).length||(G.filterTags||[]).length||G.filterRisk||G.filterGrade||G.showFavorites;return hasFilter?`<button class="btn-sm" style="background:#fdecea;color:#c62828;border:1.5px solid #ef9a9a;font-weight:700" onclick="G.searchText='';G.clientRepSearch='';G.filterManagers=[];G.filterTaxTypes=[];G.filterVatTypes=[];G.filterFeeStatuses=[];G.filterDealTypes=[];G.filterCMS=[];G.filterRoutes=[];G.filterTags=[];G.filterRisk='';G.filterGrade='';G.showFavorites=false;G.clientPage=0;renderClients()">✕ 필터초기화</button>`:'';})()}
+      <button class="btn-sm" style="background:${G.clientsSearchOpen?'#e0f7fa':'#eef9fb'};color:#00838f;border:1.5px solid #80deea;font-weight:600" onclick="G.clientsSearchOpen=!G.clientsSearchOpen;renderClients()">${G.clientsSearchOpen?'▾ 검색':'🔍 검색'}</button>
       <button class="btn-primary btn-sm" onclick="openForm(null)">+ 거래처 추가</button>
       <button class="btn-sm" style="background:#fff3e0;color:#bf360c;border:1.5px solid #ffab91" onclick="openTerminatedModal()">📁 해지폐업 관리${terminated?' ('+terminated+')':''}</button>
       <button class="btn-sm" style="background:#f0f8ff;color:#1565c0;border:1.5px solid #90caf9" onclick="openImportExportMenu(this)">⇅ 가져오기/내보내기</button>
+      <span style="display:inline-flex;align-items:center;gap:5px;margin-left:4px">
+        <span style="font-size:12px;color:#888;font-weight:600">정렬</span>
+        ${(()=>{
+          const sf = (G.clientSort||{}).field||'d', sd = (G.clientSort||{}).dir||'asc';
+          const opts = [{k:'c',l:'수임일자'},{k:'n',l:'거래처명'},{k:'r',l:'대표자'},{k:'d',l:'수임유형'},{k:'f',l:'수수료'},{k:'m',l:'담당자'},{k:'g',l:'등급'}];
+          return `<select onchange="G.clientSort={field:this.value,dir:(G.clientSort&&G.clientSort.dir)||'asc'};G.clientPage=0;renderClients()" style="font-size:12px;padding:3px 8px;border-radius:6px;border:1px solid #e0e0e0;font-family:inherit;cursor:pointer">${opts.map(({k,l})=>`<option value="${k}"${sf===k?' selected':''}>${l}</option>`).join('')}</select><button onclick="G.clientSort={field:'${sf}',dir:'${sd==='asc'?'desc':'asc'}'};G.clientPage=0;renderClients()" style="padding:3px 10px;border-radius:6px;border:1px solid ${sd==='desc'?'#4f8ef7':'#e0e0e0'};background:${sd==='desc'?'#e8f0fe':'#f5f5f5'};color:${sd==='desc'?'#1565c0':'#555'};font-size:12px;cursor:pointer;font-family:inherit">${sd==='asc'?'↑ 오름차순':'↓ 내림차순'}</button>`;
+        })()}
+      </span>
     </div>`:''}
   </div>
 
-  ${G.clientsSearchOpen?`<div style="background:#f8f9ff;border:1px solid #e8eaf6;border-radius:10px;padding:8px 10px;margin-bottom:8px">
-    <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:7px">
-      <span style="font-size:11px;color:#888;font-weight:600">정렬</span>
-      ${(()=>{
-        const sf = (G.clientSort||{}).field||'d', sd = (G.clientSort||{}).dir||'asc';
-        const opts = [{k:'c',l:'수임일자'},{k:'n',l:'업체명'},{k:'r',l:'대표자'},{k:'d',l:'수임유형'},{k:'f',l:'수수료'},{k:'m',l:'담당자'},{k:'g',l:'등급'}];
-        const btns = opts.map(({k,l})=>{
-          const active = sf===k;
-          const nextDir = active && sd==='asc' ? 'desc' : 'asc';
-          const icon = active ? (sd==='asc'?' ↑':' ↓') : '';
-          const st = active ? 'background:#e8f0fe;color:#1565c0;border:1.5px solid #4f8ef7;font-weight:700' : 'background:#fff;color:#888;border:1.5px solid #e0e0e0';
-          return `<button onclick="G.clientSort={field:'${k}',dir:'${nextDir}'};G.clientPage=0;renderClients()" style="padding:4px 9px;border-radius:16px;font-size:11px;cursor:pointer;font-family:inherit;${st}">${l}${icon}</button>`;
-        }).join('');
-        const resetBtn = (sf!=='d'||sd!=='asc') ? `<button onclick="G.clientSort={field:'d',dir:'asc'};G.clientPage=0;renderClients()" style="padding:4px 7px;border-radius:16px;font-size:10px;cursor:pointer;font-family:inherit;background:#fdecea;color:#c62828;border:1.5px solid #ef9a9a" title="정렬 초기화">✕</button>` : '';
-        return btns+resetBtn;
-      })()}
-    </div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap">
+  ${(G.clientsToolsOpen&&G.clientsSearchOpen)?`<div style="background:#f8f9ff;border:1px solid #e8eaf6;border-radius:10px;padding:8px 10px;margin-bottom:8px">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:7px">
       ${(()=>{
         const pill = (active, label, onclick) => `<button onclick="${onclick}" style="padding:5px 11px;border-radius:16px;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap;border:1.5px solid ${active?'#4f8ef7':'#ddd'};background:${active?'#e8f0fe':'#fff'};color:${active?'#1565c0':'#555'}">${label}</button>`;
         const filterPill = (field, label) => { const v=G[field]||[]; return pill(v.length>0, label+(v.length?` (${v.length})`:'')+'▾', `openFilterPopup('${field}',this)`); };
         const sa = G.searchText, ra = G.clientRepSearch;
         return [
+          `<button class="btn-sm" style="background:#f3e5f5;color:#6a1b9a;border:1.5px solid #ce93d8" onclick="openFilterPresets(this)">⭐ 프리셋${(G.filterPresets||[]).length?' ('+(G.filterPresets||[]).length+')':''}</button>`,
           pill(!!sa, '🔍 '+(sa?esc(sa):'업체명'), 'openClientNameSearch(this)'),
           pill(!!ra, '🔍 '+(ra?esc(ra):'대표자'), 'openClientRepSearch(this)'),
           filterPill('filterDealTypes','수임유형'),
@@ -2375,6 +2360,15 @@ function renderClients() {
           filterPill('filterFeeStatuses','수수료상태'),
         ].join('');
       })()}
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="btn-sm" style="background:${G.showFavorites?'#fff8e1':'#fefae0'};color:${G.showFavorites?'#f57c00':'#a08028'};border:2px solid ${G.showFavorites?'#ffd54f':'#e8d870'}" onclick="G.showFavorites=!G.showFavorites;G.clientPage=0;renderClients()">⭐ 즐겨찾기${G.showFavorites?' ON':''}</button>
+      <button class="btn-sm" style="background:#fff3e0;color:#e65100;border:1.5px solid #ffcc80" onclick="openNotesSearch()">🔍 메모검색</button>
+      <button class="btn-sm" style="background:#fce4ec;color:#880e4f;border:1.5px solid #f48fb1" onclick="showNameRepDuplicates()">🔎 중복검색</button>
+      <button class="btn-sm" style="background:${G.filterRisk==='위험'?'#fdecea':G.filterRisk==='주의'?'#fff3e0':'#fdf5f5'};color:${G.filterRisk==='위험'?'#c62828':G.filterRisk==='주의'?'#e65100':'#b07070'};border:1.5px solid ${G.filterRisk==='위험'?'#ef9a9a':G.filterRisk==='주의'?'#ffcc80':'#f0c0c0'}" onclick="G.filterRisk=G.filterRisk===''?'위험':G.filterRisk==='위험'?'주의':'';G.clientPage=0;renderClients()">● 위험도${G.filterRisk?' ('+G.filterRisk+')':' (전체)'}</button>
+      <button class="btn-sm" style="background:${G.filterGrade==='A'?'#e8f0fe':G.filterGrade==='B'?'#e8f5e9':G.filterGrade==='C'?'#f5f5f5':'#f0f2ff'};color:${G.filterGrade==='A'?'#1565c0':G.filterGrade==='B'?'#2e7d32':G.filterGrade==='C'?'#888':'#7080c8'};border:1.5px solid ${G.filterGrade==='A'?'#4f8ef7':G.filterGrade==='B'?'#43a047':G.filterGrade==='C'?'#bbb':'#c5cef0'};font-weight:${G.filterGrade?'700':'400'}" onclick="G.filterGrade=G.filterGrade===''?'A':G.filterGrade==='A'?'B':G.filterGrade==='B'?'C':'';G.clientPage=0;renderClients()">등급${G.filterGrade?' ('+G.filterGrade+')':''}</button>
+      <button class="btn-sm" style="background:${(G.filterTags||[]).length?'#e8f0fe':'#f0f4ff'};color:${(G.filterTags||[]).length?'#4f8ef7':'#5878cc'};border:1.5px solid ${(G.filterTags||[]).length?'#4f8ef7':'#b8c8f8'}" onclick="openTagFilterDropdown(this)">🏷 태그${(G.filterTags||[]).length?' ('+G.filterTags.length+')':''}</button>
+      ${(()=>{const hasFilter=G.searchText||G.clientRepSearch||(G.filterManagers||[]).length||(G.filterTaxTypes||[]).length||(G.filterVatTypes||[]).length||(G.filterFeeStatuses||[]).length||(G.filterDealTypes||[]).length||(G.filterCMS||[]).length||(G.filterRoutes||[]).length||(G.filterTags||[]).length||G.filterRisk||G.filterGrade||G.showFavorites;return hasFilter?`<button class="btn-sm" style="background:#fdecea;color:#c62828;border:1.5px solid #ef9a9a;font-weight:700" onclick="G.searchText='';G.clientRepSearch='';G.filterManagers=[];G.filterTaxTypes=[];G.filterVatTypes=[];G.filterFeeStatuses=[];G.filterDealTypes=[];G.filterCMS=[];G.filterRoutes=[];G.filterTags=[];G.filterRisk='';G.filterGrade='';G.showFavorites=false;G.clientPage=0;renderClients()">✕ 필터초기화</button>`:'';})()}
     </div>
   </div>`:''}
 
