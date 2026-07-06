@@ -1385,10 +1385,52 @@ function routeDetailInner(){
   }
   if (r === '컨설팅업체') {
     const list = (G.settings && G.settings.consultingCompanies) ? G.settings.consultingCompanies : [];
-    return `<input class="finput" list="route-consult-list" placeholder="컨설팅업체명 입력/선택" value="${esc(cur)}" oninput="window._formData.routeDetail=this.value"><datalist id="route-consult-list">${list.map(v=>`<option value="${esc(v)}">`).join('')}</datalist>`;
+    const names = [...new Set([...list, ...(cur ? [cur] : [])])];
+    const chips = names.map(v => {
+      const sel = cur === v;
+      const ev = esc(v).replace(/'/g, "\\'");
+      return `<label style="display:inline-flex;align-items:center;gap:5px;padding:4px 8px 4px 10px;border-radius:14px;border:1.5px solid ${sel?'#00838f':'#e0e0e0'};background:${sel?'#e0f7fa':'#fff'};color:${sel?'#00695c':'#555'};font-size:12px;cursor:pointer;font-weight:${sel?'700':'500'}">
+        <input type="checkbox" ${sel?'checked':''} onclick="_toggleConsult('${ev}')" style="cursor:pointer;margin:0">${esc(v)}
+        <span onclick="event.preventDefault();event.stopPropagation();_removeConsult('${ev}')" title="목록에서 삭제" style="color:#bbb;font-size:13px;line-height:1;padding:0 1px;cursor:pointer">✕</span>
+      </label>`;
+    }).join('');
+    return `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+      ${chips || '<span style="font-size:12px;color:#aaa">등록된 컨설팅업체가 없습니다. 아래에서 추가하세요</span>'}
+      <span style="display:inline-flex;gap:4px;align-items:center">
+        <input id="new-consult-input" class="finput" placeholder="새 컨설팅업체명" style="width:130px;padding:4px 8px;font-size:12px" onkeydown="if(event.key==='Enter'){event.preventDefault();_addConsult();}">
+        <button type="button" class="btn-sm" onclick="_addConsult()" style="background:#e0f7fa;color:#00695c;border:1px solid #80deea;font-weight:600">+ 추가</button>
+      </span>
+    </div>`;
   }
   return `<div style="font-size:12px;color:#aaa;padding:7px 2px">수임경로를 먼저 선택하세요</div>`;
 }
+window._toggleConsult = function(name){
+  const fd = window._formData || {};
+  fd.routeDetail = (fd.routeDetail === name) ? '' : name;
+  const box = document.getElementById('route-detail-box');
+  if (box) box.innerHTML = routeDetailInner();
+};
+window._addConsult = function(){
+  const inp = document.getElementById('new-consult-input');
+  if (!inp) return;
+  const nm = (inp.value||'').trim();
+  if (!nm) { inp.focus(); return; }
+  if (!G.settings) G.settings = {};
+  if (!G.settings.consultingCompanies) G.settings.consultingCompanies = [];
+  if (!G.settings.consultingCompanies.includes(nm)) { G.settings.consultingCompanies.push(nm); saveToLS(); }
+  window._formData.routeDetail = nm; // 새로 추가한 업체를 바로 선택
+  const box = document.getElementById('route-detail-box');
+  if (box) box.innerHTML = routeDetailInner();
+};
+window._removeConsult = function(name){
+  if (!G.settings || !Array.isArray(G.settings.consultingCompanies)) return;
+  if (!confirm(`'${name}' 을(를) 컨설팅업체 목록에서 삭제할까요?\n(이미 이 업체로 지정된 거래처에는 영향 없음)`)) return;
+  G.settings.consultingCompanies = G.settings.consultingCompanies.filter(x => x !== name);
+  if ((window._formData||{}).routeDetail === name) window._formData.routeDetail = '';
+  saveToLS();
+  const box = document.getElementById('route-detail-box');
+  if (box) box.innerHTML = routeDetailInner();
+};
 
 // 소득구분(복수 선택) — 거래처 상세에서 표시/토글
 const INCOME_CATS = ['사업','부동산','주택','금융','기타'];
@@ -13551,6 +13593,14 @@ function defaultRouteSemusaV1() {
   if (count > 0) saveToLS();
   localStorage.setItem('tm_defaultRouteSemusaV1', '1');
 }
+function seedConsultingCompaniesV1() {
+  // 기본 컨설팅업체 '윤우' 등록 (1회)
+  if (localStorage.getItem('tm_seedConsultingV1')) return;
+  if (!G.settings) G.settings = {};
+  if (!Array.isArray(G.settings.consultingCompanies)) G.settings.consultingCompanies = [];
+  if (!G.settings.consultingCompanies.includes('윤우')) { G.settings.consultingCompanies.push('윤우'); saveToLS(); }
+  localStorage.setItem('tm_seedConsultingV1', '1');
+}
 function setNonBizVatV1() {
   // 사업소득자·종소세대리는 사업자가 아니므로 부가세 구분을 '비사업자'로 일괄 변경
   if (localStorage.getItem('tm_nonBizVatV1')) return;
@@ -14140,6 +14190,7 @@ async function loadFromFirebase() {
     markJointBizV1();
     defaultRouteSemusaV1();
     setNonBizVatV1();
+    seedConsultingCompaniesV1();
     importCorp26DataV1();
     importCorp26DataV2();
     importVat25_2DataV1();
