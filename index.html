@@ -2683,6 +2683,7 @@ function openImportExportMenu(btnEl) {
     <button onclick="document.getElementById('ie-popup')?.remove();openImportModal()" style="width:100%;text-align:left;padding:10px 12px;border-radius:8px;border:none;background:#f0f8ff;color:#1565c0;font-size:13px;cursor:pointer;font-family:inherit;margin-bottom:6px;display:block">📥 세무사랑 가져오기</button>
     <button onclick="document.getElementById('ie-popup')?.remove();openReconcileTool()" style="width:100%;text-align:left;padding:10px 12px;border-radius:8px;border:none;background:#fff3e0;color:#e65100;font-size:13px;cursor:pointer;font-family:inherit;margin-bottom:6px;display:block">📋 엑셀 대조·반영(누락채움·담당자·신규)</button>
     <button onclick="document.getElementById('ie-popup')?.remove();openRepIncomeTaxTool()" style="width:100%;text-align:left;padding:10px 12px;border-radius:8px;border:none;background:#eef3ff;color:#3949ab;font-size:13px;cursor:pointer;font-family:inherit;margin-bottom:6px;display:block">🏢 법인 대표자 종소세 정리</button>
+    <button onclick="document.getElementById('ie-popup')?.remove();showLongIdClients()" style="width:100%;text-align:left;padding:10px 12px;border-radius:8px;border:none;background:#f3e5f5;color:#6a1b9a;font-size:13px;cursor:pointer;font-family:inherit;margin-bottom:6px;display:block">🆔 자동생성 ID(긴 ID) 업체 점검</button>
     <button onclick="document.getElementById('ie-popup')?.remove();exportClientsToExcel()" style="width:100%;text-align:left;padding:10px 12px;border-radius:8px;border:none;background:#e8f5e9;color:#1b5e20;font-size:13px;cursor:pointer;font-family:inherit;display:block">📊 Excel 내보내기</button>`;
   document.body.appendChild(pop);
   const outside = e => { if(!pop.contains(e.target)&&e.target!==btnEl){pop.remove();document.removeEventListener('click',outside);} };
@@ -13919,9 +13920,50 @@ function openAuditSeongsiReport() {
 const _DUP_MODES = [
   {k:'nameExact', label:'상호 완전일치',  by:'name', partial:false},
   {k:'repExact',  label:'대표자 완전일치', by:'rep',  partial:false},
+  {k:'bizExact',  label:'사업자번호 일치', by:'bizNo', partial:false},
+  {k:'juminExact', label:'주민번호 일치', by:'jumin', partial:false},
   {k:'namePartial', label:'상호 일부일치', by:'name', partial:true},
   {k:'repPartial',  label:'대표자 일부일치', by:'rep',  partial:true},
 ];
+// 자동생성(타임스탬프) ID 업체 점검 — '거래처 추가' 폼/일부 가져오기로 만든 거래처는 ID가 등록시각(13자리)
+function showLongIdClients() {
+  const TH = 1e11;   // 처음 엑셀 로드분은 1~수백번대의 짧은 ID, 폼/가져오기 추가분은 13자리 타임스탬프
+  const list = G.clients.filter(c => Number(c.id) > TH)
+    .sort((a,b)=> (a.name||'').localeCompare(b.name||'','ko'));
+  const norm = s => (s||'').replace(/\s+/g,'').replace(/[()（）]/g,'').toLowerCase();
+  document.getElementById('dup-overlay')?.remove();
+  const ov = document.createElement('div');
+  ov.className = 'overlay'; ov.id = 'dup-overlay';
+  ov.innerHTML = `<div class="modal">
+    <div class="modal-header">
+      <h3>🆔 자동생성 ID(긴 ID) 업체 — ${list.length}개</h3>
+      <button class="close-btn" onclick="window._modalStack=[];this.closest('.overlay').remove()">✕</button>
+    </div>
+    <div class="modal-body" style="max-height:72vh;overflow-y:auto">
+      <div style="font-size:12px;color:#555;background:#f8f9ff;border:1px solid #e8eaf6;border-radius:8px;padding:10px 12px;margin-bottom:12px;line-height:1.7">
+        ℹ️ <b>왜 ID가 길까요?</b> 처음 엑셀로 불러온 거래처는 <b>1~수백번대의 짧은 ID</b>를 쓰지만,
+        <b>'거래처 추가' 폼</b>이나 일부 가져오기로 등록한 거래처는 등록 시각(밀리초, 13자리)을 ID로 부여합니다.
+        중복을 피하기 위한 정상 동작으로, ID가 길다는 것 자체는 문제가 아닙니다.<br>
+        다만 <b>이름이 이상하거나(여러 항목이 콤마로 합쳐짐 등) 중복</b>인 항목은 잘못 들어온 데이터일 수 있으니 검토·정리하세요.
+      </div>
+      ${list.length===0?`<p style="color:#888;text-align:center;padding:24px">자동생성 ID 업체가 없습니다.</p>`:
+      list.map(c=>{
+        const dup = G.clients.some(x=>x.id!==c.id && norm(x.name)===norm(c.name));
+        return `<div style="font-size:12px;color:#555;padding:6px 4px;border-bottom:1px solid #f0f0f0;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <span style="color:#aaa;font-size:11px;font-family:monospace">ID:${c.id}</span>
+          <span style="font-weight:600">${esc(c.name)}</span>
+          <span style="color:#888">${esc(c.rep)||'-'}</span>
+          <span style="color:#aaa">${c.bizNo||'사업자번호없음'}</span>
+          <span style="color:#aaa">${esc((getDealTypes(c)[0])||'')}</span>
+          ${dup?`<span style="font-size:10px;padding:1px 6px;border-radius:6px;background:#fff3e0;color:#e65100;font-weight:700">상호중복</span>`:''}
+          ${(c.status==='해지'||c.status==='폐업')?`<span style="font-size:10px;padding:1px 6px;border-radius:6px;background:#fdecea;color:#c62828;font-weight:700">${esc(c.status)}</span>`:''}
+          <button onclick="navTo(()=>showLongIdClients(),()=>openClientNotes(${c.id}))" style="margin-left:auto;font-size:11px;padding:2px 8px;border-radius:5px;border:1px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;cursor:pointer;font-family:inherit">보기</button>
+        </div>`;}).join('')}
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e => { if (e.target === ov) { window._modalStack = []; ov.remove(); } });
+}
 function toggleDupMode(k) {
   const s = new Set(window._dupModes && window._dupModes.length ? window._dupModes : ['nameExact']);
   if (s.has(k)) { if (s.size > 1) s.delete(k); } // 최소 1개는 유지
@@ -13941,10 +13983,13 @@ function showNameRepDuplicates(opt) {
   const items = G.clients.slice();
   const nName = items.map(c=>norm(c.name));
   const nRep  = items.map(c=>norm(c.rep));
+  const nBiz  = items.map(c=>(c.bizNo||'').replace(/[^0-9]/g,''));   // 사업자번호는 숫자만
+  const nJumin= items.map(c=>(c.jumin||'').replace(/[^0-9]/g,''));   // 주민/법인등록번호는 숫자만
+  const nBy = { name:nName, rep:nRep, bizNo:nBiz, jumin:nJumin };
   // 선택한 모든 기준을 동시에 만족(AND)하는 쌍만 같은 묶음으로 — union-find
   const pairMatch = (i,j) => cfgs.every(cfg => {
-    const va = cfg.by==='rep' ? nRep[i] : nName[i];
-    const vb = cfg.by==='rep' ? nRep[j] : nName[j];
+    const va = (nBy[cfg.by]||nName)[i];
+    const vb = (nBy[cfg.by]||nName)[j];
     if (!va || !vb) return false;
     if (!cfg.partial) return va === vb;
     const sh = va.length <= vb.length ? va : vb;
