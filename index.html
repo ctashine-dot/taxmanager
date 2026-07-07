@@ -1722,7 +1722,7 @@ function showMissingClientsModal() {
   ${list.map(c=>{
     const mf = getMissingFields(c);
     return `<div style="padding:14px 16px;border-bottom:1px solid #f0f0f0">
-      <div style="font-weight:700;font-size:14px;margin-bottom:8px;color:#1a1a2e">${esc(c.name)} <span style="font-size:11px;color:#ff7043;font-weight:400">${mf.map(x=>x.label).join(', ')} 누락</span></div>
+      <div style="font-weight:700;font-size:14px;margin-bottom:8px;color:#1a1a2e">${esc(c.name)}${c.rep?` <span style="font-size:12px;color:#888;font-weight:500">· ${esc(c.rep)}</span>`:''} <span style="font-size:11px;color:#ff7043;font-weight:400">${mf.map(x=>x.label).join(', ')} 누락</span></div>
       <div style="display:flex;flex-wrap:wrap;gap:8px">
       ${mf.map(({field,label})=>{
         if (field==='taxType') return `<div style="display:flex;align-items:center;gap:4px"><span style="font-size:12px;color:#888;min-width:60px">${label}</span><select onchange="updateClientField(${c.id},'taxType',this.value);closeModal();showMissingClientsModal()" class="inline-edit" style="font-size:12px;padding:3px 6px">${TAX_TYPES.map(v=>`<option${c.taxType===v?' selected':''}>${v}</option>`).join('')}</select></div>`;
@@ -13760,6 +13760,19 @@ function seedConsultingCompaniesV1() {
   if (!G.settings.consultingCompanies.includes('윤우')) { G.settings.consultingCompanies.push('윤우'); saveToLS(); }
   localStorage.setItem('tm_seedConsultingV1', '1');
 }
+function fillJongsoBizNoV1() {
+  // 종소세대리 중 사업자등록번호 누락 업체를 '000-00-00000'으로 채움 (1회)
+  if (localStorage.getItem('tm_fillJongsoBizNoV1')) return;
+  let count = 0;
+  G.clients.forEach(c => {
+    if (getDealTypes(c).includes('종소세대리') && !(c.bizNo||'').trim()) {
+      c.bizNo = '000-00-00000';
+      count++;
+    }
+  });
+  if (count > 0) { saveToLS(); console.log(`종소세대리 사업자번호 누락 ${count}개 → 000-00-00000`); }
+  localStorage.setItem('tm_fillJongsoBizNoV1', '1');
+}
 function setNonBizVatV1() {
   // 사업소득자·종소세대리는 사업자가 아니므로 부가세 구분을 '비사업자'로 일괄 변경
   if (localStorage.getItem('tm_nonBizVatV1')) return;
@@ -14425,6 +14438,7 @@ async function loadFromFirebase() {
     defaultRouteSemusaV1();
     setNonBizVatV1();
     seedConsultingCompaniesV1();
+    fillJongsoBizNoV1();
     importCorp26DataV1();
     importCorp26DataV2();
     importVat25_2DataV1();
