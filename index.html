@@ -5412,10 +5412,12 @@ function renderJulgae() {
   //    + 사업자번호가 없는 공동사업자는 거래처수정·그룹편집에서 명시 지정(incomeGroupKey)한 경우만
   //  · 부가세·사업장현황: 그룹화하지 않고 모두 개별 표시
   //  ※ 관계사 그룹(relatedGroup)은 신고리스트 묶음 기준에서 제외 — 개별 업체로 표시
+  // '000-00-00000' 같은 자리표시(모두 0) 번호는 실제 번호가 아니므로 공동사업자 묶음에서 제외
+  const _isRealNum = s => s && !/^0+$/.test(s);
   const _juminCnt = {}, _bizCnt = {};
   clients.forEach(x => {
-    const jn=(x.jumin||'').replace(/[-\s]/g,''); if(jn) _juminCnt[jn]=(_juminCnt[jn]||0)+1;
-    const bn=(x.bizNo||'').replace(/\D/g,''); if(bn) _bizCnt[bn]=(_bizCnt[bn]||0)+1;
+    const jn=(x.jumin||'').replace(/[-\s]/g,''); if(_isRealNum(jn)) _juminCnt[jn]=(_juminCnt[jn]||0)+1;
+    const bn=(x.bizNo||'').replace(/\D/g,''); if(_isRealNum(bn)) _bizCnt[bn]=(_bizCnt[bn]||0)+1;
   });
   const _nmKey = s => (s||'').replace(/\s/g,'');
   const _jGrpNorm = c => {
@@ -5423,12 +5425,12 @@ function renderJulgae() {
     const jn=(c.jumin||'').replace(/[-\s]/g,'');
     const bn=(c.bizNo||'').replace(/\D/g,'');
     if (rt === 'corp') {                                    // 법인: 본점·지점(같은 법인등록번호)
-      if (jn && _juminCnt[jn]>1) return 'jm:'+jn;
+      if (_isRealNum(jn) && _juminCnt[jn]>1) return 'jm:'+jn;
       return '';
     }
     // 소득세·성실
-    if (jn && _juminCnt[jn]>1) return 'jm:'+jn;             // 동일인 여러 사업장
-    if (bn && bn.length>=10 && _bizCnt[bn]>1) return 'bz:'+bn; // 공동사업자(같은 사업자번호)
+    if (_isRealNum(jn) && _juminCnt[jn]>1) return 'jm:'+jn;             // 동일인 여러 사업장
+    if (_isRealNum(bn) && bn.length>=10 && _bizCnt[bn]>1) return 'bz:'+bn; // 공동사업자(같은 사업자번호)
     return '';
   };
   // 상호/대표자 기준 '묶기 제안' 후보 — 사업자번호·주민번호로 자동그룹이 안 되는 경우(미입력 등)
@@ -5458,10 +5460,10 @@ function renderJulgae() {
   //   ②일부/전부 사업자번호가 없고 거래처수정·그룹편집에서 공동으로 지정(groupJoint)한 경우 → 공동사업자
   //   ③서로 다른 사업자번호 → 별개의 사업자(공동 아님)
   const julgaeIsJoint = gc => {
-    const bns = gc.map(_bzKey).filter(b => b.length>=10);
+    const bns = gc.map(_bzKey).filter(b => b.length>=10 && !/^0+$/.test(b));
     const bcnt = {}; bns.forEach(b => bcnt[b]=(bcnt[b]||0)+1);
     if (Object.values(bcnt).some(n => n>=2)) return true;
-    const someBlank = gc.some(m => _bzKey(m).length < 10);
+    const someBlank = gc.some(m => { const b=_bzKey(m); return b.length < 10 || /^0+$/.test(b); });
     if (someBlank && gc.some(m => m.groupJoint)) return true;
     return false;
   };
@@ -5526,6 +5528,7 @@ function renderJulgae() {
   const _totalPages = _pages.length;
   if (G.julgaePage == null || G.julgaePage < 0) G.julgaePage = 0;
   if (G.julgaePage >= _totalPages) G.julgaePage = _totalPages - 1;
+  window._julgaeTotalPages = _totalPages;   // 좌우 페이지 이동 버튼용
   const _pageBlocks = _pages[G.julgaePage] || [];
 
   // 현재 페이지의 블록을 구분선과 함께 renderItems로 펼침
@@ -14855,21 +14858,29 @@ init();
   }
 
   function updateNav() {
-    const wrap = document.querySelector('.tbl-wrap');
     const isClients = G.currentTab === 'clients';
-    const totalPages = isClients ? (Math.ceil(filteredClients().length / 50) || 1) : 1;
+    const isJulgae  = G.currentTab === 'julgae';
+    // 현재 탭의 보이는 표 래퍼(가로 스크롤 감지용)
+    const pageEl = document.getElementById('page-' + G.currentTab);
+    const wrap = pageEl ? pageEl.querySelector('.tbl-wrap') : document.querySelector('.tbl-wrap');
+    const page = isClients ? (G.clientPage||0) : isJulgae ? (G.julgaePage||0) : 0;
+    const totalPages = isClients ? (Math.ceil(filteredClients().length / 50) || 1)
+                     : isJulgae ? (window._julgaeTotalPages || 1) : 1;
+    const active = isClients || isJulgae;
     const atLeft  = !wrap || wrap.scrollLeft <= 4;
     const atRight = !wrap || wrap.scrollLeft >= wrap.scrollWidth - wrap.clientWidth - 4;
+    const goPrev = () => { if (isClients){ G.clientPage--; renderClients(); } else { julgaePageChange(-1); } window.scrollTo({top:0,behavior:'instant'}); };
+    const goNext = () => { if (isClients){ G.clientPage++; renderClients(); } else { julgaePageChange(1); } window.scrollTo({top:0,behavior:'instant'}); };
 
     const lb = getOrCreateBtn('_prev-page-btn', 'left');
     lb.textContent = '◀';
-    lb.style.display = (isClients && atLeft && G.clientPage > 0) ? '' : 'none';
-    lb.onclick = () => { G.clientPage--; renderClients(); window.scrollTo({top:0,behavior:'instant'}); };
+    lb.style.display = (active && atLeft && page > 0) ? '' : 'none';
+    lb.onclick = goPrev;
 
     const rb = getOrCreateBtn('_next-page-btn', 'right');
     rb.textContent = '▶';
-    rb.style.display = (isClients && atRight && G.clientPage < totalPages - 1) ? '' : 'none';
-    rb.onclick = () => { G.clientPage++; renderClients(); window.scrollTo({top:0,behavior:'instant'}); };
+    rb.style.display = (active && atRight && page < totalPages - 1) ? '' : 'none';
+    rb.onclick = goNext;
   }
 
   // 스크롤 이벤트는 버블되지 않으므로 capture 단계에서 감지
@@ -14879,9 +14890,11 @@ init();
     }
   }, true);
 
-  // renderClients 후 DOM 재구성 시 버튼 상태 갱신
+  // renderClients/renderJulgae 후 DOM 재구성 시 버튼 상태 갱신
   const _rc = renderClients;
   renderClients = function() { _rc.apply(this, arguments); requestAnimationFrame(updateNav); };
+  const _rj = renderJulgae;
+  renderJulgae = function() { _rj.apply(this, arguments); requestAnimationFrame(updateNav); };
 })();
 // 검색 입력 디바운스 — 키 입력마다 전체 리렌더 방지
 const _dRC = debounce(renderClients, 220);
