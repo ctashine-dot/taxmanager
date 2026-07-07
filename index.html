@@ -7490,7 +7490,8 @@ function consultingFeeCardsHTML() {
         <td style="padding:5px 8px;font-size:11px;color:#7b1fa2">${esc(c.routeDetail||'-')}</td>
         <td style="padding:5px 8px;text-align:right;font-size:12px">${won(f.monthly)}</td>
         <td style="padding:5px 8px;text-align:right;font-size:12px;font-weight:700;color:#6a3ab2">${won(f.total)}</td>
-        <td style="padding:5px 8px;font-size:11px;color:#666">1차 ${f.due1||'입금대기'} · 2차 ${f.due2||'-'}</td>
+        <td style="padding:5px 8px;font-size:11px;color:#666;white-space:nowrap">1차 ${f.due1||'입금대기'} · 2차 ${f.due2||'-'}</td>
+        <td style="padding:5px 8px;text-align:right;font-size:11px;color:#444;white-space:nowrap">1차 ${won(f.half)} · 2차 ${won(f.half)}</td>
       </tr>`;
     }).join('');
     return `<div style="border:1px solid #eadff7;border-radius:10px;margin-bottom:8px;overflow:hidden">
@@ -7498,10 +7499,10 @@ function consultingFeeCardsHTML() {
         <span style="font-size:13px;font-weight:700;color:#4a2b7a">${open?'▾':'▸'} ${_cfYMLabel(ym)} 수임 <span style="color:#888;font-weight:400">(${gcs.length}개)</span></span>
         <span style="font-size:11px;color:#666">기장료 ${won(sfee)} · 수임료 <b style="color:#6a3ab2">${won(scomm)}</b></span>
       </button>
-      ${open?`<div style="overflow-x:auto"><table style="width:100%;min-width:520px">
-        <thead><tr style="background:#faf9ff"><th style="padding:5px 8px;text-align:left;font-size:11px;color:#888">거래처</th><th style="padding:5px 8px;text-align:left;font-size:11px;color:#888">컨설팅업체</th><th style="padding:5px 8px;text-align:right;font-size:11px;color:#888">기장료(월)</th><th style="padding:5px 8px;text-align:right;font-size:11px;color:#888">수임료(1년)</th><th style="padding:5px 8px;text-align:left;font-size:11px;color:#888">지급 시기</th></tr></thead>
+      ${open?`<div style="overflow-x:auto"><table style="width:100%;min-width:640px">
+        <thead><tr style="background:#faf9ff"><th style="padding:5px 8px;text-align:left;font-size:11px;color:#888">거래처</th><th style="padding:5px 8px;text-align:left;font-size:11px;color:#888">컨설팅업체</th><th style="padding:5px 8px;text-align:right;font-size:11px;color:#888">기장료(월)</th><th style="padding:5px 8px;text-align:right;font-size:11px;color:#888">수임료(1년)</th><th style="padding:5px 8px;text-align:left;font-size:11px;color:#888">지급 시기</th><th style="padding:5px 8px;text-align:right;font-size:11px;color:#888">지급해야할 금액(1차·2차)</th></tr></thead>
         <tbody>${rows}</tbody>
-        <tfoot><tr style="background:#f5f5f5;font-weight:700"><td colspan="2" style="padding:5px 8px;font-size:12px">소계 (${gcs.length}개)</td><td style="padding:5px 8px;text-align:right;font-size:12px">${won(sfee)}</td><td style="padding:5px 8px;text-align:right;font-size:12px;color:#6a3ab2">${won(scomm)}</td><td></td></tr></tfoot>
+        <tfoot><tr style="background:#f5f5f5;font-weight:700"><td colspan="2" style="padding:5px 8px;font-size:12px">소계 (${gcs.length}개)</td><td style="padding:5px 8px;text-align:right;font-size:12px">${won(sfee)}</td><td style="padding:5px 8px;text-align:right;font-size:12px;color:#6a3ab2">${won(scomm)}</td><td style="padding:5px 8px;font-size:11px;color:#888">지급 합계 →</td><td style="padding:5px 8px;text-align:right;font-size:12px;color:#6a3ab2">${won(scomm)}</td></tr></tfoot>
       </table></div>`:''}
     </div>`;
   }).join('');
@@ -7528,7 +7529,9 @@ function consultingFeeCardsHTML() {
   </div>`;
 
   // ── Card 2: 컨설팅 업체 기장료 (수금) — 수임월부터 12개월, 월정수금(G.monthlyFees) 연동 ──
-  const feeRows = list.map(c => {
+  // 기장료(수수료)가 0인 업체는 수금 관리 대상이 아니므로 제외
+  const feeList = list.filter(c => (getFeeForYM(c, feesYM) || c.fee || 0) > 0);
+  const feeRows = feeList.map(c => {
     const startYM = _cfContractYM(c) || feesYM;
     const monthsList = []; for (let i=0;i<12;i++) monthsList.push(_cfAddMonthsYM(startYM,i));
     const monthly = getFeeForYM(c, feesYM) || c.fee || 0;
@@ -7549,11 +7552,11 @@ function consultingFeeCardsHTML() {
     <div style="display:flex;align-items:center;gap:8px;${cfeeOpen?'margin-bottom:12px':''}">
       <button onclick="G.feesConsultFeeOpen=!G.feesConsultFeeOpen;renderFees()" style="padding:2px 8px;border-radius:6px;border:1.5px solid #e0e0e0;background:${cfeeOpen?'#fff':'#f5f5f5'};color:#888;font-size:12px;cursor:pointer;font-family:inherit;line-height:1.4">${cfeeOpen?'▼':'▶'}</button>
       <div class="card-title" style="margin-bottom:0;color:#1b5e20">📒 컨설팅 업체 기장료 (수금 · 1년)</div>
-      ${!cfeeOpen?`<span style="font-size:12px;color:#888;margin-left:auto">대상 ${list.length}개</span>`:''}
+      ${!cfeeOpen?`<span style="font-size:12px;color:#888;margin-left:auto">대상 ${feeList.length}개</span>`:''}
     </div>
     ${cfeeOpen?`
-    <div style="font-size:11px;color:#1b5e20;background:#f1f8f1;border:1px solid #c8e6c9;border-radius:8px;padding:8px 12px;margin-bottom:10px;line-height:1.6">💡 컨설팅업체 수임 거래처의 기장료를 월정수수료와 별도로 <b>수임월부터 12개월</b> 관리합니다. 각 월 칸을 눌러 수금 체크(월정 수금과 연동). <b>첫 수금 시점이 수수료 1차 지급 기준</b>이 됩니다.</div>
-    ${list.length?`<div style="overflow-x:auto"><table style="min-width:640px">
+    <div style="font-size:11px;color:#1b5e20;background:#f1f8f1;border:1px solid #c8e6c9;border-radius:8px;padding:8px 12px;margin-bottom:10px;line-height:1.6">💡 컨설팅업체 수임 거래처의 기장료를 월정수수료와 별도로 <b>수임월부터 12개월</b> 관리합니다. 각 월 칸을 눌러 수금 체크(월정 수금과 연동). <b>첫 수금 시점이 수수료 1차 지급 기준</b>이 됩니다. (기장료 0원 업체 제외)</div>
+    ${feeList.length?`<div style="overflow-x:auto"><table style="min-width:640px">
       <thead><tr style="background:#f5f5f5"><th style="padding:5px 8px;text-align:left;font-size:11px;color:#888;position:sticky;left:0;background:#f5f5f5">거래처</th><th style="padding:5px 8px;text-align:right;font-size:11px;color:#888">기장료</th><th style="padding:5px 8px;text-align:center;font-size:11px;color:#888">수금</th><th colspan="12" style="padding:5px 8px;text-align:left;font-size:11px;color:#888">수임월부터 12개월 (✓=수금)</th></tr></thead>
       <tbody>${feeRows}</tbody>
     </table></div>`:`<div style="text-align:center;padding:20px;color:#aaa">컨설팅업체 수임 거래처가 없습니다.</div>`}
