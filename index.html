@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <!-- 보안: 데이터 외부 유출 차단(connect-src 허용목록) + object/base 제한. default-src 미지정으로 스크립트·스타일·워커는 영향 없음 -->
-<meta http-equiv="Content-Security-Policy" content="connect-src 'self' https://api.anthropic.com https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://apis.google.com https://accounts.google.com https://*.firebaseapp.com https://www.gstatic.com https://cdnjs.cloudflare.com; object-src 'none'; base-uri 'self'">
+<meta http-equiv="Content-Security-Policy" content="connect-src 'self' https://api.anthropic.com https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://apis.google.com https://accounts.google.com https://*.firebaseapp.com https://www.gstatic.com https://cdnjs.cloudflare.com http://127.0.0.1:*; object-src 'none'; base-uri 'self'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -9467,6 +9467,14 @@ function openImportModal() {
     <input type="file" id="import-file-input" accept=".csv,.txt,.xlsx,.xls" style="display:none"
       onchange="parseImportFile(this.files[0])">
     <div id="import-preview"></div>
+    <div style="margin-top:14px;border-top:1px dashed #ddd;padding-top:14px">
+      <button onclick="fetchFromSemusarangAgent(event)" style="width:100%;padding:11px;border-radius:10px;border:2px solid #2e7d32;background:#e8f5e9;color:#1b5e20;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">
+        🤖 세무사랑 앱에서 자동으로 불러오기
+      </button>
+      <div style="font-size:11px;color:#aaa;margin-top:5px;text-align:center">
+        세무사랑이 설치된 PC에서 자동화 에이전트가 실행 중이어야 합니다 · <a href="#" onclick="openAgentSettings();return false" style="color:#4f8ef7">연결 설정</a>
+      </div>
+    </div>
     <div style="margin-top:12px;background:#fff8e1;border-radius:8px;padding:10px 14px;font-size:11px;color:#795548;line-height:1.8">
       <b>💡 세무사랑에서 내보내기 방법</b><br>
       • 거래처 목록: 기초 → 거래처 관리 → 거래처 현황 → [엑셀] 버튼<br>
@@ -9474,6 +9482,73 @@ function openImportModal() {
     </div>
   </div>
   </div>`);
+}
+
+// ══════════════════════════════════════════════════════
+// 세무사랑 자동화 에이전트 연동 (로컬 PC에서 실행되는 별도 프로그램, automation/ 참고)
+// 브라우저는 데스크톱 앱을 직접 제어할 수 없으므로, 세무사랑이 설치된 PC에서
+// 로컬로 실행 중인 에이전트(http://127.0.0.1:포트)에 요청을 보내 대신 수행시킨다.
+// ══════════════════════════════════════════════════════
+function _agentCfg() {
+  return {
+    url: (localStorage.getItem('tm_agentUrl') || 'http://127.0.0.1:5987').replace(/\/$/,''),
+    token: localStorage.getItem('tm_agentToken') || ''
+  };
+}
+function openAgentSettings() {
+  const cfg = _agentCfg();
+  showModal(`<div style="max-width:420px;width:min(420px,95vw)">
+    <div class="modal-header"><h3>🤖 세무사랑 자동화 에이전트 연결</h3><button class="close-btn" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div style="font-size:12px;color:#666;margin-bottom:12px;line-height:1.7">
+        세무사랑이 설치된 PC에서 로컬 자동화 에이전트를 먼저 실행하세요 (별도 프로그램, <code>automation/</code> 폴더 참고).
+        아래 주소·토큰은 이 브라우저에만 저장되며 서버로 전송되지 않습니다.
+      </div>
+      <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">에이전트 주소</label>
+      <input id="agent-url-input" type="text" value="${esc(cfg.url)}" placeholder="http://127.0.0.1:5987" style="width:100%;padding:9px 10px;border-radius:8px;border:1.5px solid #ddd;font-size:13px;margin-bottom:10px;font-family:inherit;box-sizing:border-box">
+      <label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">인증 토큰</label>
+      <input id="agent-token-input" type="text" value="${esc(cfg.token)}" placeholder="에이전트 실행 시 콘솔에 출력된 토큰" style="width:100%;padding:9px 10px;border-radius:8px;border:1.5px solid #ddd;font-size:13px;margin-bottom:14px;font-family:inherit;box-sizing:border-box">
+      <div class="btn-row">
+        <button class="btn-secondary" onclick="closeModal()">취소</button>
+        <button class="btn-primary" onclick="saveAgentSettings()">저장</button>
+      </div>
+    </div>
+  </div>`);
+}
+function saveAgentSettings() {
+  const url = document.getElementById('agent-url-input').value.trim().replace(/\/$/,'');
+  const token = document.getElementById('agent-token-input').value.trim();
+  if (url) localStorage.setItem('tm_agentUrl', url);
+  localStorage.setItem('tm_agentToken', token);
+  toast('에이전트 연결 정보가 저장되었습니다.', 'success');
+  closeModal();
+  openImportModal();
+}
+async function fetchFromSemusarangAgent(evt) {
+  const cfg = _agentCfg();
+  if (!cfg.token) { toast('먼저 "연결 설정"에서 에이전트 토큰을 입력하세요.', 'warning'); openAgentSettings(); return; }
+  const type = window._importType || 'clients';
+  const btn = evt?.target;
+  const prevLabel = btn ? btn.textContent : null;
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 세무사랑에서 불러오는 중...'; }
+  try {
+    const res = await fetch(cfg.url + '/fetch', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json', 'X-Agent-Token': cfg.token},
+      body: JSON.stringify({type})
+    });
+    const body = await res.json().catch(()=>({}));
+    if (!res.ok) throw new Error(body.error || ('에이전트 응답 오류 (' + res.status + ')'));
+    const bin = atob(body.content_base64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+    parseImportFile(new Blob([bytes]));
+    toast('세무사랑에서 "' + (body.filename||'') + '" 파일을 불러왔습니다.', 'success');
+  } catch (err) {
+    toast('자동 불러오기 실패: ' + err.message + ' (PC에서 에이전트가 실행 중인지 확인하세요)', 'error', 6000);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = prevLabel; }
+  }
 }
 
 function setImportType(type) {

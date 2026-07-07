@@ -1,0 +1,8 @@
+# 기본 동작(watch 모드)은 표준 라이브러리만 사용합니다 — 별도 설치 불필요.
+# automate 모드(세무사랑 화면을 직접 조작)와 inspect_semusarang.py는
+# Windows + 아래 패키지가 필요합니다.
+pywinauto>=0.6.8; sys_platform == "win32"
+pywin32; sys_platform == "win32"
+
+# 테스트 실행용 (개발 환경에서만 필요)
+pytest>=7.0

@@ -1,0 +1,20 @@
+{
+  "port": 5987,
+  "token": "REPLACE_ME_RANDOM_TOKEN",
+  "allowed_origin": "https://YOUR-TAXMANAGER-APP.web.app",
+
+  "mode": "watch",
+
+  "watch_dir": "C:\\Users\\YOUR_WINDOWS_USERNAME\\Downloads",
+  "file_patterns": {
+    "clients": "*거래처*.xls*",
+    "invoice": "*세금계산서*.xls*"
+  },
+  "max_age_minutes": 10,
+
+  "window_title_regex": ".*세무사랑.*",
+  "menu_paths": {
+    "clients": ["기초", "거래처 관리", "거래처 현황", "엑셀"],
+    "invoice": ["홈택스", "전자세금계산서 합계표", "엑셀"]
+  }
+}
