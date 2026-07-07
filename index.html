@@ -14450,6 +14450,12 @@ async function loadFromFirebase() {
       if (filled > 0) { saveToLS(); console.log(`수임일자 누락 ${filled}개 업체 → 2020-01-01 적용`); }
       localStorage.setItem('tm_contractDateFillV1', '1');
     }
+    if (!localStorage.getItem('tm_contractDateFill2025V1')) {
+      let filled = 0;
+      G.clients.forEach(c => { if (!(c.contractDate||'').trim()) { c.contractDate = '2025-01-01'; filled++; } });
+      if (filled > 0) { saveToLS(); console.log(`수임일자 누락 ${filled}개 업체 → 2025-01-01 적용`); }
+      localStorage.setItem('tm_contractDateFill2025V1', '1');
+    }
     computeGrades();
     if (G.settings?.managers) MANAGERS = ['전체', ...G.settings.managers];
     if (G.settings.feeApplied === undefined) G.settings.feeApplied = false;
