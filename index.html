@@ -7465,9 +7465,11 @@ function consultingFeeCardsHTML() {
   const consultOpen = !!G.feesConsultOpen, cfeeOpen = !!G.feesConsultFeeOpen;
   if (!G.feesConsultMonths) G.feesConsultMonths = {};
 
+  // ── 기장료(수수료)가 0인 업체는 지급 리스트에서 제외 ──
+  const payList = list.filter(c => ((getFeeForYM(c,feesYM)||c.fee||0) > 0));
   // ── 당월 송금 요약: 1차(당월 due) + 6개월전 업체 2차(당월 due) ──
   let due1=0, due2=0, cnt1=0, cnt2=0;
-  list.forEach(c => { const f=computeConsultingFee(c);
+  payList.forEach(c => { const f=computeConsultingFee(c);
     if (f.due1 && f.due1.slice(0,7)===feesYM) { due1+=f.half; cnt1++; }
     if (f.due2 && f.due2.slice(0,7)===feesYM) { due2+=f.half; cnt2++; }
   });
@@ -7475,34 +7477,36 @@ function consultingFeeCardsHTML() {
 
   // ── 수임월별 그룹 ──
   const byMonth = {};
-  list.forEach(c => { const m=_cfContractYM(c)||'미상'; (byMonth[m]=byMonth[m]||[]).push(c); });
+  payList.forEach(c => { const m=_cfContractYM(c)||'미상'; (byMonth[m]=byMonth[m]||[]).push(c); });
   const months = Object.keys(byMonth).sort().reverse();
   let grandFee=0, grandCommission=0;
-  list.forEach(c => { const f=computeConsultingFee(c); grandFee+=f.monthly; grandCommission+=f.total; });
+  payList.forEach(c => { const f=computeConsultingFee(c); grandFee+=f.monthly; grandCommission+=f.total; });
 
   const monthBlocks = months.map(ym => {
     const gcs = byMonth[ym];
     const open = !!G.feesConsultMonths[ym];
-    let sfee=0, scomm=0;
-    const rows = gcs.map(c => { const f=computeConsultingFee(c); sfee+=f.monthly; scomm+=f.total;
+    let sfee=0, scomm=0, s1=0, s2=0;
+    const rows = gcs.map(c => { const f=computeConsultingFee(c); sfee+=f.monthly; scomm+=f.total; s1+=f.half; s2+=f.half;
       return `<tr style="border-bottom:1px solid #f2f2f2">
         <td style="padding:5px 8px;font-size:12px;font-weight:600">${esc(c.name)}</td>
         <td style="padding:5px 8px;font-size:11px;color:#7b1fa2">${esc(c.routeDetail||'-')}</td>
         <td style="padding:5px 8px;text-align:right;font-size:12px">${won(f.monthly)}</td>
         <td style="padding:5px 8px;text-align:right;font-size:12px;font-weight:700;color:#6a3ab2">${won(f.total)}</td>
-        <td style="padding:5px 8px;font-size:11px;color:#666;white-space:nowrap">1차 ${f.due1||'입금대기'} · 2차 ${f.due2||'-'}</td>
-        <td style="padding:5px 8px;text-align:right;font-size:11px;color:#444;white-space:nowrap">1차 ${won(f.half)} · 2차 ${won(f.half)}</td>
+        <td style="padding:5px 8px;font-size:11px;color:#666;white-space:nowrap">${f.due1||'입금대기'}</td>
+        <td style="padding:5px 8px;text-align:right;font-size:12px;color:#1565c0">${won(f.half)}</td>
+        <td style="padding:5px 8px;font-size:11px;color:#666;white-space:nowrap">${f.due2||'-'}</td>
+        <td style="padding:5px 8px;text-align:right;font-size:12px;color:#e65100">${won(f.half)}</td>
       </tr>`;
     }).join('');
     return `<div style="border:1px solid #eadff7;border-radius:10px;margin-bottom:8px;overflow:hidden">
       <button onclick="toggleConsultMonth('${ym}')" style="width:100%;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 12px;border:none;background:${open?'#f4eefe':'#faf7ff'};cursor:pointer;font-family:inherit">
         <span style="font-size:13px;font-weight:700;color:#4a2b7a">${open?'▾':'▸'} ${_cfYMLabel(ym)} 수임 <span style="color:#888;font-weight:400">(${gcs.length}개)</span></span>
-        <span style="font-size:11px;color:#666">기장료 ${won(sfee)} · 수임료 <b style="color:#6a3ab2">${won(scomm)}</b></span>
+        <span style="font-size:11px;color:#666">1차 <b style="color:#1565c0">${won(s1)}</b> · 2차 <b style="color:#e65100">${won(s2)}</b></span>
       </button>
-      ${open?`<div style="overflow-x:auto"><table style="width:100%;min-width:640px">
-        <thead><tr style="background:#faf9ff"><th style="padding:5px 8px;text-align:left;font-size:11px;color:#888">거래처</th><th style="padding:5px 8px;text-align:left;font-size:11px;color:#888">컨설팅업체</th><th style="padding:5px 8px;text-align:right;font-size:11px;color:#888">기장료(월)</th><th style="padding:5px 8px;text-align:right;font-size:11px;color:#888">수임료(1년)</th><th style="padding:5px 8px;text-align:left;font-size:11px;color:#888">지급 시기</th><th style="padding:5px 8px;text-align:right;font-size:11px;color:#888">지급해야할 금액(1차·2차)</th></tr></thead>
+      ${open?`<div style="overflow-x:auto"><table style="width:100%;min-width:760px">
+        <thead><tr style="background:#faf9ff"><th style="padding:5px 8px;text-align:left;font-size:11px;color:#888">거래처</th><th style="padding:5px 8px;text-align:left;font-size:11px;color:#888">컨설팅업체</th><th style="padding:5px 8px;text-align:right;font-size:11px;color:#888">기장료(월)</th><th style="padding:5px 8px;text-align:right;font-size:11px;color:#888">수임료(1년)</th><th style="padding:5px 8px;text-align:left;font-size:11px;color:#1565c0">1차 지급시기</th><th style="padding:5px 8px;text-align:right;font-size:11px;color:#1565c0">1차 금액</th><th style="padding:5px 8px;text-align:left;font-size:11px;color:#e65100">2차 지급시기</th><th style="padding:5px 8px;text-align:right;font-size:11px;color:#e65100">2차 금액</th></tr></thead>
         <tbody>${rows}</tbody>
-        <tfoot><tr style="background:#f5f5f5;font-weight:700"><td colspan="2" style="padding:5px 8px;font-size:12px">소계 (${gcs.length}개)</td><td style="padding:5px 8px;text-align:right;font-size:12px">${won(sfee)}</td><td style="padding:5px 8px;text-align:right;font-size:12px;color:#6a3ab2">${won(scomm)}</td><td style="padding:5px 8px;font-size:11px;color:#888">지급 합계 →</td><td style="padding:5px 8px;text-align:right;font-size:12px;color:#6a3ab2">${won(scomm)}</td></tr></tfoot>
+        <tfoot><tr style="background:#f5f5f5;font-weight:700"><td colspan="2" style="padding:5px 8px;font-size:12px">소계 (${gcs.length}개)</td><td style="padding:5px 8px;text-align:right;font-size:12px">${won(sfee)}</td><td style="padding:5px 8px;text-align:right;font-size:12px;color:#6a3ab2">${won(scomm)}</td><td style="padding:5px 8px;font-size:11px;color:#888">1차 합계 →</td><td style="padding:5px 8px;text-align:right;font-size:12px;color:#1565c0">${won(s1)}</td><td style="padding:5px 8px;font-size:11px;color:#888">2차 합계 →</td><td style="padding:5px 8px;text-align:right;font-size:12px;color:#e65100">${won(s2)}</td></tr></tfoot>
       </table></div>`:''}
     </div>`;
   }).join('');
@@ -7511,7 +7515,7 @@ function consultingFeeCardsHTML() {
     <div style="display:flex;align-items:center;gap:8px;${consultOpen?'margin-bottom:12px':''}">
       <button onclick="G.feesConsultOpen=!G.feesConsultOpen;renderFees()" style="padding:2px 8px;border-radius:6px;border:1.5px solid #e0e0e0;background:${consultOpen?'#fff':'#f5f5f5'};color:#888;font-size:12px;cursor:pointer;font-family:inherit;line-height:1.4">${consultOpen?'▼':'▶'}</button>
       <div class="card-title" style="margin-bottom:0;color:#6a1b9a">🤝 컨설팅업체 수수료 (지급)</div>
-      ${!consultOpen?`<span style="font-size:12px;color:#888;margin-left:auto">대상 ${list.length}개 · 당월 송금 <b style="color:#c62828">${won(remit)}원</b></span>`:''}
+      ${!consultOpen?`<span style="font-size:12px;color:#888;margin-left:auto">대상 ${payList.length}개 · 당월 송금 <b style="color:#c62828">${won(remit)}원</b></span>`:''}
     </div>
     ${consultOpen?`
     <div style="font-size:11px;color:#7a5230;background:#fff8ef;border:1px solid #ffe0c2;border-radius:8px;padding:8px 12px;margin-bottom:10px;line-height:1.6">💡 컨설팅업체 수임료 = 1년치 기장료. <b>첫 기장료 수금 시 50%</b>, <b>6개월 뒤(7개월째) 나머지 50%</b> 지급. 아래 '${feesYM}' 기준 송금액과 수임월별 내역을 확인하세요.</div>
