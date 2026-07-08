@@ -2473,7 +2473,7 @@ function renderClients() {
         <td data-label="인격" style="${hc['c_taxType']?'display:none':''}">${em?iSel('taxType',TAX_TYPES.slice(1),c.taxType):badge(c.taxType,c.taxType==='법인'?'blue':'gray')}</td>
         <td data-label="과세유형" style="${hc['c_vatType']?'display:none':''}">${em?iSel('vatType',VAT_TYPES.slice(1),c.vatType):badge(c.vatType,c.vatType==='일반'?'blue':c.vatType==='간이'?'orange':c.vatType==='간세'?'teal':'gray')}</td>
         <td data-label="담당자" style="color:#555;font-size:12px;${hc['c_manager']?'display:none':''}">${em?iSel('manager',MANAGERS.slice(1),getManagers(c)[0]||''):esc(getManagers(c).join(', ')||'-')}</td>
-        <td data-label="수수료" style="font-weight:600;font-size:11px;${hc['c_fee']?'display:none':''}">${em?`<div onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:4px;font-size:10px"><span style="color:#888">기장</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'fee',this.value)" value="${c.fee||0}" class="inline-edit" style="width:70px"></div>`:((isJuminLead||isRelatedLead)?clientFeeDisplayGroup([c,...juminMembers,...relatedMembers]):clientFeeDisplay(c))}</td>
+        <td data-label="수수료" style="font-weight:600;font-size:11px;${hc['c_fee']?'display:none':''}">${em?`<div onclick="event.stopPropagation()" style="display:flex;flex-direction:column;gap:3px;font-size:10px"><div style="display:flex;align-items:center;gap:4px"><span style="color:#888;width:22px">기장</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'fee',this.value)" value="${c.fee||0}" class="inline-edit" style="width:72px"></div><div style="display:flex;align-items:center;gap:4px"><span style="color:#888;width:22px">조정</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'adjustFee',this.value)" value="${c.adjustFee||0}" class="inline-edit" style="width:72px"></div></div>`:((isJuminLead||isRelatedLead)?clientFeeDisplayGroup([c,...juminMembers,...relatedMembers]):clientFeeDisplay(c))}</td>
         <td data-label="상태" ${em?`onclick="event.stopPropagation();openStatusModal(${c.id})" style="cursor:pointer;` : `style="opacity:.95;`}${hc['c_status']?'display:none':''}${em?`" title="클릭하여 상태 변경"` : `" title="상태 변경은 수정모드에서 가능합니다"`}>${badge(c.status,statusColor(c.status))}</td>
         <td data-label="CMS" ${em?`onclick="event.stopPropagation();toggleCMS(${c.id})" style="cursor:pointer;` : `style="opacity:.95;`}${hc['c_cms']?'display:none':''}${em?`"` : `" title="CMS 변경은 수정모드에서 가능합니다"`}>${badge(c.cms?'가입':'미가입',c.cms?'green':'gray')}</td>
         <td data-label="등급" style="text-align:center;${hc['c_grade']?'display:none':''}">${gradeBadge(c.grade,c.gradeManual)}</td>
@@ -3673,6 +3673,7 @@ function updateClientField(id, field, value, _skipCheck) {
     if (cur !== next && confirm(`수임계약항목을 '${value}'에 맞게 재설정할까요?\n(예: 종소세대리·사업소득자는 사업장현황신고 제외)`)) c.contracts = getDefaultContracts(value, c.taxType, c.vatType);
   }
   else if (field==='manager') { c.manager=value; c.managers=value?[value]:[]; }
+  else if (['adjustFee','personalAdjustFee'].includes(field)) c[field] = Number(String(value).replace(/[,\s]/g,''))||0;
   else c[field] = value;
   saveToLS();
 }
