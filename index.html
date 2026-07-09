@@ -2705,7 +2705,7 @@ function openFilterPresets(btn) {
     ${presets.length===0?'<div style="font-size:12px;color:#bbb;margin-bottom:8px">프리셋 없음</div>':''}
     ${presets.map((p,i)=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
       <button onclick="applyFilterPreset(${i});document.getElementById('preset-popup')?.remove()" style="flex:1;padding:6px 10px;border-radius:7px;border:1px solid #e0e0e0;background:#f5f5f5;font-size:12px;cursor:pointer;font-family:inherit;text-align:left">${esc(p.name)}</button>
-      <button onclick="G.filterPresets.splice(${i},1);saveToLS();openFilterPresets(document.querySelector('[onclick*=openFilterPresets]'))" style="padding:4px 7px;border-radius:6px;border:1px solid #fca5a5;background:#fef2f2;color:#e53935;font-size:11px;cursor:pointer;font-family:inherit">✕</button>
+      <button onclick="deleteFilterPreset(${i})" style="padding:4px 7px;border-radius:6px;border:1px solid #fca5a5;background:#fef2f2;color:#e53935;font-size:11px;cursor:pointer;font-family:inherit">✕</button>
     </div>`).join('')}
     <div style="border-top:1px solid #f0f0f0;margin-top:6px;padding-top:8px">
       <button onclick="saveCurrentFilterPreset();document.getElementById('preset-popup')?.remove()" style="width:100%;padding:7px;border-radius:7px;border:1.5px dashed #6a1b9a;background:#f9f4ff;color:#6a1b9a;font-size:12px;cursor:pointer;font-family:inherit">+ 현재 필터 저장</button>
@@ -2717,33 +2717,52 @@ function saveCurrentFilterPreset() {
   const name = prompt('프리셋 이름을 입력하세요');
   if (!name) return;
   if (!G.filterPresets) G.filterPresets = [];
+  // 현재 필터 상태 전체를 그대로 저장 (초기화 버튼이 다루는 모든 필터 = 검색·수임경로·즐겨찾기 포함)
   G.filterPresets.push({
     name,
+    searchText: G.searchText||'',
+    clientRepSearch: G.clientRepSearch||'',
     filterManagers: [...(G.filterManagers||[])],
     filterTaxTypes: [...(G.filterTaxTypes||[])],
     filterVatTypes: [...(G.filterVatTypes||[])],
     filterDealTypes: [...(G.filterDealTypes||[])],
     filterFeeStatuses: [...(G.filterFeeStatuses||[])],
     filterCMS: [...(G.filterCMS||[])],
+    filterRoutes: [...(G.filterRoutes||[])],
     filterTags: [...(G.filterTags||[])],
     filterRisk: G.filterRisk||'',
     filterGrade: G.filterGrade||'',
+    showFavorites: !!G.showFavorites,
   });
   saveToLS(); renderClients();
 }
 function applyFilterPreset(idx) {
   const p = (G.filterPresets||[])[idx];
   if (!p) return;
-  if (p.filterManagers !== undefined) G.filterManagers = [...p.filterManagers];
-  if (p.filterTaxTypes !== undefined) G.filterTaxTypes = [...p.filterTaxTypes];
-  if (p.filterVatTypes !== undefined) G.filterVatTypes = [...p.filterVatTypes];
-  if (p.filterDealTypes !== undefined) G.filterDealTypes = [...p.filterDealTypes];
-  if (p.filterFeeStatuses !== undefined) G.filterFeeStatuses = [...p.filterFeeStatuses];
-  if (p.filterCMS !== undefined) G.filterCMS = [...p.filterCMS];
-  if (p.filterTags !== undefined) G.filterTags = [...p.filterTags];
-  if (p.filterRisk !== undefined) G.filterRisk = p.filterRisk;
-  if (p.filterGrade !== undefined) G.filterGrade = p.filterGrade;
+  // 저장된 상태로 '완전히' 대체 — 프리셋에 없는 필터는 초기화해 저장 당시 화면을 그대로 재현
+  G.searchText      = p.searchText || '';
+  G.clientRepSearch = p.clientRepSearch || '';
+  G.filterManagers  = [...(p.filterManagers||[])];
+  G.filterTaxTypes  = [...(p.filterTaxTypes||[])];
+  G.filterVatTypes  = [...(p.filterVatTypes||[])];
+  G.filterDealTypes = [...(p.filterDealTypes||[])];
+  G.filterFeeStatuses = [...(p.filterFeeStatuses||[])];
+  G.filterCMS       = [...(p.filterCMS||[])];
+  G.filterRoutes    = [...(p.filterRoutes||[])];
+  G.filterTags      = [...(p.filterTags||[])];
+  G.filterRisk      = p.filterRisk || '';
+  G.filterGrade     = p.filterGrade || '';
+  G.showFavorites   = !!p.showFavorites;
   G.clientPage = 0; renderClients();
+}
+function deleteFilterPreset(idx) {
+  if (!G.filterPresets || !G.filterPresets[idx]) return;
+  G.filterPresets.splice(idx,1);
+  saveToLS(); renderClients();
+  // 팝업을 새 목록으로 갱신 (툴바가 다시 그려졌으므로 새 버튼을 기준으로 다시 연다)
+  document.getElementById('preset-popup')?.remove();
+  const btn = document.querySelector('[onclick*=openFilterPresets]');
+  if (btn) openFilterPresets(btn);
 }
 function openTagFilterDropdown(btn) {
   const existing = document.getElementById('tag-filter-popup');
