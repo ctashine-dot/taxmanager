@@ -7358,7 +7358,10 @@ function _cfAddMonthsYM(ym, n) {
 }
 function _cfFirstFeeYM(c) {
   const mf = (G.monthlyFees||{})[c.id] || {};
-  const yms = Object.keys(mf).filter(k=>mf[k]).sort();
+  // 수임월(계약월) 이후의 수금만 '첫 기장료 수금'으로 인정 — 수임 이전 오래된 체크가 섞여
+  // 지급시기가 1년씩 앞당겨지거나, 12개월 창 밖 업체가 지급 대상으로 잡히는 오류 방지
+  const startYM = _cfContractYM(c);
+  const yms = Object.keys(mf).filter(k=>mf[k] && (!startYM || k>=startYM)).sort();
   return yms[0] || null;
 }
 function _cfMonthsElapsed(c) {
@@ -7609,7 +7612,7 @@ function consultingFeeCardsHTML() {
       ${open?`<div style="overflow-x:auto"><table style="min-width:700px">
         <thead><tr style="background:#f5f5f5"><th style="padding:5px 8px;text-align:left;font-size:11px;color:#888;position:sticky;left:0;background:#f5f5f5">거래처</th><th style="padding:5px 8px;text-align:right;font-size:11px;color:#888">기장료(월)</th><th style="padding:5px 8px;text-align:right;font-size:11px;color:#2e7d32">수금액</th><th style="padding:5px 8px;text-align:center;font-size:11px;color:#888">수금</th><th colspan="12" style="padding:5px 8px;text-align:left;font-size:11px;color:#888">수임월부터 12개월 (✓=수금)</th></tr></thead>
         <tbody>${rows}</tbody>
-        <tfoot><tr style="background:#eef7ee;font-weight:700"><td style="padding:5px 8px;font-size:12px;position:sticky;left:0;background:#eef7ee">소계 (${gcs.length}개)</td><td style="padding:5px 8px;text-align:right;font-size:12px;color:#888">기장료(연) ${won(gFeeYear)}</td><td style="padding:5px 8px;text-align:right;font-size:12px;color:#2e7d32">${won(gCollected)}</td><td colspan="13"></td></tr></tfoot>
+        <tfoot><tr style="background:#eef7ee;font-weight:700"><td style="padding:5px 8px;font-size:12px;position:sticky;left:0;background:#eef7ee">소계 (${gcs.length}개)</td><td style="padding:5px 8px;text-align:right;font-size:12px;color:#888">기장료(연) ${won(gFeeYear)}</td><td style="padding:5px 8px;text-align:right;font-size:12px;color:#2e7d32">${won(gCollected)}</td><td colspan="13" style="padding:5px 12px;text-align:right;font-size:12px;color:#1b5e20">수금 합계 <b style="font-size:13px">${won(gCollected)}</b>원</td></tr></tfoot>
       </table></div>`:''}
     </div>`;
   }).join('');
