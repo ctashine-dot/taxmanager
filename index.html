@@ -7458,6 +7458,13 @@ function toggleConsultMonth(ym) {
   G.feesConsultMonths[ym] = !G.feesConsultMonths[ym];
   renderFees();
 }
+function toggleConsultFeeMonth(ym) {
+  if (!G.feesConsultFeeMonths) G.feesConsultFeeMonths = {};
+  G.feesConsultFeeMonths[ym] = !G.feesConsultFeeMonths[ym];
+  renderFees();
+}
+// 기장료 첫 수금 여부(수금 체크된 달이 하나라도 있으면 수금 시작 → 수수료 지급 대상)
+function _cfCollected(c) { return _cfFirstFeeYM(c) != null; }
 // 수수료 관리 페이지의 '컨설팅업체 수수료 / 기장료' 카드 2종 (미수금 에이징처럼 별도 섹션)
 function consultingFeeCardsHTML() {
   const won = n => (Number(n)||0).toLocaleString();
@@ -7466,8 +7473,9 @@ function consultingFeeCardsHTML() {
   const consultOpen = !!G.feesConsultOpen, cfeeOpen = !!G.feesConsultFeeOpen;
   if (!G.feesConsultMonths) G.feesConsultMonths = {};
 
-  // ── 기장료(수수료)가 0인 업체는 지급 리스트에서 제외 ──
-  const payList = list.filter(c => ((getFeeForYM(c,feesYM)||c.fee||0) > 0));
+  // ── 지급 대상: 기장료>0 이면서 '수금이 시작된(수금 체크된 달이 하나라도 있는)' 업체만 ──
+  //    → 수금 리스트에서 체크해야 지급할 수수료에 실시간 반영됨
+  const payList = list.filter(c => ((getFeeForYM(c,feesYM)||c.fee||0) > 0) && _cfCollected(c));
   // ── 당월 송금 요약: 1차(당월 due) + 6개월전 업체 2차(당월 due) ──
   let due1=0, due2=0, cnt1=0, cnt2=0;
   payList.forEach(c => { const f=computeConsultingFee(c);
@@ -7519,7 +7527,7 @@ function consultingFeeCardsHTML() {
       ${!consultOpen?`<span style="font-size:12px;color:#888;margin-left:auto">대상 ${payList.length}개 · 당월 송금 <b style="color:#c62828">${won(remit)}원</b></span>`:''}
     </div>
     ${consultOpen?`
-    <div style="font-size:11px;color:#7a5230;background:#fff8ef;border:1px solid #ffe0c2;border-radius:8px;padding:8px 12px;margin-bottom:10px;line-height:1.6">💡 컨설팅업체 수임료 = 1년치 기장료. <b>첫 기장료 수금 시 50%</b>, <b>6개월 뒤(7개월째) 나머지 50%</b> 지급. 아래 '${feesYM}' 기준 송금액과 수임월별 내역을 확인하세요.</div>
+    <div style="font-size:11px;color:#7a5230;background:#fff8ef;border:1px solid #ffe0c2;border-radius:8px;padding:8px 12px;margin-bottom:10px;line-height:1.6">💡 컨설팅업체 수임료 = 1년치 기장료. <b>첫 기장료 수금 시 50%</b>, <b>6개월 뒤(7개월째) 나머지 50%</b> 지급. <b style="color:#c62828">아래 기장료(수금) 카드에서 수금 체크된 업체만</b> 여기에 표시됩니다(실시간 반영).</div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px">
       <div style="background:#f8f9ff;border-radius:10px;padding:10px"><div style="font-size:11px;color:#888">당월 지급(1차 50%) · ${cnt1}건</div><div style="font-size:16px;font-weight:800;color:#1565c0">${won(due1)}원</div></div>
       <div style="background:#fff3e0;border-radius:10px;padding:10px"><div style="font-size:11px;color:#888">6개월전 업체(2차 50%) · ${cnt2}건</div><div style="font-size:16px;font-weight:800;color:#e65100">${won(due2)}원</div></div>
@@ -7529,42 +7537,77 @@ function consultingFeeCardsHTML() {
       <span style="font-size:12px;color:#888">수임월별 (기장료 합 ${won(grandFee)} · 1년 수임료 합 <b style="color:#6a3ab2">${won(grandCommission)}</b>)</span>
       <button class="btn-sm" style="background:#f3e8fd;color:#6a3ab2;border:1.5px solid #cdb4ef" onclick="openConsultingFeeModal()">🧾 지급·회수 상세</button>
     </div>
-    ${months.length?monthBlocks:`<div style="text-align:center;padding:20px;color:#aaa">수임경로가 '컨설팅업체'인 거래처가 없습니다.</div>`}
+    ${months.length?monthBlocks:`<div style="text-align:center;padding:20px;color:#aaa">아직 수금 체크된 컨설팅업체가 없습니다.<br>아래 '기장료(수금)' 카드에서 수금을 체크하면 지급 대상으로 표시됩니다.</div>`}
     `:''}
   </div>`;
 
-  // ── Card 2: 컨설팅 업체 기장료 (수금) — 수임월부터 12개월, 월정수금(G.monthlyFees) 연동 ──
+  // ── Card 2: 컨설팅 업체 기장료 (수금) — 수임월별 그룹, 각 그룹 수임월부터 12개월 수금 체크(월정수금 G.monthlyFees 연동) ──
   // 기장료(수수료)가 0인 업체는 수금 관리 대상이 아니므로 제외
+  if (!G.feesConsultFeeMonths) G.feesConsultFeeMonths = {};
   const feeList = list.filter(c => (getFeeForYM(c, feesYM) || c.fee || 0) > 0);
-  const feeRows = feeList.map(c => {
+  const feeByMonth = {};
+  feeList.forEach(c => { const m=_cfContractYM(c)||'미상'; (feeByMonth[m]=feeByMonth[m]||[]).push(c); });
+  const feeMonths = Object.keys(feeByMonth).sort().reverse();
+
+  // 전체 합계: 기장료(1년치 총액) 및 실제 수금 합계(체크된 달 × 월 기장료, 수임 12개월 창 기준)
+  let totFeeYear=0, totCollected=0;
+  feeList.forEach(c => {
     const startYM = _cfContractYM(c) || feesYM;
-    const monthsList = []; for (let i=0;i<12;i++) monthsList.push(_cfAddMonthsYM(startYM,i));
     const monthly = getFeeForYM(c, feesYM) || c.fee || 0;
-    let paidCnt=0;
-    const cells = monthsList.map(m => {
-      const paid = !!(G.monthlyFees?.[c.id]?.[m]);
-      if (paid) paidCnt++;
-      return `<td style="padding:3px;text-align:center"><button onclick="toggleMonthlyFee(${c.id},'${m}')" title="${m}" style="width:30px;height:26px;border-radius:6px;border:1.5px solid ${paid?'#43a047':'#e0e0e0'};background:${paid?'#e8f5e9':'#fff'};color:${paid?'#2e7d32':'#bbb'};font-size:11px;cursor:pointer;font-family:inherit">${paid?'✓':''}</button><div style="font-size:8px;color:#bbb;margin-top:1px">${Number(m.slice(5))}월</div></td>`;
+    totFeeYear += monthly*12;
+    for (let i=0;i<12;i++){ if (G.monthlyFees?.[c.id]?.[_cfAddMonthsYM(startYM,i)]) totCollected += monthly; }
+  });
+
+  const feeBlocks = feeMonths.map(ym => {
+    const gcs = feeByMonth[ym];
+    const open = !!G.feesConsultFeeMonths[ym];
+    let gFeeYear=0, gCollected=0;
+    const rows = gcs.map(c => {
+      const startYM = _cfContractYM(c) || feesYM;
+      const monthly = getFeeForYM(c, feesYM) || c.fee || 0;
+      gFeeYear += monthly*12;
+      const monthsList = []; for (let i=0;i<12;i++) monthsList.push(_cfAddMonthsYM(startYM,i));
+      let paidCnt=0;
+      const cells = monthsList.map(m => {
+        const paid = !!(G.monthlyFees?.[c.id]?.[m]);
+        if (paid) paidCnt++;
+        return `<td style="padding:3px;text-align:center"><button onclick="toggleMonthlyFee(${c.id},'${m}')" title="${m}" style="width:30px;height:26px;border-radius:6px;border:1.5px solid ${paid?'#43a047':'#e0e0e0'};background:${paid?'#e8f5e9':'#fff'};color:${paid?'#2e7d32':'#bbb'};font-size:11px;cursor:pointer;font-family:inherit">${paid?'✓':''}</button><div style="font-size:8px;color:#bbb;margin-top:1px">${Number(m.slice(5))}월</div></td>`;
+      }).join('');
+      gCollected += monthly*paidCnt;
+      return `<tr style="border-bottom:1px solid #f2f2f2">
+        <td style="padding:5px 8px;font-size:12px;font-weight:600;position:sticky;left:0;background:#fff;white-space:nowrap">${esc(c.name)}</td>
+        <td style="padding:5px 8px;text-align:right;font-size:12px;white-space:nowrap">${won(monthly)}</td>
+        <td style="padding:5px 8px;text-align:right;font-size:12px;font-weight:700;color:#2e7d32;white-space:nowrap">${won(monthly*paidCnt)}</td>
+        <td style="padding:5px 8px;text-align:center;font-size:11px;color:${paidCnt>=12?'#2e7d32':'#888'};white-space:nowrap">${paidCnt}/12</td>
+        ${cells}
+      </tr>`;
     }).join('');
-    return `<tr style="border-bottom:1px solid #f2f2f2">
-      <td style="padding:5px 8px;font-size:12px;font-weight:600;position:sticky;left:0;background:#fff;white-space:nowrap">${esc(c.name)}</td>
-      <td style="padding:5px 8px;text-align:right;font-size:12px;white-space:nowrap">${won(monthly)}</td>
-      <td style="padding:5px 8px;text-align:center;font-size:11px;color:${paidCnt>=12?'#2e7d32':'#888'};white-space:nowrap">${paidCnt}/12</td>
-      ${cells}
-    </tr>`;
+    return `<div style="border:1px solid #d7ead7;border-radius:10px;margin-bottom:8px;overflow:hidden">
+      <button onclick="toggleConsultFeeMonth('${ym}')" style="width:100%;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 12px;border:none;background:${open?'#eef7ee':'#f7fbf7'};cursor:pointer;font-family:inherit">
+        <span style="font-size:13px;font-weight:700;color:#1b5e20">${open?'▾':'▸'} ${_cfYMLabel(ym)} 수임 <span style="color:#888;font-weight:400">(${gcs.length}개)</span></span>
+        <span style="font-size:11px;color:#666">수금 <b style="color:#2e7d32">${won(gCollected)}</b> · 기장료(연) <b>${won(gFeeYear)}</b></span>
+      </button>
+      ${open?`<div style="overflow-x:auto"><table style="min-width:700px">
+        <thead><tr style="background:#f5f5f5"><th style="padding:5px 8px;text-align:left;font-size:11px;color:#888;position:sticky;left:0;background:#f5f5f5">거래처</th><th style="padding:5px 8px;text-align:right;font-size:11px;color:#888">기장료(월)</th><th style="padding:5px 8px;text-align:right;font-size:11px;color:#2e7d32">수금액</th><th style="padding:5px 8px;text-align:center;font-size:11px;color:#888">수금</th><th colspan="12" style="padding:5px 8px;text-align:left;font-size:11px;color:#888">수임월부터 12개월 (✓=수금)</th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr style="background:#eef7ee;font-weight:700"><td style="padding:5px 8px;font-size:12px;position:sticky;left:0;background:#eef7ee">소계 (${gcs.length}개)</td><td style="padding:5px 8px;text-align:right;font-size:12px;color:#888">기장료(연) ${won(gFeeYear)}</td><td style="padding:5px 8px;text-align:right;font-size:12px;color:#2e7d32">${won(gCollected)}</td><td colspan="13"></td></tr></tfoot>
+      </table></div>`:''}
+    </div>`;
   }).join('');
+
   const card2 = `<div class="card" style="margin-bottom:14px;border-left:4px solid #2e7d32">
     <div style="display:flex;align-items:center;gap:8px;${cfeeOpen?'margin-bottom:12px':''}">
       <button onclick="G.feesConsultFeeOpen=!G.feesConsultFeeOpen;renderFees()" style="padding:2px 8px;border-radius:6px;border:1.5px solid #e0e0e0;background:${cfeeOpen?'#fff':'#f5f5f5'};color:#888;font-size:12px;cursor:pointer;font-family:inherit;line-height:1.4">${cfeeOpen?'▼':'▶'}</button>
       <div class="card-title" style="margin-bottom:0;color:#1b5e20">📒 컨설팅 업체 기장료 (수금 · 1년)</div>
-      ${!cfeeOpen?`<span style="font-size:12px;color:#888;margin-left:auto">대상 ${feeList.length}개</span>`:''}
+      ${!cfeeOpen?`<span style="font-size:12px;color:#888;margin-left:auto">대상 ${feeList.length}개 · 수금 <b style="color:#2e7d32">${won(totCollected)}원</b></span>`:''}
     </div>
     ${cfeeOpen?`
-    <div style="font-size:11px;color:#1b5e20;background:#f1f8f1;border:1px solid #c8e6c9;border-radius:8px;padding:8px 12px;margin-bottom:10px;line-height:1.6">💡 컨설팅업체 수임 거래처의 기장료를 월정수수료와 별도로 <b>수임월부터 12개월</b> 관리합니다. 각 월 칸을 눌러 수금 체크(월정 수금과 연동). <b>첫 수금 시점이 수수료 1차 지급 기준</b>이 됩니다. (기장료 0원 업체 제외)</div>
-    ${feeList.length?`<div style="overflow-x:auto"><table style="min-width:640px">
-      <thead><tr style="background:#f5f5f5"><th style="padding:5px 8px;text-align:left;font-size:11px;color:#888;position:sticky;left:0;background:#f5f5f5">거래처</th><th style="padding:5px 8px;text-align:right;font-size:11px;color:#888">기장료</th><th style="padding:5px 8px;text-align:center;font-size:11px;color:#888">수금</th><th colspan="12" style="padding:5px 8px;text-align:left;font-size:11px;color:#888">수임월부터 12개월 (✓=수금)</th></tr></thead>
-      <tbody>${feeRows}</tbody>
-    </table></div>`:`<div style="text-align:center;padding:20px;color:#aaa">컨설팅업체 수임 거래처가 없습니다.</div>`}
+    <div style="font-size:11px;color:#1b5e20;background:#f1f8f1;border:1px solid #c8e6c9;border-radius:8px;padding:8px 12px;margin-bottom:10px;line-height:1.6">💡 컨설팅업체 수임 거래처의 기장료를 <b>수임월별 그룹</b>으로 나눠, 각 그룹 <b>수임월부터 12개월</b> 수금을 체크합니다(월정 수금과 연동). <b>첫 수금 시점이 수수료 1차 지급 기준</b>이 되며, 수금 체크한 업체만 위 '지급' 카드에 실시간 반영됩니다.</div>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px">
+      <div style="background:#f1f8f1;border-radius:10px;padding:10px"><div style="font-size:11px;color:#888">기장료 합계 (1년치 · ${feeList.length}개)</div><div style="font-size:16px;font-weight:800;color:#1b5e20">${won(totFeeYear)}원</div></div>
+      <div style="background:#e8f5e9;border-radius:10px;padding:10px"><div style="font-size:11px;color:#888">수금 합계 (체크된 금액)</div><div style="font-size:16px;font-weight:800;color:#2e7d32">${won(totCollected)}원</div></div>
+    </div>
+    ${feeMonths.length?feeBlocks:`<div style="text-align:center;padding:20px;color:#aaa">컨설팅업체 수임 거래처가 없습니다.</div>`}
     `:''}
   </div>`;
 
