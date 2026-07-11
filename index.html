@@ -1834,11 +1834,19 @@ function _renderDashboardInner() {
     const t = mc.reduce((a,c)=>a+getFeeForYM(c,thisYM),0);
     const col = mc.filter(c=>G.monthlyFees[c.id]?.[thisYM]).reduce((a,c)=>a+getFeeForYM(c,thisYM),0);
     const p = t>0?Math.round(col/t*100):0;
-    // 수임유형별 업체수(중복 허용) — 맨 앞 숫자는 세 유형 카운트의 합계
-    const cJang   = allMC.filter(c=>getDealTypes(c).some(d=>['기장','고문','성실'].includes(d))).length;
-    const cSingo  = allMC.filter(c=>getDealTypes(c).some(d=>d==='신고대리'||d==='신고')).length;
-    const cJongso = allMC.filter(c=>getDealTypes(c).some(d=>['종소세대리','사업소득자'].includes(d))).length;
-    const cTotal  = cJang + cSingo + cJongso;
+    // 수임유형별 업체수(중복 허용) — 합계는 세 유형 카운트의 합, 순 업체수는 중복 제거(distinct)
+    let cJang=0, cSingo=0, cJongso=0, cNet=0;
+    allMC.forEach(c=>{
+      const dt=getDealTypes(c);
+      const isJang   = dt.some(d=>['기장','고문','성실'].includes(d));
+      const isSingo  = dt.some(d=>d==='신고대리'||d==='신고');
+      const isJongso = dt.some(d=>['종소세대리','사업소득자'].includes(d));
+      if(isJang) cJang++;
+      if(isSingo) cSingo++;
+      if(isJongso) cJongso++;
+      if(isJang||isSingo||isJongso) cNet++;
+    });
+    const cTotal = cJang + cSingo + cJongso;
     // 수수료 합계: 기장료(월정) / 신고대리 수수료 / 조정료(법인세·소득세 조정료 + 성실신고수수료)
     let feeSingo=0, feeAdj=0;
     allMC.forEach(c=>{
@@ -1851,7 +1859,7 @@ function _renderDashboardInner() {
     return `<div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #f0f0f0">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
         <div><span style="font-weight:700;font-size:14px">${esc(m)}</span>
-        <span style="font-size:12px;color:#888;margin-left:8px">${cTotal}개 · 기장 ${cJang} · 신고대리 ${cSingo} · 종소세 ${cJongso}</span></div>
+        <span style="font-size:12px;color:#888;margin-left:8px">${cTotal}개 <span style="color:#aaa">(순 ${cNet})</span> · 기장 ${cJang} · 신고대리 ${cSingo} · 종소세 ${cJongso}</span></div>
         <span style="font-size:13px;color:#555;font-weight:600">${t.toLocaleString()}원</span>
       </div>
       <div class="progress-bar"><div class="progress-fill" style="width:${p}%"></div></div>
