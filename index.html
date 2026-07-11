@@ -1834,15 +1834,31 @@ function _renderDashboardInner() {
     const t = mc.reduce((a,c)=>a+getFeeForYM(c,thisYM),0);
     const col = mc.filter(c=>G.monthlyFees[c.id]?.[thisYM]).reduce((a,c)=>a+getFeeForYM(c,thisYM),0);
     const p = t>0?Math.round(col/t*100):0;
-    const s2 = allMC.filter(c=>getDealTypes(c).some(d=>d.includes('신고')||d==='종소세대리')).length;
+    // 수임유형별 업체수(중복 허용) — 맨 앞 숫자는 세 유형 카운트의 합계
+    const cJang   = allMC.filter(c=>getDealTypes(c).some(d=>['기장','고문','성실'].includes(d))).length;
+    const cSingo  = allMC.filter(c=>getDealTypes(c).some(d=>d==='신고대리'||d==='신고')).length;
+    const cJongso = allMC.filter(c=>getDealTypes(c).some(d=>['종소세대리','사업소득자'].includes(d))).length;
+    const cTotal  = cJang + cSingo + cJongso;
+    // 수수료 합계: 기장료(월정) / 신고대리 수수료 / 조정료(법인세·소득세 조정료 + 성실신고수수료)
+    let feeSingo=0, feeAdj=0;
+    allMC.forEach(c=>{
+      const lf=latestFilingFees(c);
+      feeSingo += lf.singo!=null?lf.singo:(c.feeSingo||0);
+      const jojung  = lf.jojung!=null?lf.jojung:(c.adjustFee||c.feeJojung||0);
+      const seongsi = lf.seongsi!=null?lf.seongsi:(c.seongsiConfirmFee||c.feeSeongsi||0);
+      feeAdj += jojung + seongsi;
+    });
     return `<div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #f0f0f0">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
         <div><span style="font-weight:700;font-size:14px">${esc(m)}</span>
-        <span style="font-size:12px;color:#888;margin-left:8px">${allMC.length}개 · 월정 ${mc.length} · 신고 ${s2}</span></div>
+        <span style="font-size:12px;color:#888;margin-left:8px">${cTotal}개 · 기장 ${cJang} · 신고대리 ${cSingo} · 종소세 ${cJongso}</span></div>
         <span style="font-size:13px;color:#555;font-weight:600">${t.toLocaleString()}원</span>
       </div>
       <div class="progress-bar"><div class="progress-fill" style="width:${p}%"></div></div>
-      <div style="font-size:11px;color:#aaa;margin-top:3px">수금 ${p}% (${col.toLocaleString()}원)</div>
+      <div style="font-size:11px;color:#aaa;margin-top:3px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
+        <span>수금 ${p}% (${col.toLocaleString()}원)</span>
+        <span>기장료 ${t.toLocaleString()} · 신고대리 ${feeSingo.toLocaleString()} · 조정료 ${feeAdj.toLocaleString()}</span>
+      </div>
     </div>`;
   }).join('');
 
@@ -2030,7 +2046,7 @@ function _renderDashboardInner() {
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${_dashCollapsed('dash-manager')?0:12}px">
       <div style="display:flex;align-items:center;gap:8px">
         ${sectionToggleBtn('dash-manager')}
-        <div class="card-title" style="margin:0">담당자별 현황 (업체수 · 월정수수료)</div>
+        <div class="card-title" style="margin:0">담당자별 현황 (수임유형별 업체수 · 수수료)</div>
       </div>
       ${_dashCollapsed('dash-manager')?'':
         `<div style="display:flex;gap:8px">
