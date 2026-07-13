@@ -2054,12 +2054,13 @@ function _renderDashboardInner() {
 
   ${(G.settings?.dashWidgets?.managerStats!==false)?`<div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${_dashCollapsed('dash-manager')?0:12}px">
-      <div style="display:flex;align-items:center;gap:8px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         ${sectionToggleBtn('dash-manager')}
         <div class="card-title" style="margin:0">담당자별 현황 (수임유형별 업체수 · 수수료)</div>
+        ${(()=>{const n=G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&getManagers(c).length>1).length;return n?`<button onclick="openMultiManagerFix()" style="padding:4px 10px;border-radius:8px;border:1.5px solid #ef9a9a;background:#fdecea;color:#c62828;font-size:12px;cursor:pointer;font-family:inherit;font-weight:700">⚠ 담당자 중복 ${n}개</button>`:'';})()}
       </div>
       ${_dashCollapsed('dash-manager')?'':
-        `<div style="display:flex;gap:8px">
+        `<div style="display:flex;gap:8px;flex-wrap:wrap">
           <button onclick="openManagerTransferModal()" style="padding:5px 12px;border-radius:8px;border:1.5px solid #a5d6a7;background:#e8f5e9;color:#2e7d32;font-size:12px;cursor:pointer;font-family:inherit">👤 담당자 이동</button>
           <button onclick="openManagerAnalysis()" style="padding:5px 12px;border-radius:8px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;font-size:12px;cursor:pointer;font-family:inherit">📊 상세 분석</button>
         </div>`}
@@ -4037,6 +4038,71 @@ function saveAssignManager() {
   closeModal();
   renderDashboard();
   toast(`${mgr} 담당자로 ${checked.length}개 업체 배정 완료`,'success');
+}
+
+// 담당자가 2명 이상 잘못 지정된 업체(해지·폐업 제외)
+function multiManagerClients() {
+  return G.clients
+    .filter(c => c.status!=='해지' && c.status!=='폐업' && getManagers(c).length > 1)
+    .sort((a,b) => a.name.localeCompare(b.name, 'ko'));
+}
+// 담당자 중복 지정 정리 — 업체별로 올바른 담당자 1명 선택
+function openMultiManagerFix() {
+  const list = multiManagerClients();
+  if (!list.length) { toast('담당자가 2명 이상 지정된 업체가 없습니다.','info'); return; }
+  showModal(`<div style="max-width:560px;width:92vw">
+  <div class="modal-header">
+    <h3>⚠ 담당자 중복 지정 정리 <span style="font-size:13px;font-weight:400;color:#888">(${list.length}개)</span></h3>
+    <button class="close-btn" onclick="navBack()">✕</button>
+  </div>
+  <div class="modal-body" style="padding-bottom:0">
+    <div style="font-size:12px;color:#888;margin-bottom:10px;line-height:1.5">업체당 담당자는 1명이 원칙입니다. 아래 업체는 담당자가 2명 이상 지정되어 있습니다. 각 업체의 올바른 담당자를 선택한 뒤 저장하세요.</div>
+    <div style="max-height:360px;overflow-y:auto;border:1px solid #e8e8e8;border-radius:10px;padding:2px 8px;margin-bottom:12px">
+      ${list.map(c=>{
+        const mgrs = getManagers(c);
+        const others = MANAGERS.slice(1).filter(m=>!mgrs.includes(m));
+        return `<div style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid #f4f4f4">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)} <span style="font-size:11px;color:#888;font-weight:400">${esc(c.rep||'')}</span></div>
+            <div style="font-size:11px;color:#c62828;margin-top:2px">현재: ${mgrs.map(esc).join(' + ')}</div>
+          </div>
+          <select data-mmf-id="${c.id}" class="fsel" style="width:130px;flex:none">
+            ${mgrs.map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join('')}
+            ${others.length?`<option disabled>──────</option>`:''}
+            ${others.map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join('')}
+          </select>
+        </div>`;
+      }).join('')}
+    </div>
+    <div style="display:flex;gap:8px;padding-bottom:14px;align-items:center">
+      <div style="flex:1;font-size:12px;color:#888">선택한 담당자 1명으로 각각 재지정됩니다</div>
+      <button onclick="saveMultiManagerFix()" style="padding:10px 24px;background:#4f8ef7;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">저장</button>
+    </div>
+  </div></div>`);
+}
+function saveMultiManagerFix() {
+  const sels = [...document.querySelectorAll('[data-mmf-id]')];
+  if (!sels.length) return;
+  if (!G.managerHistory) G.managerHistory = {};
+  let n = 0;
+  sels.forEach(sel => {
+    const id = Number(sel.dataset.mmfId), mgr = sel.value;
+    const c = G.clients.find(x => x.id===id);
+    if (!c || !mgr) return;
+    const cur = getManagers(c);
+    if (cur.length===1 && cur[0]===mgr) return; // 변경 없음
+    const oldStr = cur.join(', ') || '(없음)';
+    c.managers = [mgr];
+    c.manager = mgr;
+    if (!G.managerHistory[id]) G.managerHistory[id] = [];
+    G.managerHistory[id].push({ date: new Date().toLocaleString('ko-KR'), from: oldStr, to: mgr });
+    n++;
+  });
+  saveToLS();
+  closeModal();
+  renderDashboard();
+  renderClients();
+  toast(`${n}개 업체 담당자를 1명으로 정리했습니다`, 'success');
 }
 
 // ══════════════════════════════════════════════════════
