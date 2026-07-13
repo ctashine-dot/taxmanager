@@ -7773,7 +7773,43 @@ function consultingFeeCardsHTML() {
     `:''}
   </div>`;
 
-  return card1 + card2;
+  // ── Card 3: 컨설팅 업체 CMS 현황 (월별 · feesYM 기준) ──
+  const cmsOpen = !!G.feesConsultCmsOpen;
+  const cmsList = list.filter(c => c.cms && c.status!=='해지' && c.status!=='폐업' && (getFeeForYM(c,feesYM)||c.fee||0) > 0);
+  const cmsDone = cmsList.filter(c => (G.monthlyFees[c.id]||{})[feesYM]).length;
+  const cmsCollected = cmsList.filter(c => (G.monthlyFees[c.id]||{})[feesYM]).reduce((a,c)=>a+(getFeeForYM(c,feesYM)||c.fee||0),0);
+  const card3 = `<div class="card" style="margin-bottom:14px;border-left:4px solid #00838f">
+    <div style="display:flex;align-items:center;gap:8px;${cmsOpen?'margin-bottom:12px':''}">
+      <button onclick="G.feesConsultCmsOpen=!G.feesConsultCmsOpen;renderFees()" style="padding:2px 8px;border-radius:6px;border:1.5px solid #e0e0e0;background:${cmsOpen?'#fff':'#f5f5f5'};color:#888;font-size:12px;cursor:pointer;font-family:inherit;line-height:1.4">${cmsOpen?'▼':'▶'}</button>
+      <div class="card-title" style="margin-bottom:0;color:#00695c">🏦 컨설팅 업체 CMS 현황 <span style="font-size:12px;font-weight:400;color:#888">(${ymLabel(feesYM)})</span></div>
+      ${!cmsOpen?`<span style="font-size:12px;color:#888;margin-left:auto">${cmsList.length}개 · 이체완료 ${cmsDone}/${cmsList.length} · <b style="color:#00695c">${won(cmsCollected)}원</b></span>`:''}
+    </div>
+    ${cmsOpen?`
+    <div style="font-size:11px;color:#00695c;background:#e0f2f1;border:1px solid #b2dfdb;border-radius:8px;padding:8px 12px;margin-bottom:10px;line-height:1.6">💡 컨설팅업체 중 CMS(자동이체) 등록 거래처의 <b>${ymLabel(feesYM)}</b> 이체 현황입니다. 월은 아래 '월정 수수료' 카드의 월 이동(‹ ›)으로 변경됩니다.</div>
+    ${cmsList.length?`<div class="tbl-wrap"><table>
+      <thead><tr><th>거래처명</th><th>대표자</th><th style="text-align:right">이체금액</th><th style="text-align:center;width:70px">이체완료</th></tr></thead>
+      <tbody>${cmsList.map(c=>{const amt=getFeeForYM(c,feesYM)||c.fee||0; const done=(G.monthlyFees[c.id]||{})[feesYM]; return `<tr>
+        <td><div class="td-name">${esc(c.name)}</div></td>
+        <td style="font-size:12px">${esc(c.rep||'')}</td>
+        <td style="text-align:right;font-weight:700;color:#00695c">${won(amt)}원</td>
+        <td style="text-align:center;cursor:pointer" onclick="toggleMonthlyFee(${c.id},'${feesYM}')">
+          <div class="chk ${done?'on':''}" style="margin:0 auto;width:26px;height:26px;${done?'background:#b2dfdb;border-color:#00838f;color:#00695c':''}">${done?'💰':''}</div>
+        </td>
+      </tr>`;}).join('')}</tbody>
+    </table></div>`:`<div style="text-align:center;padding:20px;color:#aaa">CMS 등록된 컨설팅업체가 없습니다.</div>`}
+    `:''}
+  </div>`;
+
+  // ── 그룹: 컨설팅 업체 수수료 관리 (기본 접힘) — 지급 → 기장료 → CMS 순 ──
+  const groupCollapsed = !!(G.sectionCollapsed && G.sectionCollapsed['fees-consulting']);
+  return `<div style="margin-bottom:16px;border:1.5px solid #e6dcf7;border-radius:12px;overflow:hidden">
+    <div onclick="toggleSection('fees-consulting')" style="display:flex;align-items:center;gap:8px;padding:12px 14px;background:#f4eefe;cursor:pointer">
+      <span style="font-size:13px;color:#6a1b9a;width:16px">${groupCollapsed?'▶':'▼'}</span>
+      <div style="font-weight:800;font-size:15px;color:#6a1b9a">🤝 컨설팅 업체 수수료 관리</div>
+      <span style="font-size:12px;color:#888;margin-left:auto">지급 ${payList.length} · 기장료 ${feeList.length} · CMS ${cmsList.length}</span>
+    </div>
+    ${groupCollapsed?'':`<div style="padding:12px 12px 2px">${card1}${card2}${card3}</div>`}
+  </div>`;
 }
 
 function renderFees() {
@@ -7781,7 +7817,7 @@ function renderFees() {
   const ym = G.feesYM;
   // 모든 수수료 섹션 기본 접힘 (최초 1회만 — 이후 사용자 토글 상태 유지)
   if (!G.sectionCollapsed) G.sectionCollapsed = {};
-  ['fees-monthly','fees-filing','fees-adhoc'].forEach(k=>{ if(!(k in G.sectionCollapsed)) G.sectionCollapsed[k]=true; });
+  ['fees-monthly','fees-filing','fees-adhoc','fees-consulting'].forEach(k=>{ if(!(k in G.sectionCollapsed)) G.sectionCollapsed[k]=true; });
 
   // 월정 수수료 대상: 수임일자~휴업/해지/폐업일자 기간 내 기장·고문·성실
   const monthlyClients = G.clients.filter(c => getDealTypes(c).some(d => ['기장','고문','성실'].includes(d)));
@@ -8181,28 +8217,6 @@ function renderFees() {
     ` : '<div style="color:#aaa;text-align:center;padding:20px">추가 청구 내역 없음 — 거래처 목록 또는 위 버튼에서 신고대리·조정료·성실신고 수수료를 추가하세요</div>'}
     </div>
   </div>
-
-  ${(()=>{
-    const cmsClients=G.clients.filter(c=>c.cms&&c.status!=='해지'&&c.status!=='폐업'&&(c.fee||0)>0);
-    if(!cmsClients.length) return '';
-    return `<div class="card" style="margin-top:4px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <div class="card-title" style="margin:0">🏦 CMS 자동이체 현황 (${ym})</div>
-        <span style="font-size:12px;color:#888">${cmsClients.length}개 거래처</span>
-      </div>
-      <div class="tbl-wrap"><table>
-        <thead><tr><th>거래처명</th><th>대표자</th><th style="text-align:right">이체금액</th><th style="text-align:center;width:70px">이체완료</th></tr></thead>
-        <tbody>${cmsClients.map(c=>`<tr>
-          <td><div class="td-name">${esc(c.name)}</div></td>
-          <td style="font-size:12px">${esc(c.rep||'')}</td>
-          <td style="text-align:right;font-weight:700;color:#7b1fa2">${(c.fee||0).toLocaleString()}원</td>
-          <td style="text-align:center;cursor:pointer" onclick="toggleMonthlyFee(${c.id},'${ym}')">
-            <div class="chk ${(G.monthlyFees[c.id]||{})[ym]?'on':''}" style="margin:0 auto;width:26px;height:26px;${(G.monthlyFees[c.id]||{})[ym]?'background:#c8e6c9;border-color:#2e7d32;color:#2e7d32':''}">${(G.monthlyFees[c.id]||{})[ym]?'💰':''}</div>
-          </td>
-        </tr>`).join('')}</tbody>
-      </table></div>
-    </div>`;
-  })()}
 
   `;
 }
