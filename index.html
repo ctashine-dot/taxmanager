@@ -1277,10 +1277,12 @@ function filteredClients() {
   });
   const groupSortKeys = {};
   Object.entries(groupBuckets).forEach(([k, members]) => {
-    // 대표업체: groupMain=true 인 멤버, 없으면 수임일자 가장 빠른 멤버
+    // 표시 대표업체: groupMain=true 인 멤버(지정 대표), 없으면 수임일자 가장 빠른 멤버
     const lead = members.find(m=>m.groupMain) ||
       [...members].sort((a,b)=>csk(a).localeCompare(csk(b))||a.name.localeCompare(b.name,'ko'))[0];
-    groupSortKeys[k] = { dateKey: csk(lead), lead: lead.name, mainId: lead.id, leadGrade: lead.grade||'', dealRank: Math.min(...members.map(m=>dealSortRankForClient(m))) };
+    // 정렬 기준 수임일자: 지정 대표와 무관하게 그룹 구성원 중 가장 빠른 수임일자
+    const dateKey = members.reduce((min,m)=>{const d=csk(m);return d<min?d:min;}, 'ZZZZ-ZZ-ZZ');
+    groupSortKeys[k] = { dateKey, lead: lead.name, mainId: lead.id, leadGrade: lead.grade||'', dealRank: Math.min(...members.map(m=>dealSortRankForClient(m))) };
   });
 
   // 검색 중일 때는 일치도 높은 순으로 정렬
@@ -2497,7 +2499,7 @@ function renderClients() {
         <td data-label="인격" style="${hc['c_taxType']?'display:none':''}">${em?iSel('taxType',TAX_TYPES.slice(1),c.taxType):badge(c.taxType,c.taxType==='법인'?'blue':'gray')}</td>
         <td data-label="과세유형" style="${hc['c_vatType']?'display:none':''}">${em?iSel('vatType',VAT_TYPES.slice(1),c.vatType):badge(c.vatType,c.vatType==='일반'?'blue':c.vatType==='간이'?'orange':c.vatType==='간세'?'teal':'gray')}</td>
         <td data-label="담당자" style="color:#555;font-size:12px;${hc['c_manager']?'display:none':''}">${em?iSel('manager',MANAGERS.slice(1),getManagers(c)[0]||''):esc(getManagers(c).join(', ')||'-')}</td>
-        <td data-label="수수료" style="font-weight:600;font-size:11px;${hc['c_fee']?'display:none':''}">${em?`<div onclick="event.stopPropagation()" style="display:flex;flex-direction:column;gap:3px;font-size:10px"><div style="display:flex;align-items:center;gap:4px"><span style="color:#888;width:22px">기장</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'fee',this.value)" value="${c.fee||0}" class="inline-edit" style="width:72px"></div><div style="display:flex;align-items:center;gap:4px"><span style="color:#888;width:22px">조정</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'adjustFee',this.value)" value="${c.adjustFee||0}" class="inline-edit" style="width:72px"></div></div>`:((isJuminLead||isRelatedLead)?clientFeeDisplayGroup([c,...juminMembers,...relatedMembers]):clientFeeDisplay(c))}</td>
+        <td data-label="수수료" style="font-weight:600;font-size:11px;${hc['c_fee']?'display:none':''}">${em?`<div onclick="event.stopPropagation()" style="display:flex;flex-direction:column;gap:3px;font-size:10px"><div style="display:flex;align-items:center;gap:4px"><span style="color:#888;width:22px">기장</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'fee',this.value)" value="${c.fee||0}" class="inline-edit" style="width:72px"></div><div style="display:flex;align-items:center;gap:4px"><span style="color:#888;width:22px">조정</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'adjustFee',this.value)" value="${c.adjustFee||0}" class="inline-edit" style="width:72px"></div></div>`:((isJuminLead||isRelatedLead)?`<span class="grp-fee-sum" id="grpfee-sum-${c.id}">${clientFeeDisplayGroup([c,...juminMembers,...relatedMembers])}</span><span class="grp-fee-own" id="grpfee-own-${c.id}" style="display:none">${clientFeeDisplay(c)}</span>`:clientFeeDisplay(c))}</td>
         <td data-label="상태" ${em?`onclick="event.stopPropagation();openStatusModal(${c.id})" style="cursor:pointer;` : `style="opacity:.95;`}${hc['c_status']?'display:none':''}${em?`" title="클릭하여 상태 변경"` : `" title="상태 변경은 수정모드에서 가능합니다"`}>${badge(c.status,statusColor(c.status))}</td>
         <td data-label="CMS" ${em?`onclick="event.stopPropagation();toggleCMS(${c.id})" style="cursor:pointer;` : `style="opacity:.95;`}${hc['c_cms']?'display:none':''}${em?`"` : `" title="CMS 변경은 수정모드에서 가능합니다"`}>${badge(c.cms?'가입':'미가입',c.cms?'green':'gray')}</td>
         <td data-label="등급" style="text-align:center;${hc['c_grade']?'display:none':''}">${gradeBadge(c.grade,c.gradeManual)}</td>
@@ -3826,6 +3828,15 @@ function toggleJuminGroup(leadId) {
   expandRows.forEach(r => r.style.display = 'none');
   const btn = document.getElementById(`jumin-btn-${leadId}`);
   if (btn) btn.innerHTML = isExpanded ? `+${mainRows.length}개 사업장` : `▲ 접기`;
+  _toggleGroupLeadFee(leadId, !isExpanded);
+}
+
+// 그룹 대표행 수수료 셀: 펼침(open=true)이면 대표 자신의 수수료, 접힘이면 그룹합계
+function _toggleGroupLeadFee(leadId, open) {
+  const sumEl = document.getElementById(`grpfee-sum-${leadId}`);
+  const ownEl = document.getElementById(`grpfee-own-${leadId}`);
+  if (sumEl) sumEl.style.display = open ? 'none' : '';
+  if (ownEl) ownEl.style.display = open ? '' : 'none';
 }
 
 function toggleRelatedGroup(leadId) {
@@ -3837,6 +3848,7 @@ function toggleRelatedGroup(leadId) {
   expandRows.forEach(r => r.style.display = 'none');
   const btn = document.getElementById(`related-btn-${leadId}`);
   if (btn) btn.innerHTML = isExpanded ? `+${mainRows.length}개의 그룹` : `▲ 접기`;
+  _toggleGroupLeadFee(leadId, !isExpanded);
 }
 
 function cycleFeeStatus(id) {
