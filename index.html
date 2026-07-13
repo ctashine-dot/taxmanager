@@ -1277,10 +1277,12 @@ function filteredClients() {
   });
   const groupSortKeys = {};
   Object.entries(groupBuckets).forEach(([k, members]) => {
-    // 대표업체: groupMain=true 인 멤버, 없으면 수임일자 가장 빠른 멤버
+    // 표시 대표업체: groupMain=true 인 멤버(지정 대표), 없으면 수임일자 가장 빠른 멤버
     const lead = members.find(m=>m.groupMain) ||
       [...members].sort((a,b)=>csk(a).localeCompare(csk(b))||a.name.localeCompare(b.name,'ko'))[0];
-    groupSortKeys[k] = { dateKey: csk(lead), lead: lead.name, mainId: lead.id, leadGrade: lead.grade||'', dealRank: Math.min(...members.map(m=>dealSortRankForClient(m))) };
+    // 정렬 기준 수임일자: 지정 대표와 무관하게 그룹 구성원 중 가장 빠른 수임일자
+    const dateKey = members.reduce((min,m)=>{const d=csk(m);return d<min?d:min;}, 'ZZZZ-ZZ-ZZ');
+    groupSortKeys[k] = { dateKey, lead: lead.name, mainId: lead.id, leadGrade: lead.grade||'', dealRank: Math.min(...members.map(m=>dealSortRankForClient(m))) };
   });
 
   // 검색 중일 때는 일치도 높은 순으로 정렬
@@ -1829,7 +1831,7 @@ function _renderDashboardInner() {
   const monthlyUnpaid = monthlyClients.filter(c=>!(G.monthlyFees[c.id]?.[thisYM]));
 
   const feeByManager = MANAGERS.slice(1).map(m=>{
-    const allMC = G.clients.filter(c=>getManagers(c).includes(m)&&c.status!=='해지'&&c.status!=='폐업');
+    const allMC = G.clients.filter(c=>getManagers(c).includes(m)&&c.status!=='해지'&&c.status!=='폐업'&&c.status!=='휴업');
     const mc = G.clients.filter(c=>getManagers(c).includes(m)&&isMonthlyBillable(c, thisYM));
     const t = mc.reduce((a,c)=>a+getFeeForYM(c,thisYM),0);
     const col = mc.filter(c=>G.monthlyFees[c.id]?.[thisYM]).reduce((a,c)=>a+getFeeForYM(c,thisYM),0);
@@ -2052,12 +2054,13 @@ function _renderDashboardInner() {
 
   ${(G.settings?.dashWidgets?.managerStats!==false)?`<div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${_dashCollapsed('dash-manager')?0:12}px">
-      <div style="display:flex;align-items:center;gap:8px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         ${sectionToggleBtn('dash-manager')}
         <div class="card-title" style="margin:0">담당자별 현황 (수임유형별 업체수 · 수수료)</div>
+        ${(()=>{const n=G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&getManagers(c).length>1).length;return n?`<button onclick="openMultiManagerFix()" style="padding:4px 10px;border-radius:8px;border:1.5px solid #ef9a9a;background:#fdecea;color:#c62828;font-size:12px;cursor:pointer;font-family:inherit;font-weight:700">⚠ 담당자 중복 ${n}개</button>`:'';})()}
       </div>
       ${_dashCollapsed('dash-manager')?'':
-        `<div style="display:flex;gap:8px">
+        `<div style="display:flex;gap:8px;flex-wrap:wrap">
           <button onclick="openManagerTransferModal()" style="padding:5px 12px;border-radius:8px;border:1.5px solid #a5d6a7;background:#e8f5e9;color:#2e7d32;font-size:12px;cursor:pointer;font-family:inherit">👤 담당자 이동</button>
           <button onclick="openManagerAnalysis()" style="padding:5px 12px;border-radius:8px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;font-size:12px;cursor:pointer;font-family:inherit">📊 상세 분석</button>
         </div>`}
@@ -2491,13 +2494,13 @@ function renderClients() {
       })() : '';
       return `<tr class="client-row" onpointerdown="startLongPress(event,${c.id})" onpointermove="moveLongPress(event)" onpointerup="cancelLongPress()" onpointercancel="cancelLongPress()" oncontextmenu="event.preventDefault()" onclick="if(window._lpFired){window._lpFired=false}else{toggleExpand(${c.id})}" style="${inGroup?`border-left:3px solid ${gc}`:''}" >
         ${G.bulkMode?`<td onclick="event.stopPropagation();toggleClientSelect(${c.id})" style="width:32px;text-align:center;cursor:pointer"><input type="checkbox" ${(G.selectedClients||[]).includes(c.id)?'checked':''} style="width:16px;height:16px;cursor:pointer" onclick="event.stopPropagation();toggleClientSelect(${c.id})"></td>`:''}
-        <td><div class="td-name">${(()=>{const risk=clientRiskLevel(c);return risk==='red'?'<span title="위험" style="color:#e53935;margin-right:4px">●</span>':risk==='yellow'?'<span title="주의" style="color:#f57c00;margin-right:4px">●</span>':''})()}${groupDot}${esc(c.name)}<button onclick="event.stopPropagation();openQuickMemo(${c.id}, this)" style="margin-left:4px;padding:1px 5px;border-radius:5px;border:1px solid #e0e0e0;background:#f8f9ff;font-size:11px;cursor:pointer;vertical-align:middle" title="메모/이력">📝${(G.clientNotes||{})[c.id]?.length?` ${G.clientNotes[c.id].length}`:''}</button><button onclick="event.stopPropagation();toggleFavorite(${c.id})" style="margin-left:2px;padding:1px 4px;border-radius:5px;border:1px solid #e0e0e0;background:#fff;font-size:12px;cursor:pointer;vertical-align:middle" title="즐겨찾기">${(G.favorites||[]).includes(c.id)?'⭐':'☆'}</button>${isJuminLead ? `<button onclick="event.stopPropagation();toggleJuminGroup(${c.id})" id="jumin-btn-${c.id}" style="margin-left:4px;padding:1px 6px;border-radius:10px;background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;font-size:10px;font-weight:700;cursor:pointer;vertical-align:middle" title="같은 사업주의 다른 사업장">+${juminMembers.length}개 사업장</button>` : ''}${isRelatedLead ? `<button onclick="event.stopPropagation();toggleRelatedGroup(${c.id})" id="related-btn-${c.id}" style="margin-left:4px;padding:1px 6px;border-radius:10px;background:#ede7f6;color:#6a1b9a;border:1px solid #ce93d8;font-size:10px;font-weight:700;cursor:pointer;vertical-align:middle" title="관계사 그룹">+${relatedMembers.length}개의 그룹</button>` : ''}</div>${(c.bizType||c.bizCode||groupSub||_incSub)?`<div class="td-sub">${c.bizType?esc(c.bizType):''}${c.bizCode?` <span style="color:#aaa;font-size:10px">[${esc(c.bizCode)}]</span>`:''}${groupSub}${_incSub}</div>`:''}</td>
+        <td><div class="td-name">${(()=>{const risk=clientRiskLevel(c);return risk==='red'?'<span title="7개월 이상 미수" style="color:#e53935;margin-right:4px">●</span>':risk==='yellow'?'<span title="4~6개월 미수" style="color:#f57c00;margin-right:4px">●</span>':risk==='blue'?'<span title="1~3개월 미수" style="color:#1e88e5;margin-right:4px">●</span>':''})()}${groupDot}${esc(c.name)}<button onclick="event.stopPropagation();openQuickMemo(${c.id}, this)" style="margin-left:4px;padding:1px 5px;border-radius:5px;border:1px solid #e0e0e0;background:#f8f9ff;font-size:11px;cursor:pointer;vertical-align:middle" title="메모/이력">📝${(G.clientNotes||{})[c.id]?.length?` ${G.clientNotes[c.id].length}`:''}</button><button onclick="event.stopPropagation();toggleFavorite(${c.id})" style="margin-left:2px;padding:1px 4px;border-radius:5px;border:1px solid #e0e0e0;background:#fff;font-size:12px;cursor:pointer;vertical-align:middle" title="즐겨찾기">${(G.favorites||[]).includes(c.id)?'⭐':'☆'}</button>${isJuminLead ? `<button onclick="event.stopPropagation();toggleJuminGroup(${c.id})" id="jumin-btn-${c.id}" style="margin-left:4px;padding:1px 6px;border-radius:10px;background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;font-size:10px;font-weight:700;cursor:pointer;vertical-align:middle" title="같은 사업주의 다른 사업장">+${juminMembers.length}개 사업장</button>` : ''}${isRelatedLead ? `<button onclick="event.stopPropagation();toggleRelatedGroup(${c.id})" id="related-btn-${c.id}" style="margin-left:4px;padding:1px 6px;border-radius:10px;background:#ede7f6;color:#6a1b9a;border:1px solid #ce93d8;font-size:10px;font-weight:700;cursor:pointer;vertical-align:middle" title="관계사 그룹">+${relatedMembers.length}개의 그룹</button>` : ''}</div>${(c.bizType||c.bizCode||groupSub||_incSub)?`<div class="td-sub">${c.bizType?esc(c.bizType):''}${c.bizCode?` <span style="color:#aaa;font-size:10px">[${esc(c.bizCode)}]</span>`:''}${groupSub}${_incSub}</div>`:''}</td>
         <td data-label="대표자" style="font-size:12px;color:#444;${hc['c_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
         <td data-label="수임유형" style="${hc['c_dealType']?'display:none':''}">${em?iSel('dealType',DEAL_TYPES.slice(1),getDealTypes(c)[0]):getDealTypes(c).map(d=>dealBadge(d)).join('')}${routeBadge(c)}</td>
         <td data-label="인격" style="${hc['c_taxType']?'display:none':''}">${em?iSel('taxType',TAX_TYPES.slice(1),c.taxType):badge(c.taxType,c.taxType==='법인'?'blue':'gray')}</td>
         <td data-label="과세유형" style="${hc['c_vatType']?'display:none':''}">${em?iSel('vatType',VAT_TYPES.slice(1),c.vatType):badge(c.vatType,c.vatType==='일반'?'blue':c.vatType==='간이'?'orange':c.vatType==='간세'?'teal':'gray')}</td>
         <td data-label="담당자" style="color:#555;font-size:12px;${hc['c_manager']?'display:none':''}">${em?iSel('manager',MANAGERS.slice(1),getManagers(c)[0]||''):esc(getManagers(c).join(', ')||'-')}</td>
-        <td data-label="수수료" style="font-weight:600;font-size:11px;${hc['c_fee']?'display:none':''}">${em?`<div onclick="event.stopPropagation()" style="display:flex;flex-direction:column;gap:3px;font-size:10px"><div style="display:flex;align-items:center;gap:4px"><span style="color:#888;width:22px">기장</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'fee',this.value)" value="${c.fee||0}" class="inline-edit" style="width:72px"></div><div style="display:flex;align-items:center;gap:4px"><span style="color:#888;width:22px">조정</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'adjustFee',this.value)" value="${c.adjustFee||0}" class="inline-edit" style="width:72px"></div></div>`:((isJuminLead||isRelatedLead)?clientFeeDisplayGroup([c,...juminMembers,...relatedMembers]):clientFeeDisplay(c))}</td>
+        <td data-label="수수료" style="font-weight:600;font-size:11px;${hc['c_fee']?'display:none':''}">${em?`<div onclick="event.stopPropagation()" style="display:flex;flex-direction:column;gap:3px;font-size:10px"><div style="display:flex;align-items:center;gap:4px"><span style="color:#888;width:22px">기장</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'fee',this.value)" value="${c.fee||0}" class="inline-edit" style="width:72px"></div><div style="display:flex;align-items:center;gap:4px"><span style="color:#888;width:22px">조정</span><input type="number" onchange="event.stopPropagation();updateClientField(${c.id},'adjustFee',this.value)" value="${c.adjustFee||0}" class="inline-edit" style="width:72px"></div></div>`:((isJuminLead||isRelatedLead)?`<span class="grp-fee-sum" id="grpfee-sum-${c.id}">${clientFeeDisplayGroup([c,...juminMembers,...relatedMembers])}</span><span class="grp-fee-own" id="grpfee-own-${c.id}" style="display:none">${clientFeeDisplay(c)}</span>`:clientFeeDisplay(c))}</td>
         <td data-label="상태" ${em?`onclick="event.stopPropagation();openStatusModal(${c.id})" style="cursor:pointer;` : `style="opacity:.95;`}${hc['c_status']?'display:none':''}${em?`" title="클릭하여 상태 변경"` : `" title="상태 변경은 수정모드에서 가능합니다"`}>${badge(c.status,statusColor(c.status))}</td>
         <td data-label="CMS" ${em?`onclick="event.stopPropagation();toggleCMS(${c.id})" style="cursor:pointer;` : `style="opacity:.95;`}${hc['c_cms']?'display:none':''}${em?`"` : `" title="CMS 변경은 수정모드에서 가능합니다"`}>${badge(c.cms?'가입':'미가입',c.cms?'green':'gray')}</td>
         <td data-label="등급" style="text-align:center;${hc['c_grade']?'display:none':''}">${gradeBadge(c.grade,c.gradeManual)}</td>
@@ -2547,7 +2550,7 @@ function renderClients() {
           onclick="if(window._lpFired){window._lpFired=false}else{toggleExpand(${m.id})}"
           style="background:#f0fff4;border-left:3px solid #4caf50;display:none">
           ${G.bulkMode?`<td onclick="event.stopPropagation();toggleClientSelect(${m.id})" style="width:32px;text-align:center;cursor:pointer"><input type="checkbox" ${(G.selectedClients||[]).includes(m.id)?'checked':''} style="width:16px;height:16px;cursor:pointer" onclick="event.stopPropagation();toggleClientSelect(${m.id})"></td>`:''}
-          <td><div class="td-name"><span style="color:#4caf50;font-size:12px;margin-right:3px;vertical-align:middle">↳</span>${(()=>{const risk=clientRiskLevel(m);return risk==='red'?'<span style="color:#e53935;margin-right:4px">●</span>':risk==='yellow'?'<span style="color:#f57c00;margin-right:4px">●</span>':'';})()}${esc(m.name)}<button onclick="event.stopPropagation();openClientNotes(${m.id})" style="margin-left:4px;padding:1px 5px;border-radius:5px;border:1px solid #e0e0e0;background:#f8f9ff;font-size:11px;cursor:pointer;vertical-align:middle" title="메모/이력">📝${(G.clientNotes||{})[m.id]?.length?` ${G.clientNotes[m.id].length}`:''}</button><button onclick="event.stopPropagation();toggleFavorite(${m.id})" style="margin-left:2px;padding:1px 4px;border-radius:5px;border:1px solid #e0e0e0;background:#fff;font-size:12px;cursor:pointer;vertical-align:middle" title="즐겨찾기">${(G.favorites||[]).includes(m.id)?'⭐':'☆'}</button></div>${m.bizType||m.bizCode?`<div class="td-sub">${m.bizType?esc(m.bizType):''}${m.bizCode?` <span style="color:#aaa;font-size:10px">[${esc(m.bizCode)}]</span>`:''}</div>`:''}</td>
+          <td><div class="td-name"><span style="color:#4caf50;font-size:12px;margin-right:3px;vertical-align:middle">↳</span>${(()=>{const risk=clientRiskLevel(m);return risk==='red'?'<span style="color:#e53935;margin-right:4px">●</span>':risk==='yellow'?'<span style="color:#f57c00;margin-right:4px">●</span>':risk==='blue'?'<span style="color:#1e88e5;margin-right:4px">●</span>':'';})()}${esc(m.name)}<button onclick="event.stopPropagation();openClientNotes(${m.id})" style="margin-left:4px;padding:1px 5px;border-radius:5px;border:1px solid #e0e0e0;background:#f8f9ff;font-size:11px;cursor:pointer;vertical-align:middle" title="메모/이력">📝${(G.clientNotes||{})[m.id]?.length?` ${G.clientNotes[m.id].length}`:''}</button><button onclick="event.stopPropagation();toggleFavorite(${m.id})" style="margin-left:2px;padding:1px 4px;border-radius:5px;border:1px solid #e0e0e0;background:#fff;font-size:12px;cursor:pointer;vertical-align:middle" title="즐겨찾기">${(G.favorites||[]).includes(m.id)?'⭐':'☆'}</button></div>${m.bizType||m.bizCode?`<div class="td-sub">${m.bizType?esc(m.bizType):''}${m.bizCode?` <span style="color:#aaa;font-size:10px">[${esc(m.bizCode)}]</span>`:''}</div>`:''}</td>
           <td data-label="대표자" style="font-size:12px;color:#444;${hc['c_rep']?'display:none':''}">${esc(m.rep)||'-'}</td>
           <td data-label="수임유형" style="${hc['c_dealType']?'display:none':''}">${em?miSel('dealType',DEAL_TYPES.slice(1),getDealTypes(m)[0]):getDealTypes(m).map(d=>dealBadge(d)).join('')}${routeBadge(m)}</td>
           <td data-label="인격" style="${hc['c_taxType']?'display:none':''}">${em?miSel('taxType',TAX_TYPES.slice(1),m.taxType):badge(m.taxType,m.taxType==='법인'?'blue':'gray')}</td>
@@ -2603,7 +2606,7 @@ function renderClients() {
           onclick="if(window._lpFired){window._lpFired=false}else{toggleExpand(${m.id})}"
           style="background:#f3e5f5;border-left:3px solid ${mgc};display:none">
           ${G.bulkMode?`<td onclick="event.stopPropagation();toggleClientSelect(${m.id})" style="width:32px;text-align:center;cursor:pointer"><input type="checkbox" ${(G.selectedClients||[]).includes(m.id)?'checked':''} style="width:16px;height:16px;cursor:pointer" onclick="event.stopPropagation();toggleClientSelect(${m.id})"></td>`:''}
-          <td><div class="td-name"><span style="color:#9c27b0;font-size:12px;margin-right:3px;vertical-align:middle">↳</span>${(()=>{const risk=clientRiskLevel(m);return risk==='red'?'<span style="color:#e53935;margin-right:4px">●</span>':risk==='yellow'?'<span style="color:#f57c00;margin-right:4px">●</span>':'';})()}${esc(m.name)}<button onclick="event.stopPropagation();openClientNotes(${m.id})" style="margin-left:4px;padding:1px 5px;border-radius:5px;border:1px solid #e0e0e0;background:#f8f9ff;font-size:11px;cursor:pointer;vertical-align:middle" title="메모/이력">📝${(G.clientNotes||{})[m.id]?.length?` ${G.clientNotes[m.id].length}`:''}</button><button onclick="event.stopPropagation();toggleFavorite(${m.id})" style="margin-left:2px;padding:1px 4px;border-radius:5px;border:1px solid #e0e0e0;background:#fff;font-size:12px;cursor:pointer;vertical-align:middle" title="즐겨찾기">${(G.favorites||[]).includes(m.id)?'⭐':'☆'}</button></div>${m.bizType||m.bizCode?`<div class="td-sub">${m.bizType?esc(m.bizType):''}${m.bizCode?` <span style="color:#aaa;font-size:10px">[${esc(m.bizCode)}]</span>`:''}</div>`:''}</td>
+          <td><div class="td-name"><span style="color:#9c27b0;font-size:12px;margin-right:3px;vertical-align:middle">↳</span>${(()=>{const risk=clientRiskLevel(m);return risk==='red'?'<span style="color:#e53935;margin-right:4px">●</span>':risk==='yellow'?'<span style="color:#f57c00;margin-right:4px">●</span>':risk==='blue'?'<span style="color:#1e88e5;margin-right:4px">●</span>':'';})()}${esc(m.name)}<button onclick="event.stopPropagation();openClientNotes(${m.id})" style="margin-left:4px;padding:1px 5px;border-radius:5px;border:1px solid #e0e0e0;background:#f8f9ff;font-size:11px;cursor:pointer;vertical-align:middle" title="메모/이력">📝${(G.clientNotes||{})[m.id]?.length?` ${G.clientNotes[m.id].length}`:''}</button><button onclick="event.stopPropagation();toggleFavorite(${m.id})" style="margin-left:2px;padding:1px 4px;border-radius:5px;border:1px solid #e0e0e0;background:#fff;font-size:12px;cursor:pointer;vertical-align:middle" title="즐겨찾기">${(G.favorites||[]).includes(m.id)?'⭐':'☆'}</button></div>${m.bizType||m.bizCode?`<div class="td-sub">${m.bizType?esc(m.bizType):''}${m.bizCode?` <span style="color:#aaa;font-size:10px">[${esc(m.bizCode)}]</span>`:''}</div>`:''}</td>
           <td data-label="대표자" style="font-size:12px;color:#444;${hc['c_rep']?'display:none':''}">${esc(m.rep)||'-'}</td>
           <td data-label="수임유형" style="${hc['c_dealType']?'display:none':''}">${em?miSel('dealType',DEAL_TYPES.slice(1),getDealTypes(m)[0]):getDealTypes(m).map(d=>dealBadge(d)).join('')}${routeBadge(m)}</td>
           <td data-label="인격" style="${hc['c_taxType']?'display:none':''}">${em?miSel('taxType',TAX_TYPES.slice(1),m.taxType):badge(m.taxType,m.taxType==='법인'?'blue':'gray')}</td>
@@ -3826,6 +3829,15 @@ function toggleJuminGroup(leadId) {
   expandRows.forEach(r => r.style.display = 'none');
   const btn = document.getElementById(`jumin-btn-${leadId}`);
   if (btn) btn.innerHTML = isExpanded ? `+${mainRows.length}개 사업장` : `▲ 접기`;
+  _toggleGroupLeadFee(leadId, !isExpanded);
+}
+
+// 그룹 대표행 수수료 셀: 펼침(open=true)이면 대표 자신의 수수료, 접힘이면 그룹합계
+function _toggleGroupLeadFee(leadId, open) {
+  const sumEl = document.getElementById(`grpfee-sum-${leadId}`);
+  const ownEl = document.getElementById(`grpfee-own-${leadId}`);
+  if (sumEl) sumEl.style.display = open ? 'none' : '';
+  if (ownEl) ownEl.style.display = open ? '' : 'none';
 }
 
 function toggleRelatedGroup(leadId) {
@@ -3837,6 +3849,7 @@ function toggleRelatedGroup(leadId) {
   expandRows.forEach(r => r.style.display = 'none');
   const btn = document.getElementById(`related-btn-${leadId}`);
   if (btn) btn.innerHTML = isExpanded ? `+${mainRows.length}개의 그룹` : `▲ 접기`;
+  _toggleGroupLeadFee(leadId, !isExpanded);
 }
 
 function cycleFeeStatus(id) {
@@ -4025,6 +4038,71 @@ function saveAssignManager() {
   closeModal();
   renderDashboard();
   toast(`${mgr} 담당자로 ${checked.length}개 업체 배정 완료`,'success');
+}
+
+// 담당자가 2명 이상 잘못 지정된 업체(해지·폐업 제외)
+function multiManagerClients() {
+  return G.clients
+    .filter(c => c.status!=='해지' && c.status!=='폐업' && getManagers(c).length > 1)
+    .sort((a,b) => a.name.localeCompare(b.name, 'ko'));
+}
+// 담당자 중복 지정 정리 — 업체별로 올바른 담당자 1명 선택
+function openMultiManagerFix() {
+  const list = multiManagerClients();
+  if (!list.length) { toast('담당자가 2명 이상 지정된 업체가 없습니다.','info'); return; }
+  showModal(`<div style="max-width:560px;width:92vw">
+  <div class="modal-header">
+    <h3>⚠ 담당자 중복 지정 정리 <span style="font-size:13px;font-weight:400;color:#888">(${list.length}개)</span></h3>
+    <button class="close-btn" onclick="navBack()">✕</button>
+  </div>
+  <div class="modal-body" style="padding-bottom:0">
+    <div style="font-size:12px;color:#888;margin-bottom:10px;line-height:1.5">업체당 담당자는 1명이 원칙입니다. 아래 업체는 담당자가 2명 이상 지정되어 있습니다. 각 업체의 올바른 담당자를 선택한 뒤 저장하세요.</div>
+    <div style="max-height:360px;overflow-y:auto;border:1px solid #e8e8e8;border-radius:10px;padding:2px 8px;margin-bottom:12px">
+      ${list.map(c=>{
+        const mgrs = getManagers(c);
+        const others = MANAGERS.slice(1).filter(m=>!mgrs.includes(m));
+        return `<div style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid #f4f4f4">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)} <span style="font-size:11px;color:#888;font-weight:400">${esc(c.rep||'')}</span></div>
+            <div style="font-size:11px;color:#c62828;margin-top:2px">현재: ${mgrs.map(esc).join(' + ')}</div>
+          </div>
+          <select data-mmf-id="${c.id}" class="fsel" style="width:130px;flex:none">
+            ${mgrs.map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join('')}
+            ${others.length?`<option disabled>──────</option>`:''}
+            ${others.map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join('')}
+          </select>
+        </div>`;
+      }).join('')}
+    </div>
+    <div style="display:flex;gap:8px;padding-bottom:14px;align-items:center">
+      <div style="flex:1;font-size:12px;color:#888">선택한 담당자 1명으로 각각 재지정됩니다</div>
+      <button onclick="saveMultiManagerFix()" style="padding:10px 24px;background:#4f8ef7;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">저장</button>
+    </div>
+  </div></div>`);
+}
+function saveMultiManagerFix() {
+  const sels = [...document.querySelectorAll('[data-mmf-id]')];
+  if (!sels.length) return;
+  if (!G.managerHistory) G.managerHistory = {};
+  let n = 0;
+  sels.forEach(sel => {
+    const id = Number(sel.dataset.mmfId), mgr = sel.value;
+    const c = G.clients.find(x => x.id===id);
+    if (!c || !mgr) return;
+    const cur = getManagers(c);
+    if (cur.length===1 && cur[0]===mgr) return; // 변경 없음
+    const oldStr = cur.join(', ') || '(없음)';
+    c.managers = [mgr];
+    c.manager = mgr;
+    if (!G.managerHistory[id]) G.managerHistory[id] = [];
+    G.managerHistory[id].push({ date: new Date().toLocaleString('ko-KR'), from: oldStr, to: mgr });
+    n++;
+  });
+  saveToLS();
+  closeModal();
+  renderDashboard();
+  renderClients();
+  toast(`${n}개 업체 담당자를 1명으로 정리했습니다`, 'success');
 }
 
 // ══════════════════════════════════════════════════════
@@ -13593,30 +13671,14 @@ function toggleDocCheck(clientId, field) {
 // Feature 5: 거래처 위험도 자동 배지
 // ══════════════════════════════════════════════════════
 function clientRiskLevel(c) {
-  if (c.status==='주의') return 'red';
-  // Count uncollected months
-  const now3 = new Date();
-  let uncollected = 0;
-  if (c.fee>0&&getDealTypes(c).some(d=>['기장','고문','성실'].includes(d))) {
-    for (let i=1;i<=6;i++) {
-      const d3 = new Date(now3.getFullYear(), now3.getMonth()-i, 1);
-      const ym3 = d3.getFullYear()+'-'+String(d3.getMonth()+1).padStart(2,'0');
-      if (!c.contractDate||c.contractDate.slice(0,7)>ym3) break;
-      if (!(G.monthlyFees[c.id]&&G.monthlyFees[c.id][ym3])) uncollected++;
-      else break;
-    }
-  }
-  if (uncollected>=3) return 'red';
-  // Contract age
-  let contractMonths = 0;
-  if (c.contractDate) {
-    const cd=new Date(c.contractDate);
-    contractMonths=(now3.getFullYear()-cd.getFullYear())*12+(now3.getMonth()-cd.getMonth());
-  }
-  if (contractMonths>=12) return 'red';
-  if (uncollected>=1&&uncollected<=2) return 'yellow';
-  if (!c.bizNo) return 'yellow';
-  if (contractMonths>=10&&contractMonths<=11) return 'yellow';
+  // 위험도 = 월정(기장·고문·성실) 수수료 미수금 연속 개월 수 기준
+  //  · 1~3개월 미수 → blue(파랑)
+  //  · 4~6개월 미수 → yellow(노랑)
+  //  · 7개월 이상 미수 → red(빨강)
+  const n = getUnpaidStreak(c, currentYM());
+  if (n >= 7) return 'red';
+  if (n >= 4) return 'yellow';
+  if (n >= 1) return 'blue';
   return 'green';
 }
 
