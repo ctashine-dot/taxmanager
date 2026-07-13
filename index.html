@@ -1944,7 +1944,13 @@ function _renderDashboardInner() {
         <div class="stat-sub">${feeSum?feeSum.toLocaleString()+'원/월':'-'}</div>
       </div>`;
     }).join('');
-    return `<div style="margin-bottom:8px"><div style="font-size:13px;font-weight:700;color:#555;margin-bottom:7px">🏅 거래처 등급</div><div class="stat-grid">${cards}</div></div>`;
+    return `<div style="margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+        ${sectionToggleBtn('dash-grade')}
+        <div style="font-size:13px;font-weight:700;color:#555">🏅 거래처 등급</div>
+      </div>
+      <div style="${_dashCollapsed('dash-grade')?'display:none':''}"><div class="stat-grid">${cards}</div></div>
+    </div>`;
   })()}
 
   <div class="stat-grid">
@@ -2000,9 +2006,13 @@ function _renderDashboardInner() {
 
 
   <div style="margin:22px 0 12px;display:flex;justify-content:space-between;align-items:center">
-    <h3 style="font-size:18px;font-weight:800">💰 수수료 현황</h3>
+    <div style="display:flex;align-items:center;gap:8px">
+      ${sectionToggleBtn('dash-fees')}
+      <h3 style="font-size:18px;font-weight:800;margin:0">💰 수수료 현황</h3>
+    </div>
     <button class="btn-sm" style="background:#e3f2fd;color:#1565c0;border:1.5px solid #90caf9" onclick="switchTab('fees')">수수료 탭 →</button>
   </div>
+  <div style="${_dashCollapsed('dash-fees')?'display:none':''}">
 
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
     <div class="card" style="margin-bottom:0;border-top:3px solid #4f8ef7">
@@ -2051,6 +2061,7 @@ function _renderDashboardInner() {
       </div>`).join('')||'<div style="color:#aaa;font-size:13px">없음</div>';
     })()}
   </div>`:''}
+  </div>
 
   ${(G.settings?.dashWidgets?.managerStats!==false)?`<div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${_dashCollapsed('dash-manager')?0:12}px">
