@@ -2485,7 +2485,7 @@ function renderClients() {
       const contracts = (c.contracts||[]).map(k=>contractLabel(k)).join(', ');
       const em = G.editMode;
       const iSel = (field,opts,val)=>`<select onclick="event.stopPropagation()" onchange="event.stopPropagation();updateClientField(${c.id},'${field}',this.value)" class="inline-edit">${opts.map(v=>`<option${val===v?' selected':''}>${esc(v)}</option>`).join('')}</select>`;
-      const iInput = (field,val,attrs='')=>`<input ${attrs} onclick="event.stopPropagation()" onchange="event.stopPropagation();updateClientField(${c.id},'${field}',this.value)" value="${esc(val||'')}" class="inline-edit">`;
+      const iInput = (field,val,attrs='')=>`<input ${attrs}${_inlineFmtAttr(field)} onclick="event.stopPropagation()" onchange="event.stopPropagation();updateClientField(${c.id},'${field}',this.value)" value="${esc(val||'')}" class="inline-edit">`;
       const gk = getGroupKey(c);
       const juminMembers = (window._juminGroups || {})[c.id] || [];
       const isJuminLead = juminMembers.length > 0;
@@ -2528,7 +2528,7 @@ function renderClients() {
             ${withholdingSection(c)}
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">연락처</div>${em?iInput('phone',c.phone,'placeholder="전화번호" style="width:140px"'):`<div style="font-weight:600">${c.phone?`<a href="tel:${esc(c.phone)}" style="color:#4f8ef7;text-decoration:none;font-weight:600">${esc(c.phone)}</a>`:'-'}</div>`}</div>
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">관할세무서</div>${em?iInput('taxOffice',c.taxOffice,'list="taxoffice-list" placeholder="세무서 선택·입력" style="width:150px"'):`<div style="font-weight:600">${esc(c.taxOffice||'-')}</div>`}</div>
-            <div><div style="font-size:11px;color:#888;margin-bottom:3px">수임일자</div>${em?iInput('contractDate',c.contractDate,'type="date"'):`<div style="font-weight:600">${esc(c.contractDate||'-')}</div>`}</div>
+            <div><div style="font-size:11px;color:#888;margin-bottom:3px">수임일자</div>${em?iInput('contractDate',c.contractDate):`<div style="font-weight:600">${esc(c.contractDate||'-')}</div>`}</div>
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">사업자번호</div>${em?iInput('bizNo',c.bizNo,'placeholder="000-00-00000" style="width:130px"'):`<div style="font-weight:600;font-family:monospace">${esc(c.bizNo||'-')}</div>`}</div>
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">${c.taxType==='법인'?'법인등록번호':'주민번호'}</div>${em?iInput('jumin',c.jumin,'placeholder="000000-0000000" style="width:150px"'):`<div style="font-weight:600;font-family:monospace">${c.jumin?esc(c.jumin.slice(0,6)+'-'+c.jumin.slice(6,7)+'••••••'):'-'}</div>`}</div>
             ${c.openDate?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">개업연월일</div><div style="font-weight:600">${esc(c.openDate)}</div></div>`:''}
@@ -2555,7 +2555,7 @@ function renderClients() {
       ${isJuminLead ? juminMembers.map(m => {
         const mc = (m.contracts||[]).map(k=>contractLabel(k)).join(', ');
         const miSel = (field,opts,val)=>`<select onclick="event.stopPropagation()" onchange="event.stopPropagation();updateClientField(${m.id},'${field}',this.value)" class="inline-edit">${opts.map(v=>`<option${val===v?' selected':''}>${esc(v)}</option>`).join('')}</select>`;
-        const miInput = (field,val,attrs='')=>`<input ${attrs} onclick="event.stopPropagation()" onchange="event.stopPropagation();updateClientField(${m.id},'${field}',this.value)" value="${esc(val||'')}" class="inline-edit">`;
+        const miInput = (field,val,attrs='')=>`<input ${attrs}${_inlineFmtAttr(field)} onclick="event.stopPropagation()" onchange="event.stopPropagation();updateClientField(${m.id},'${field}',this.value)" value="${esc(val||'')}" class="inline-edit">`;
         return `<tr class="client-row" data-jumin-lead="${c.id}" id="jumin-sub-${m.id}"
           onpointerdown="startLongPress(event,${m.id})" onpointermove="moveLongPress(event)" onpointerup="cancelLongPress()" onpointercancel="cancelLongPress()" oncontextmenu="event.preventDefault()"
           onclick="if(window._lpFired){window._lpFired=false}else{toggleExpand(${m.id})}"
@@ -2585,7 +2585,7 @@ function renderClients() {
               ${withholdingSection(m)}
               <div><div style="font-size:11px;color:#888;margin-bottom:3px">연락처</div>${em?miInput('phone',m.phone,'placeholder="전화번호" style="width:140px"'):`<div style="font-weight:600">${m.phone?`<a href="tel:${esc(m.phone)}" style="color:#4f8ef7;text-decoration:none;font-weight:600">${esc(m.phone)}</a>`:'-'}</div>`}</div>
               <div><div style="font-size:11px;color:#888;margin-bottom:3px">관할세무서</div>${em?miInput('taxOffice',m.taxOffice,'list="taxoffice-list" placeholder="세무서 선택·입력" style="width:150px"'):`<div style="font-weight:600">${esc(m.taxOffice||'-')}</div>`}</div>
-              <div><div style="font-size:11px;color:#888;margin-bottom:3px">수임일자</div>${em?miInput('contractDate',m.contractDate,'type="date"'):`<div style="font-weight:600">${esc(m.contractDate||'-')}</div>`}</div>
+              <div><div style="font-size:11px;color:#888;margin-bottom:3px">수임일자</div>${em?miInput('contractDate',m.contractDate):`<div style="font-weight:600">${esc(m.contractDate||'-')}</div>`}</div>
               <div><div style="font-size:11px;color:#888;margin-bottom:3px">사업자번호</div>${em?miInput('bizNo',m.bizNo,'placeholder="000-00-00000" style="width:130px"'):`<div style="font-weight:600;font-family:monospace">${esc(m.bizNo||'-')}</div>`}</div>
               <div><div style="font-size:11px;color:#888;margin-bottom:3px">${m.taxType==='법인'?'법인등록번호':'주민번호'}</div>${em?miInput('jumin',m.jumin,'placeholder="000000-0000000" style="width:150px"'):`<div style="font-weight:600;font-family:monospace">${m.jumin?esc(m.jumin.slice(0,6)+'-'+m.jumin.slice(6,7)+'••••••'):'-'}</div>`}</div>
               ${m.openDate?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">개업연월일</div><div style="font-weight:600">${esc(m.openDate)}</div></div>`:''}
@@ -2610,7 +2610,7 @@ function renderClients() {
       ${isRelatedLead ? relatedMembers.map(m => {
         const mc = (m.contracts||[]).map(k=>contractLabel(k)).join(', ');
         const miSel = (field,opts,val)=>`<select onclick="event.stopPropagation()" onchange="event.stopPropagation();updateClientField(${m.id},'${field}',this.value)" class="inline-edit">${opts.map(v=>`<option${val===v?' selected':''}>${esc(v)}</option>`).join('')}</select>`;
-        const miInput = (field,val,attrs='')=>`<input ${attrs} onclick="event.stopPropagation()" onchange="event.stopPropagation();updateClientField(${m.id},'${field}',this.value)" value="${esc(val||'')}" class="inline-edit">`;
+        const miInput = (field,val,attrs='')=>`<input ${attrs}${_inlineFmtAttr(field)} onclick="event.stopPropagation()" onchange="event.stopPropagation();updateClientField(${m.id},'${field}',this.value)" value="${esc(val||'')}" class="inline-edit">`;
         const mgk = getGroupKey(m), mgc = groupColor(mgk);
         return `<tr class="client-row" data-related-lead="${c.id}" id="related-sub-${m.id}"
           onpointerdown="startLongPress(event,${m.id})" onpointermove="moveLongPress(event)" onpointerup="cancelLongPress()" onpointercancel="cancelLongPress()" oncontextmenu="event.preventDefault()"
@@ -2640,7 +2640,7 @@ function renderClients() {
               ${withholdingSection(m)}
               <div><div style="font-size:11px;color:#888;margin-bottom:3px">연락처</div>${em?miInput('phone',m.phone,'placeholder="전화번호" style="width:140px"'):`<div style="font-weight:600">${m.phone?`<a href="tel:${esc(m.phone)}" style="color:#4f8ef7;text-decoration:none;font-weight:600">${esc(m.phone)}</a>`:'-'}</div>`}</div>
               <div><div style="font-size:11px;color:#888;margin-bottom:3px">관할세무서</div>${em?miInput('taxOffice',m.taxOffice,'list="taxoffice-list" placeholder="세무서 선택·입력" style="width:150px"'):`<div style="font-weight:600">${esc(m.taxOffice||'-')}</div>`}</div>
-              <div><div style="font-size:11px;color:#888;margin-bottom:3px">수임일자</div>${em?miInput('contractDate',m.contractDate,'type="date"'):`<div style="font-weight:600">${esc(m.contractDate||'-')}</div>`}</div>
+              <div><div style="font-size:11px;color:#888;margin-bottom:3px">수임일자</div>${em?miInput('contractDate',m.contractDate):`<div style="font-weight:600">${esc(m.contractDate||'-')}</div>`}</div>
               <div><div style="font-size:11px;color:#888;margin-bottom:3px">사업자번호</div>${em?miInput('bizNo',m.bizNo,'placeholder="000-00-00000" style="width:130px"'):`<div style="font-weight:600;font-family:monospace">${esc(m.bizNo||'-')}</div>`}</div>
               <div><div style="font-size:11px;color:#888;margin-bottom:3px">${m.taxType==='법인'?'법인등록번호':'주민번호'}</div>${em?miInput('jumin',m.jumin,'placeholder="000000-0000000" style="width:150px"'):`<div style="font-weight:600;font-family:monospace">${m.jumin?esc(m.jumin.slice(0,6)+'-'+m.jumin.slice(6,7)+'••••••'):'-'}</div>`}</div>
               ${m.openDate?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">개업연월일</div><div style="font-weight:600">${esc(m.openDate)}</div></div>`:''}
@@ -3689,6 +3689,10 @@ function doGroupEdit() {
 
 function updateClientField(id, field, value, _skipCheck) {
   const c = G.clients.find(x=>x.id===id); if(!c) return;
+  // 번호·날짜 필드는 자동 하이픈 정규화 후 저장(인라인 수정·붙여넣기 대비)
+  if (field==='bizNo') value = formatBiz(value);
+  else if (field==='jumin' || field==='repJumin') value = formatJumin(value);
+  else if (['contractDate','terminationDate','closeDate','openDate'].includes(field)) value = formatDateInput(value);
   if (!_skipCheck && ['dealType','taxType','vatType','seongsi','status'].includes(field)) {
     const sim = {...c, dealTypes:[...(c.dealTypes||[])], managers:[...(c.managers||[])]};
     if (field==='dealType') { sim.dealType=value; sim.dealTypes=[value]; }
@@ -3893,7 +3897,7 @@ function openStatusModal(id) {
       </div>
       <div id="status-date-row" style="display:${needsDate.includes(c.status)?'block':'none'};background:#fff8e1;border-radius:8px;padding:12px;margin-bottom:14px;border:1.5px solid #ffe082">
         <label style="font-size:13px;font-weight:700;color:#e65100;display:block;margin-bottom:8px">📅 사유발생일 <span style="color:#c62828">*</span></label>
-        <input type="date" id="status-event-date" value="${c.terminationDate||today}"
+        <input type="text" inputmode="numeric" placeholder="YYYY-MM-DD" maxlength="10" id="status-event-date" value="${c.terminationDate||today}" oninput="formatDateInput(this.value,this)"
           style="width:100%;padding:8px 12px;border:1.5px solid #ffa726;border-radius:8px;font-size:14px;font-family:inherit">
         <div style="font-size:11px;color:#888;margin-top:6px">해지·휴업·폐업 사유가 발생한 날짜를 입력하세요</div>
       </div>
@@ -3921,7 +3925,7 @@ function applyStatusChange(id) {
   const newStatus = window._statusSelected;
   if (!newStatus) return;
   if (['휴업','해지','폐업'].includes(newStatus)) {
-    const dateVal = document.getElementById('status-event-date')?.value;
+    const dateVal = formatDateInput(document.getElementById('status-event-date')?.value||'');
     if (!dateVal) { alert('사유발생일을 입력해주세요'); return; }
     c.terminationDate = dateVal;
     if (newStatus==='폐업') { c.closureYear = dateVal.slice(0,4); c.closeDate = dateVal; }
@@ -4252,14 +4256,14 @@ function openForm(id) {
     return `<div style="background:#fafafa;border-radius:10px;padding:14px;border:1.5px solid #e0e0e0;display:flex;flex-direction:column;gap:12px">
       <div style="font-size:12px;font-weight:700;color:#e65100">해지 / 폐업 정보</div>
       <div class="form-grid">
-        <div><label class="flabel">수임해지일</label><input type="date" class="finput" id="f-terminationDate" value="${esc(c.terminationDate||'')}" oninput="window._formData.terminationDate=this.value"></div>
+        <div><label class="flabel">수임해지일</label><input type="text" inputmode="numeric" placeholder="YYYY-MM-DD" maxlength="10" class="finput" id="f-terminationDate" value="${esc(c.terminationDate||'')}" oninput="window._formData.terminationDate=formatDateInput(this.value,this)"></div>
         <div><label class="flabel">해지 사유</label><select class="fsel" id="f-terminationReason" onchange="window._formData.terminationReason=this.value">
           <option value="">선택</option>
           ${['폐업','타회계사무소이전','기타'].map(v=>`<option value="${v}"${c.terminationReason===v?' selected':''}>${v==='타회계사무소이전'?'타 회계사무소 이전':v}</option>`).join('')}
         </select></div>
       </div>
       ${s==='폐업'?`<div class="form-grid">
-        <div><label class="flabel">폐업연월일</label><input type="date" class="finput" id="f-closeDate" value="${esc(c.closeDate||'')}" oninput="window._formData.closeDate=this.value"></div>
+        <div><label class="flabel">폐업연월일</label><input type="text" inputmode="numeric" placeholder="YYYY-MM-DD" maxlength="10" class="finput" id="f-closeDate" value="${esc(c.closeDate||'')}" oninput="window._formData.closeDate=formatDateInput(this.value,this)"></div>
         <div><label class="flabel">폐업연도 (신고용)</label><input type="number" class="finput" placeholder="예: 2024" id="f-closureYear" value="${esc(c.closureYear||'')}" oninput="window._formData.closureYear=this.value"></div>
       </div>`:''}
     </div>`;
@@ -4300,14 +4304,14 @@ function openForm(id) {
       </div>
       <div class="ff">
         <label class="ffl" id="f-jumin-label">${c.taxType==='법인'?'법인번호':'주민번호'}</label>
-        <input class="finput" id="f-jumin" value="${esc(c.jumin||'')}" placeholder="000000-0000000" oninput="window._formData.jumin=this.value">
+        <input class="finput" id="f-jumin" value="${esc(c.jumin||'')}" placeholder="000000-0000000" inputmode="numeric" oninput="window._formData.jumin=formatJumin(this.value,this)">
       </div>
     </div>
     <div id="bizno-msg" class="c3" style="font-size:10px;padding-left:4px;margin-top:-4px;min-height:0"></div>
 
     <div class="c3" id="f-corp-rep" style="display:${c.taxType==='법인'?'flex':'none'};align-items:center;gap:8px;background:#eef3ff;border:1px solid #c5d4f5;border-radius:8px;padding:9px 11px">
       <label class="ffl" style="white-space:nowrap">대표자 주민번호</label>
-      <input class="finput" id="f-repJumin" value="${esc(c.repJumin||'')}" placeholder="000000-0000000" oninput="window._formData.repJumin=this.value" style="flex:1;padding:3px 8px;font-size:12px">
+      <input class="finput" id="f-repJumin" value="${esc(c.repJumin||'')}" placeholder="000000-0000000" inputmode="numeric" oninput="window._formData.repJumin=formatJumin(this.value,this)" style="flex:1;padding:3px 8px;font-size:12px">
     </div>
 
     <div class="ff">
@@ -4344,7 +4348,7 @@ function openForm(id) {
 
     <div class="c3 ff">
       <label class="ffl">개업연월일</label>
-      <input type="date" class="finput" id="f-openDate" value="${esc(c.openDate||'')}" oninput="window._formData.openDate=this.value">
+      <input type="text" inputmode="numeric" placeholder="YYYY-MM-DD" maxlength="10" class="finput" id="f-openDate" value="${esc(c.openDate||'')}" oninput="window._formData.openDate=formatDateInput(this.value,this)">
     </div>
 
     <div class="c3" style="background:#f1faf9;border:1px solid #b2dfdb;border-radius:10px;padding:10px">
@@ -4449,7 +4453,7 @@ function openForm(id) {
     <div class="c3" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
       <div class="ff">
         <label class="ffl">수임일자</label>
-        <input type="date" class="fsel" style="padding:3px 4px;font-size:11px;color:#333" id="f-contractDate" value="${esc(c.contractDate||'')}" oninput="window._formData.contractDate=this.value">
+        <input type="text" inputmode="numeric" placeholder="YYYY-MM-DD" maxlength="10" class="fsel" style="padding:3px 4px;font-size:11px;color:#333" id="f-contractDate" value="${esc(c.contractDate||'')}" oninput="window._formData.contractDate=formatDateInput(this.value,this)">
       </div>
       <div class="ff">
         <label class="ffl">상태</label>
@@ -4520,7 +4524,7 @@ window.onFormSelect = function(field, val) {
       return `<div style="background:#fafafa;border-radius:10px;padding:14px;border:1.5px solid #e0e0e0;display:flex;flex-direction:column;gap:12px">
         <div style="font-size:12px;font-weight:700;color:#e65100">해지 / 폐업 정보</div>
         <div class="form-grid">
-          <div><label class="flabel">해지일자</label><input type="date" class="finput" oninput="window._formData.terminationDate=this.value"></div>
+          <div><label class="flabel">해지일자</label><input type="text" inputmode="numeric" placeholder="YYYY-MM-DD" maxlength="10" class="finput" oninput="window._formData.terminationDate=formatDateInput(this.value,this)"></div>
           <div><label class="flabel">해지 사유</label><select class="fsel" onchange="window._formData.terminationReason=this.value">
             <option value="">선택</option>
             <option value="폐업">폐업</option><option value="타회계사무소이전">타 회계사무소 이전</option><option value="기타">기타</option>
@@ -4567,6 +4571,52 @@ window.validateBizNo = function(val, input) {
       msg.innerHTML += `<span style="color:#e65100;font-size:11px;display:block;margin-top:2px">⚠ 이미 등록된 업체: ${esc(dup.name)}</span>`;
     }
   }
+};
+
+// 주민번호·법인번호 자동 하이픈 (숫자만 입력 → 000000-0000000). 커서 위치 보정.
+window.formatJumin = function(val, input) {
+  const digits = String(val||'').replace(/\D/g,'').slice(0,13);
+  const f = digits.length > 6 ? digits.slice(0,6)+'-'+digits.slice(6) : digits;
+  if (input && input.value !== f) {
+    const pos = (input.selectionStart||f.length) + (f.length - String(val||'').length);
+    input.value = f;
+    try { input.setSelectionRange(pos, pos); } catch(e) {}
+  }
+  return f;
+};
+// 날짜 자동 하이픈 (연월일 숫자만 입력 → YYYY-MM-DD). 커서 위치 보정.
+window.formatDateInput = function(val, input) {
+  const digits = String(val||'').replace(/\D/g,'').slice(0,8);
+  let f = digits;
+  if (digits.length > 6) f = digits.slice(0,4)+'-'+digits.slice(4,6)+'-'+digits.slice(6);
+  else if (digits.length > 4) f = digits.slice(0,4)+'-'+digits.slice(4);
+  if (input && input.value !== f) {
+    const pos = (input.selectionStart||f.length) + (f.length - String(val||'').length);
+    input.value = f;
+    try { input.setSelectionRange(pos, pos); } catch(e) {}
+  }
+  return f;
+};
+
+// 사업자번호 자동 하이픈 (000-00-00000) — 인라인/모달 공용(폼상태 미변경)
+window.formatBiz = function(val, input) {
+  const digits = String(val||'').replace(/\D/g,'').slice(0,10);
+  let f = digits;
+  if (digits.length > 5) f = digits.slice(0,3)+'-'+digits.slice(3,5)+'-'+digits.slice(5);
+  else if (digits.length > 3) f = digits.slice(0,3)+'-'+digits.slice(3);
+  if (input && input.value !== f) {
+    const pos = (input.selectionStart||f.length) + (f.length - String(val||'').length);
+    input.value = f;
+    try { input.setSelectionRange(pos, pos); } catch(e) {}
+  }
+  return f;
+};
+// 인라인 수정 입력칸에 필드별 자동 하이픈 oninput 부여
+window._inlineFmtAttr = function(field) {
+  if (field === 'bizNo') return ' inputmode="numeric" oninput="formatBiz(this.value,this)"';
+  if (field === 'jumin' || field === 'repJumin') return ' inputmode="numeric" oninput="formatJumin(this.value,this)"';
+  if (['contractDate','terminationDate','closeDate','openDate'].includes(field)) return ' inputmode="numeric" placeholder="YYYY-MM-DD" maxlength="10" oninput="formatDateInput(this.value,this)"';
+  return '';
 };
 
 window.addFormTag = function(e) {
@@ -13125,7 +13175,7 @@ function openJulgaeAddClientModal(pKey) {
           </div>
           <div>
             <label class="flabel">사업자번호</label>
-            <input id="adhoc-bizno" class="finput" placeholder="000-00-00000">
+            <input id="adhoc-bizno" class="finput" placeholder="000-00-00000" inputmode="numeric" oninput="formatBiz(this.value,this)">
           </div>
           <div>
             <label class="flabel">인격</label>
@@ -13148,7 +13198,7 @@ function saveJulgaeAdhocEntry(pKey) {
   const name = document.getElementById('adhoc-name')?.value?.trim();
   if (!name) { toast('상호명을 입력해주세요', 'warning'); return; }
   const rep = document.getElementById('adhoc-rep')?.value?.trim() || '';
-  const bizNo = document.getElementById('adhoc-bizno')?.value?.trim() || '';
+  const bizNo = formatBiz(document.getElementById('adhoc-bizno')?.value?.trim() || '');
   const taxType = document.getElementById('adhoc-taxtype')?.value || '개인';
   const id = -Date.now();
   if (!G.julgaeAdhoc) G.julgaeAdhoc = {};
