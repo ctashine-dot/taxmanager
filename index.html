@@ -1831,7 +1831,7 @@ function _renderDashboardInner() {
   const monthlyUnpaid = monthlyClients.filter(c=>!(G.monthlyFees[c.id]?.[thisYM]));
 
   const feeByManager = MANAGERS.slice(1).map(m=>{
-    const allMC = G.clients.filter(c=>getManagers(c).includes(m)&&c.status!=='해지'&&c.status!=='폐업');
+    const allMC = G.clients.filter(c=>getManagers(c).includes(m)&&c.status!=='해지'&&c.status!=='폐업'&&c.status!=='휴업');
     const mc = G.clients.filter(c=>getManagers(c).includes(m)&&isMonthlyBillable(c, thisYM));
     const t = mc.reduce((a,c)=>a+getFeeForYM(c,thisYM),0);
     const col = mc.filter(c=>G.monthlyFees[c.id]?.[thisYM]).reduce((a,c)=>a+getFeeForYM(c,thisYM),0);
