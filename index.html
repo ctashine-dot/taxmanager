@@ -2036,7 +2036,7 @@ function _renderDashboardInner() {
     const active = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업');
     const grades = ['A','B','C'];
     const gCfg = {A:{col:'#1565c0',bg:'#e8f0fe',bd:'#4f8ef7',label:'A등급'},B:{col:'#2e7d32',bg:'#e8f5e9',bd:'#43a047',label:'B등급'},C:{col:'#555',bg:'#f5f5f5',bd:'#bbb',label:'C등급'}};
-    const cards = grades.map(g=>{
+    const gradeCards = grades.map(g=>{
       const gc=gCfg[g];
       const cls=active.filter(c=>c.grade===g);
       const feeSum=cls.reduce((a,c)=>a+(c.fee||0),0);
@@ -2046,65 +2046,68 @@ function _renderDashboardInner() {
         <div class="stat-sub">${feeSum?feeSum.toLocaleString()+'원/월':'-'}</div>
       </div>`;
     }).join('');
-    return `<div style="margin-bottom:8px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
-        ${sectionToggleBtn('dash-grade')}
-        <div style="font-size:13px;font-weight:700;color:#555">🏅 거래처 등급</div>
+    const unassignedCnt = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&getManagers(c).length===0&&!managerCheckExempt(c)).length;
+    // 성실신고 대상 집계
+    const activeC = G.clients.filter(c=>c.status==='정상'||c.status==='주의');
+    const incomePeriod = [...(G.periods||[])].filter(p=>['income','seongsi'].includes(p.reportType)).sort((a,b)=>(b.id||'').localeCompare(a.id||''))[0];
+    const corpPeriod   = [...(G.periods||[])].filter(p=>p.reportType==='corp').sort((a,b)=>(b.id||'').localeCompare(a.id||''))[0];
+    let seongsiCnt=0, auditCnt=0;
+    if (incomePeriod) {
+      const pKey = incomePeriod.id;
+      const _gSum={};
+      for(const c of activeC){if(c.taxType==='법인'||!c.incomeGroupKey)continue;const r=julgaeVal(pKey,c.id).revenue||0;if(r)_gSum[c.incomeGroupKey]=(_gSum[c.incomeGroupKey]||0)+r;}
+      for (const c of activeC) {
+        if (c.taxType==='법인') continue;
+        const indiv=(julgaeVal(pKey,c.id)||{}).revenue||0;
+        const rev=c.incomeGroupKey?Math.max(indiv,_gSum[c.incomeGroupKey]||0):indiv;
+        if (rev > 0 && rev >= seongsiLimit(c.bizType).lim) seongsiCnt++;
+      }
+    }
+    if (corpPeriod) {
+      const pKey = corpPeriod.id;
+      for (const c of activeC) {
+        if (c.taxType!=='법인') continue;
+        const rev = (julgaeVal(pKey,c.id)||{}).revenue||0;
+        if (rev >= 10000000000) auditCnt++;
+      }
+    }
+    const statCards = `
+      <div class="stat-card" style="border-left:4px solid #4f8ef7">
+        <div class="stat-label">활성 거래처</div>
+        <div class="stat-value" style="color:#4f8ef7">${s.active}</div>
+        <div class="stat-sub">전체 ${s.total}개</div>
       </div>
-      <div style="${_dashCollapsed('dash-grade')?'display:none':''}"><div class="stat-grid">${cards}</div></div>
-    </div>`;
-  })()}
-
-  <div class="stat-grid">
-    <div class="stat-card" style="border-left:4px solid #4f8ef7">
-      <div class="stat-label">활성 거래처</div>
-      <div class="stat-value" style="color:#4f8ef7">${s.active}</div>
-      <div class="stat-sub">전체 ${s.total}개</div>
-    </div>
-    <div class="stat-card" style="border-left:4px solid #ff7043;cursor:pointer" onclick="showMissingClientsModal()">
-      <div class="stat-label">기재사항 누락</div>
-      <div class="stat-value" style="color:#ff7043">${missingClients.length}</div>
-      <div class="stat-sub">클릭해서 확인·입력</div>
-    </div>
-    <div class="stat-card" style="border-left:4px solid #f57f17;cursor:pointer" onclick="openAssignManagerModal()">
-      <div class="stat-label">담당자 미지정</div>
-      <div class="stat-value" style="color:#f57f17">${G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업'&&getManagers(c).length===0&&!managerCheckExempt(c)).length}</div>
-      <div class="stat-sub">클릭해서 배정</div>
-    </div>
-    ${(()=>{
-      const activeC = G.clients.filter(c=>c.status==='정상'||c.status==='주의');
-      const incomePeriod = [...(G.periods||[])].filter(p=>['income','seongsi'].includes(p.reportType)).sort((a,b)=>(b.id||'').localeCompare(a.id||''))[0];
-      const corpPeriod   = [...(G.periods||[])].filter(p=>p.reportType==='corp').sort((a,b)=>(b.id||'').localeCompare(a.id||''))[0];
-      let seongsiCnt=0, auditCnt=0;
-      if (incomePeriod) {
-        const pKey = incomePeriod.id;
-        const _gSum={};
-        for(const c of activeC){if(c.taxType==='법인'||!c.incomeGroupKey)continue;const r=julgaeVal(pKey,c.id).revenue||0;if(r)_gSum[c.incomeGroupKey]=(_gSum[c.incomeGroupKey]||0)+r;}
-        for (const c of activeC) {
-          if (c.taxType==='법인') continue;
-          const indiv=(julgaeVal(pKey,c.id)||{}).revenue||0;
-          const rev=c.incomeGroupKey?Math.max(indiv,_gSum[c.incomeGroupKey]||0):indiv;
-          if (rev > 0 && rev >= seongsiLimit(c.bizType).lim) seongsiCnt++;
-        }
-      }
-      if (corpPeriod) {
-        const pKey = corpPeriod.id;
-        for (const c of activeC) {
-          if (c.taxType!=='법인') continue;
-          const rev = (julgaeVal(pKey,c.id)||{}).revenue||0;
-          if (rev >= 10000000000) auditCnt++;
-        }
-      }
-      return `<div class="stat-card" style="border-left:4px solid #7b1fa2;cursor:pointer;grid-column:span 1" onclick="openAuditSeongsiReport()">
-        <div class="stat-label">성실신고 대상 예상</div>
+      <div class="stat-card" style="border-left:4px solid #ff7043;cursor:pointer" onclick="showMissingClientsModal()">
+        <div class="stat-label">기재사항 누락</div>
+        <div class="stat-value" style="color:#ff7043">${missingClients.length}</div>
+        <div class="stat-sub">클릭해서 확인·입력</div>
+      </div>
+      <div class="stat-card" style="border-left:4px solid #f57f17;cursor:pointer" onclick="openAssignManagerModal()">
+        <div class="stat-label">담당자 미지정</div>
+        <div class="stat-value" style="color:#f57f17">${unassignedCnt}</div>
+        <div class="stat-sub">클릭해서 배정</div>
+      </div>
+      <div class="stat-card" style="border-left:4px solid #7b1fa2;cursor:pointer" onclick="openAuditSeongsiReport()">
+        <div class="stat-label">성실신고 대상</div>
         <div style="display:flex;align-items:baseline;gap:10px">
           <div class="stat-value" style="color:#c62828">${seongsiCnt}</div>
           <div style="font-size:12px;color:#1565c0;font-weight:700">${auditCnt}개 외부감사</div>
         </div>
         <div class="stat-sub">클릭해서 상세보기</div>
       </div>`;
-    })()}
-  </div>
+    const collapsed = _dashCollapsed('dash-clients');
+    return `<div class="card" style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:${collapsed?0:12}px">
+        ${sectionToggleBtn('dash-clients')}
+        <div class="card-title" style="margin:0">👥 거래처 현황</div>
+        ${collapsed?`<span style="font-size:12px;color:#888;margin-left:auto">활성 ${s.active} · 누락 ${missingClients.length} · 미지정 ${unassignedCnt} · 성실 ${seongsiCnt}</span>`:''}
+      </div>
+      <div style="${collapsed?'display:none':''}">
+        <div class="stat-grid" style="margin-bottom:10px">${statCards}</div>
+        <div class="stat-grid">${gradeCards}</div>
+      </div>
+    </div>`;
+  })()}
 
 
   <div style="margin:22px 0 12px;display:flex;justify-content:space-between;align-items:center">
