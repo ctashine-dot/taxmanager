@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <!-- 보안: 데이터 외부 유출 차단(connect-src 허용목록) + object/base 제한. default-src 미지정으로 스크립트·스타일·워커는 영향 없음 -->
-<meta http-equiv="Content-Security-Policy" content="connect-src 'self' https://api.anthropic.com https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://apis.google.com https://accounts.google.com https://*.firebaseapp.com https://www.gstatic.com https://cdnjs.cloudflare.com; object-src 'none'; base-uri 'self'">
+<meta http-equiv="Content-Security-Policy" content="connect-src 'self' https://api.anthropic.com https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://apis.google.com https://accounts.google.com https://*.firebaseapp.com https://www.gstatic.com https://cdnjs.cloudflare.com https://api.allorigins.win https://corsproxy.io; object-src 'none'; base-uri 'self'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -1755,11 +1755,111 @@ function clearTodayContractDates(today) {
   toast(`수임일자 ${cleared.length}개 초기화 완료`,'info');
 }
 
+// ══════════════════════════════════════════════════════
+// 세무사랑 공지(외부 게시판) — 대시보드 카드 (CORS 프록시로 상위 3개)
+// ══════════════════════════════════════════════════════
+const SEMUSARANG = { userId: 'shin06', base: 'https://www.newzensolution.co.kr/semusarang' };
+function semusarangListUrl() { return `${SEMUSARANG.base}/infoList.jsp?userId=${SEMUSARANG.userId}`; }
+function semusarangViewUrl(seq) { return `${SEMUSARANG.base}/infoView.jsp?seq=${encodeURIComponent(seq)}&userId=${SEMUSARANG.userId}&curPage=1&searchKey=`; }
+function _semusarangCache() { try { return JSON.parse(localStorage.getItem('tm_semusarang')||'null'); } catch(e){ return null; } }
+
+function renderSemusarangItems(items) {
+  if (!items || !items.length) {
+    return `<div style="font-size:12px;color:#999;padding:4px 2px">공지를 불러오지 못했습니다. <a href="${semusarangListUrl()}" target="_blank" rel="noopener" style="color:#1565c0;font-weight:600">세무사랑에서 보기 →</a></div>`;
+  }
+  return items.slice(0,3).map(it=>`<a href="${semusarangViewUrl(it.seq)}" target="_blank" rel="noopener" style="display:flex;gap:8px;align-items:center;padding:8px 2px;border-bottom:1px solid #f2f2f2;text-decoration:none;color:#333">
+    <span style="color:#42a5f5;flex:none;font-size:11px">▪</span>
+    <span style="font-size:13px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.title)}</span>
+    ${it.date?`<span style="font-size:11px;color:#aaa;flex:none">${esc(it.date)}</span>`:''}
+    <span style="color:#bbb;flex:none;font-size:11px">↗</span>
+  </a>`).join('');
+}
+
+function semusarangCardHTML() {
+  const cached = _semusarangCache();
+  const body = (cached && cached.items && cached.items.length)
+    ? renderSemusarangItems(cached.items)
+    : `<div style="font-size:12px;color:#aaa;padding:4px 2px">공지 불러오는 중…</div>`;
+  return `<div class="card" style="margin-bottom:16px;border-left:4px solid #1565c0">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <div class="card-title" style="margin:0;color:#0d47a1">📢 세무사랑 공지</div>
+      <a href="${semusarangListUrl()}" target="_blank" rel="noopener" style="margin-left:auto;font-size:12px;color:#1565c0;text-decoration:none;font-weight:600">전체보기 →</a>
+    </div>
+    <div id="semusarang-notice-body">${body}</div>
+  </div>`;
+}
+
+function parseSemusarangList(html) {
+  const out = []; const seen = new Set();
+  const push = (seq, title, date) => {
+    seq = String(seq||'').trim();
+    title = String(title||'').replace(/\s+/g,' ').trim();
+    if (!seq || !title || title.length < 2 || seen.has(seq)) return;
+    if (/^(제목|번호|작성자|등록일|조회수?|첨부|이전|다음|목록|검색|글쓰기)$/.test(title)) return;
+    seen.add(seq); out.push({ seq, title, date: (date||'').replace(/\s+/g,' ').trim().slice(0,10) });
+  };
+  let doc = null;
+  try { doc = new DOMParser().parseFromString(html, 'text/html'); } catch(e){}
+  if (doc) {
+    // A) seq를 가진 상세보기 링크
+    doc.querySelectorAll('a[href*="seq="], a[href*="infoView"]').forEach(a=>{
+      const m = (a.getAttribute('href')||'').match(/seq=(\d+)/);
+      if (m) { const row=a.closest('tr'); const d=row?((row.querySelector('td:last-child')||{}).textContent||''):''; push(m[1], a.textContent, d); }
+    });
+    // B) onclick 핸들러에 seq가 있는 경우
+    if (out.length < 3) {
+      doc.querySelectorAll('[onclick*="iew"], [onclick*="seq"], [onclick*="read"]').forEach(el=>{
+        const m = (el.getAttribute('onclick')||'').match(/(\d{2,7})/);
+        if (m) { const row=el.closest('tr')||el; push(m[1], (row.querySelector('.title,.subject')||el).textContent); }
+      });
+    }
+  }
+  // C) 원시 정규식 폴백
+  if (!out.length) {
+    const re = /seq=(\d+)[^>]*>\s*([^<]{2,100}?)\s*</g; let mm;
+    while ((mm = re.exec(html)) && out.length < 10) push(mm[1], mm[2]);
+  }
+  return out;
+}
+
+async function loadSemusarangNotices() {
+  const body = document.getElementById('semusarang-notice-body');
+  const cached = _semusarangCache();
+  // 캐시가 30분 이내면 네트워크 생략(이미 렌더됨)
+  if (cached && cached.items && cached.items.length && cached.ts && (Date.now()-cached.ts < 30*60*1000)) return;
+  const target = semusarangListUrl();
+  const proxies = [
+    u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    u => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+  ];
+  for (const mk of proxies) {
+    try {
+      const res = await fetch(mk(target), { cache:'no-store' });
+      if (!res.ok) continue;
+      const buf = await res.arrayBuffer();
+      let html = new TextDecoder('utf-8').decode(buf);
+      if (/charset\s*=\s*["']?\s*euc-kr/i.test(html.slice(0,2000)) || html.indexOf('�') >= 0) {
+        try { html = new TextDecoder('euc-kr').decode(buf); } catch(e){}
+      }
+      const items = parseSemusarangList(html);
+      if (items.length) {
+        localStorage.setItem('tm_semusarang', JSON.stringify({ items: items.slice(0,10), ts: Date.now() }));
+        if (body) body.innerHTML = renderSemusarangItems(items);
+        return;
+      }
+    } catch(e) { /* 다음 프록시 시도 */ }
+  }
+  // 모두 실패: 캐시 없으면 폴백 링크
+  if (body && !(cached && cached.items && cached.items.length)) body.innerHTML = renderSemusarangItems(null);
+}
+
 function renderDashboard() {
   try { _renderDashboardInner(); } catch(e) {
     console.error('renderDashboard error:', e);
     document.getElementById('page-dashboard').innerHTML = `<div style="padding:20px;color:#c62828">대시보드 오류: ${String(e)}<br><button onclick="renderDashboard()" style="margin-top:10px;padding:6px 14px">새로고침</button></div>`;
   }
+  // 세무사랑 공지: 렌더 후 비동기 로드(캐시 우선, 스로틀)
+  try { setTimeout(()=>{ try { loadSemusarangNotices(); } catch(_){} }, 0); } catch(_){}
 }
 function _renderDashboardInner() {
   const s = getStats();
@@ -1875,6 +1975,8 @@ function _renderDashboardInner() {
   document.getElementById('page-dashboard').innerHTML = `
   <div style="margin-bottom:20px"><h2 style="font-size:22px;font-weight:800">대시보드</h2>
   <p style="color:#888;font-size:13px;margin-top:4px">${new Date().toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric'})} 기준</p></div>
+
+  ${semusarangCardHTML()}
 
   ${(()=>{
     const now = new Date();
