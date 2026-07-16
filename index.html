@@ -2649,6 +2649,7 @@ function renderClients() {
             ${c.bizCode?`<div><div style="font-size:11px;color:#888;margin-bottom:3px">업종코드</div><div style="font-weight:600;font-family:monospace;font-size:13px">${esc(c.bizCode)}</div></div>`:''}
             ${c.seongsi?`<div>${badge('성실신고','purple')}</div>`:''}
             ${(()=>{const docs=[{k:'contract',l:'수임계약서'},{k:'proxy',l:'위임장'},{k:'bizReg',l:'사업자등록증'},{k:'bank',l:'통장사본'},{k:'seal',l:'인감증명서'}];const dCheck=((G.docChecklist||{})[c.id]||{});return`<div style="flex-basis:100%"><div style="font-size:11px;color:#888;margin-bottom:5px">📋 서류 체크</div><div style="display:flex;flex-wrap:wrap;gap:5px">${docs.map(d=>`<button onclick="event.stopPropagation();toggleDocCheck(${c.id},'${d.k}')" style="padding:4px 10px;border-radius:12px;border:1.5px solid ${dCheck[d.k]?'#43a047':'#e0e0e0'};background:${dCheck[d.k]?'#e8f5e9':'#f5f5f5'};color:${dCheck[d.k]?'#2e7d32':'#888'};font-size:11px;cursor:pointer;font-family:inherit;font-weight:600">${dCheck[d.k]?'✓ ':''} ${d.l}</button>`).join('')}</div></div>`;})()}
+            ${clientAttachmentsHTML(c)}
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">관계회사 그룹</div>${em?iInput('relatedGroup',c.relatedGroup,'placeholder="그룹명" style="width:140px"'):`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${inGroup?`<div style="font-weight:600;font-size:12px;color:${gc}">👥 ${esc(groupLabel)}</div>`:''}<button onclick="event.stopPropagation();openGroupEditModal(${c.id})" style="padding:2px 10px;border-radius:6px;font-size:11px;border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7;cursor:pointer;font-family:inherit">✏ 그룹 편집</button></div>${c.groupReason?`<div style="font-size:11px;color:#888;margin-top:3px">사유: ${esc(c.groupReason)}</div>`:''}`}</div>
             ${(()=>{const cJulgae=(G.periods||[]).map(p=>{const pk=p.id;const v=julgaeVal(pk,c.id);if(!v||(!v.d&&!v.b&&!v.a&&!v.fee&&!v.s))return null;return{label:p.label,v};}).filter(Boolean);if(!cJulgae.length)return'';return`<div style="flex-basis:100%"><div style="font-size:11px;color:#888;margin-bottom:4px">신고 현황</div><div style="display:flex;flex-wrap:wrap;gap:4px">${cJulgae.slice(-6).map(x=>`<div style="background:${x.v.a?'#e8f5e9':x.v.s?'#f3e5f5':'#f5f5f5'};border-radius:8px;padding:4px 10px;font-size:11px"><span style="font-weight:600">${esc(x.label)}</span><span style="margin-left:4px">${x.v.d?'📋':''}${x.v.b?'📖':''}${x.v.a?'✅':''}${x.v.s?'💰':''}</span></div>`).join('')}</div></div>`;})()}
             ${(()=>{const mHist=(G.managerHistory||{})[c.id];if(!mHist||!mHist.length)return'';return`<div><div style="font-size:11px;color:#888;margin-bottom:3px">담당자 변경 이력</div>${mHist.slice(-3).reverse().map(h=>`<div style="font-size:11px;color:#666;padding:2px 0">${h.date.slice(0,10)} : ${esc(h.from||'(없음)')} → ${esc(h.to||'(없음)')}</div>`).join('')}</div>`;})()}
@@ -4322,6 +4323,95 @@ function openDetail(id) {
 }
 
 // ══════════════════════════════════════════════════════
+// 첨부 서류(사진) — 촬영/선택 후 압축하여 base64로 거래처에 저장
+// ══════════════════════════════════════════════════════
+function _compressImage(file, maxDim, quality) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        if (w >= h && w > maxDim) { h = Math.round(h * maxDim / w); w = maxDim; }
+        else if (h > w && h > maxDim) { w = Math.round(w * maxDim / h); h = maxDim; }
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        } catch (e) { reject(e); }
+      };
+      img.onerror = reject;
+      img.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+window._pickAttachment = function(type) {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = () => { if (inp.files && inp.files[0]) _onAttachmentPicked(inp.files[0], type); };
+  inp.click();
+};
+window._onAttachmentPicked = async function(file, type) {
+  if (!file.type || !file.type.startsWith('image/')) { toast('이미지 파일만 첨부할 수 있습니다', 'warning'); return; }
+  toast('사진 처리 중…', 'info');
+  try {
+    const dataUrl = await _compressImage(file, 1400, 0.65);
+    if (dataUrl.length > 3_500_000) { toast('사진 용량이 너무 큽니다. 더 작게 촬영해 주세요', 'warning'); return; }
+    if (!window._formData) return;
+    if (!Array.isArray(window._formData.attachments)) window._formData.attachments = [];
+    window._formData.attachments.push({ id: Date.now() + Math.floor(Math.random()*1000), type, name: file.name || type, dataUrl, ts: new Date().toISOString() });
+    _renderFormAttachments();
+    toast('첨부되었습니다', 'success');
+  } catch (e) { toast('사진 처리 실패', 'warning'); }
+};
+window._removeAttachment = function(id) {
+  if (!window._formData) return;
+  window._formData.attachments = (window._formData.attachments||[]).filter(a => String(a.id) !== String(id));
+  _renderFormAttachments();
+};
+function _formAttachmentsHTML() {
+  const list = (window._formData && window._formData.attachments) || [];
+  if (!list.length) return '<div style="font-size:11px;color:#aaa">첨부된 사진이 없습니다 (버튼을 눌러 촬영/선택)</div>';
+  return list.map(a => `<div style="position:relative;width:78px">
+    <img src="${a.dataUrl}" onclick="viewAttachment('${a.id}')" style="width:78px;height:78px;object-fit:cover;border-radius:8px;border:1px solid #ddd;cursor:pointer" alt="${esc(a.type)}">
+    <div style="font-size:9px;color:#666;text-align:center;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.type)}</div>
+    <button type="button" onclick="_removeAttachment('${a.id}')" title="삭제" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;border:none;background:#e53935;color:#fff;font-size:12px;line-height:1;cursor:pointer">×</button>
+  </div>`).join('');
+}
+window._renderFormAttachments = function() {
+  const el = document.getElementById('form-attachments');
+  if (el) el.innerHTML = _formAttachmentsHTML();
+};
+// 첨부 사진 크게 보기 (폼: clientId 생략 / 상세: clientId 지정)
+window.viewAttachment = function(id, clientId) {
+  const src = (clientId != null)
+    ? (((G.clients.find(c => c.id === clientId))||{}).attachments || [])
+    : ((window._formData && window._formData.attachments) || []);
+  const a = src.find(x => String(x.id) === String(id));
+  if (!a) return;
+  showModal(`<div style="max-width:min(760px,96vw)">
+    <div class="modal-header"><h3>${esc(a.type)}</h3><button class="close-btn" onclick="navBack()">✕</button></div>
+    <div class="modal-body" style="text-align:center">
+      <img src="${a.dataUrl}" style="max-width:100%;border-radius:8px">
+      <div style="margin-top:8px"><a href="${a.dataUrl}" download="${esc(a.type)}.jpg" style="font-size:12px;color:#1565c0;text-decoration:none">⬇ 다운로드</a></div>
+    </div>
+  </div>`);
+};
+// 거래처 상세(펼침)용 첨부 썸네일
+function clientAttachmentsHTML(c) {
+  const list = c.attachments || [];
+  if (!list.length) return '';
+  return `<div style="flex-basis:100%"><div style="font-size:11px;color:#888;margin-bottom:5px">📎 첨부 서류 (${list.length})</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${list.map(a=>`<div style="width:70px;text-align:center">
+      <img src="${a.dataUrl}" onclick="event.stopPropagation();viewAttachment('${a.id}',${c.id})" style="width:70px;height:70px;object-fit:cover;border-radius:8px;border:1px solid #ddd;cursor:pointer">
+      <div style="font-size:9px;color:#666;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.type)}</div>
+    </div>`).join('')}</div></div>`;
+}
+
+// ══════════════════════════════════════════════════════
 // 거래처 추가/편집 폼
 // ══════════════════════════════════════════════════════
 function openForm(id) {
@@ -4571,6 +4661,19 @@ function openForm(id) {
     </div>
 
     <div id="termination-area" class="c3">${terminationHTML()}</div>
+
+    <div class="c3">
+      <div class="ff" style="align-items:flex-start;flex-direction:column;gap:6px">
+        <label class="ffl">📎 첨부 서류 (사진)</label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button type="button" onclick="_pickAttachment('사업자등록증')" style="padding:6px 12px;border-radius:8px;border:1.5px solid #90caf9;background:#e8f0fe;color:#1565c0;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600">📷 사업자등록증</button>
+          <button type="button" onclick="_pickAttachment('신고서')" style="padding:6px 12px;border-radius:8px;border:1.5px solid #a5d6a7;background:#e8f5e9;color:#2e7d32;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600">📷 신고서</button>
+          <button type="button" onclick="_pickAttachment('기타')" style="padding:6px 12px;border-radius:8px;border:1.5px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:12px;cursor:pointer;font-family:inherit;font-weight:600">📷 기타</button>
+        </div>
+        <div id="form-attachments" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:2px">${_formAttachmentsHTML()}</div>
+        <div style="font-size:10px;color:#aaa">촬영 또는 사진 선택 → 자동 압축 저장. 썸네일 클릭 시 크게 보기, ×로 삭제.</div>
+      </div>
+    </div>
 
     <div class="c3">
       <div class="ff" style="align-items:flex-start">
