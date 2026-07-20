@@ -720,6 +720,8 @@ function periodHasClientData(period, c) {
 // - 폐업: 폐업연도가 해당 신고의 귀속연도 이상이면 그 해 영업분 신고 대상이므로 포함
 //   예) 26년 성실신고는 25년 귀속 → 26년 폐업이어도 25년 영업분은 신고 대상
 function clientInFilingPeriod(c, period) {
+  // 거래처목록에서 제외(삭제)된 업체: 데이터가 있는 기간에만 보존 표시
+  if (c.listRemoved) return periodHasClientData(period, c);
   // 수임일 이후 신고분만 포함 — 수임일이 해당 신고기간의 신고시점(마감월)보다 뒤면 소급 제외
   // (단, 이미 입력된 데이터가 있으면 작업내역 보존을 위해 유지)
   if (c.contractDate) {
@@ -1283,6 +1285,7 @@ function matchClient(c, F) {
 function filteredClients() {
   const getGroupKey = buildClientGroupMap(G.clients);
   let list = G.clients.filter(c => {
+    if (c.listRemoved) return false; // 삭제되어 목록에서 제외됨(신고리스트 데이터만 보존)
     if (!G.showTerminated && (c.status==='해지'||c.status==='폐업')) return false;
     return matchClient(c, {search:G.searchText, repSearch:G.clientRepSearch, managers:G.filterManagers,
       taxTypes:G.filterTaxTypes, vatTypes:G.filterVatTypes, feeStatuses:G.filterFeeStatuses,
@@ -4069,11 +4072,21 @@ function applyStatusChange(id) {
 function deleteClient(id) {
   const c = G.clients.find(x=>x.id===id);
   if (!c) return;
-  if (!confirm(`"${c.name}" 거래처를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
-  G.clients = G.clients.filter(x=>x.id!==id);
-  for (const pKey of Object.keys(G.julgae)) { delete G.julgae[pKey][id]; }
+  // 신고리스트에 기록된 데이터가 있으면 완전삭제 대신 '목록 제외'로 보존
+  const hasJulgaeData = (G.periods||[]).some(p => periodHasClientData(p, c));
+  if (hasJulgaeData) {
+    if (!confirm(`"${c.name}"에는 신고리스트에 기록된 데이터(매출액 등)가 있습니다.\n\n거래처 목록에서는 제외하되, 신고리스트 기록은 '거래처목록 제외' 상태로 그대로 보존합니다.\n계속하시겠습니까?`)) return;
+    c.listRemoved = true;               // 거래처목록에서 숨김
+    if (!G.managerHistory) G.managerHistory = {};
+    // 신고리스트(G.julgae) 데이터는 삭제하지 않음
+  } else {
+    if (!confirm(`"${c.name}" 거래처를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
+    G.clients = G.clients.filter(x=>x.id!==id);
+    for (const pKey of Object.keys(G.julgae)) { delete G.julgae[pKey][id]; }
+  }
   saveToLS();
   renderClients();
+  if (typeof renderJulgae==='function') renderJulgae();
 }
 
 function toggleClientSelect(id) {
@@ -6437,7 +6450,9 @@ function renderJulgae() {
       const _memoTitle = _lastMemo ? esc(_lastMemo.slice(0,120)) : '';
       const _revChg = (v.revenue&&v.prevRevenue) ? Math.round((v.revenue-v.prevRevenue)/v.prevRevenue*100) : null;
       const _revBadge = _revChg!==null ? `<span style="font-size:9px;padding:1px 4px;border-radius:4px;background:${_revChg>0?'#e8f5e9':'#fdecea'};color:${_revChg>0?'#2e7d32':'#c62828'};margin-left:3px;flex-shrink:0">${_revChg>0?'↑':'↓'}${Math.abs(_revChg)}%</span>` : '';
-      const _closedBadge = (c.status==='폐업'||c.status==='해지') ? `<span style="font-size:9px;padding:1px 5px;border-radius:4px;background:#fdecea;color:#c62828;margin-left:3px;flex-shrink:0;font-weight:700" title="${c.status} (귀속연도 영업분 신고대상)">${c.status}${clientCloseYear(c)?` ${String(clientCloseYear(c)).slice(2)}`:''}</span>` : '';
+      const _closedBadge = c.listRemoved
+        ? `<span style="font-size:9px;padding:1px 5px;border-radius:4px;background:#eceff1;color:#607d8b;margin-left:3px;flex-shrink:0;font-weight:700" title="거래처목록에서 삭제됨 — 신고리스트 기록 보존">목록제외</span>`
+        : (c.status==='폐업'||c.status==='해지') ? `<span style="font-size:9px;padding:1px 5px;border-radius:4px;background:#fdecea;color:#c62828;margin-left:3px;flex-shrink:0;font-weight:700" title="${c.status} — 거래처목록 제외(귀속연도 영업분 신고대상)">${c.status}${clientCloseYear(c)?` ${String(clientCloseYear(c)).slice(2)}`:''}</span>` : '';
       const _ssDupBadge = (_isPlainIncome && !item.isGroupChild && (c.jumin||'').replace(/[-\s]/g,'') && _ssDupJumin.has((c.jumin||'').replace(/[-\s]/g,''))) ? `<span onclick="event.stopPropagation();moveToSeongsi(${c.id},'${pKey2}')" style="font-size:9px;padding:1px 5px;border-radius:4px;background:#ede7f6;color:#6a1b9a;margin-left:3px;flex-shrink:0;font-weight:700;cursor:pointer;border:1px solid #ce93d8" title="동일 주민번호가 성실신고 리스트에 있습니다. 클릭 → 성실신고 그룹으로 이동(성실신고 우선)">⚑성실중복</span>` : '';
       // 사업자번호·주민번호로 자동그룹 안 되지만 상호/대표자가 같은 거래처가 있으면 묶기 제안
       // 묶기 버튼은 상호 탭 → 메모/이력 창의 '공동사업자 묶기'로 이동(인라인 배지 제거)
