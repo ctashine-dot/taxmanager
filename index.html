@@ -6502,6 +6502,9 @@ function renderJulgae() {
       const prevVatFeeTxt = _pvf ? `<div style="font-size:10px;color:#888" title="직전 부가세 신고(${esc(_pvf.label)})의 신고수수료">직전:${_pvf.fee.toLocaleString()}</div>` : '';
       const autoFee  = v.fee       || 0;
       const autoFee2 = v.feeSeongsi || 0;
+      // 직전(또는 전년) 신고수수료가 있는데 이번 수수료가 0이면 입력칸을 강조(누락 점검용)
+      const _hasPrevFee = (_pvf && _pvf.fee > 0) || (prev1 && prev1.fee > 0);
+      const _feeZeroWarn = (_hasPrevFee && autoFee === 0) ? 'background:#fff3e0;border-color:#ffb74d;color:#e65100;' : '';
       // 행 배경: 공동=teal / 동일인=보라 / 관계사=인디고
       const _rowTintH = item.joint ? '#e0f2f1' : (item.groupType==='same') ? '#f3e5f5' : '#e8eaf6';
       const _rowTintC = item.joint ? '#f3faf9' : (item.groupType==='same') ? '#fdf8fe' : '#f5f6fc';
@@ -6600,7 +6603,7 @@ function renderJulgae() {
         `}
         ${isSeongsiType?`
           <td style="text-align:right;padding:4px 8px;${hc['j_fee']?'display:none':''}">
-            ${isMemberRow?'':`${niInput(c.id,'fee',autoFee,autoFee?'font-weight:700;color:#7b1fa2':'')}
+            ${isMemberRow?'':`${niInput(c.id,'fee',autoFee,autoFee?'font-weight:700;color:#7b1fa2':_feeZeroWarn)}
             ${prevFeeTxt}
             ${bosuBadge}`}
           </td>
@@ -6610,7 +6613,7 @@ function renderJulgae() {
           </td>
         `:`
           <td style="text-align:right;padding:4px 8px;${hc['j_fee']?'display:none':''}">
-            ${isMemberRow?'':`${niInput(c.id,'fee',autoFee,autoFee?'font-weight:700;color:#7b1fa2':'')}
+            ${isMemberRow?'':`${niInput(c.id,'fee',autoFee,autoFee?'font-weight:700;color:#7b1fa2':_feeZeroWarn)}
             ${isIncomeType?bosuBadge:(prevVatFeeTxt+prevFeeTxt)}`}
           </td>
         `}
@@ -15338,8 +15341,8 @@ function showNameRepDuplicates(opt) {
   const items = G.clients.slice();
   const nName = items.map(c=>norm(c.name));
   const nRep  = items.map(c=>norm(c.rep));
-  const nBiz  = items.map(c=>(c.bizNo||'').replace(/[^0-9]/g,''));   // 사업자번호는 숫자만
-  const nJumin= items.map(c=>(c.jumin||'').replace(/[^0-9]/g,''));   // 주민/법인등록번호는 숫자만
+  const nBiz  = items.map(c=>{ const b=(c.bizNo||'').replace(/[^0-9]/g,''); return /^0+$/.test(b)?'':b; });   // 사업자번호는 숫자만(000-00-00000 등 전부 0인 임시번호는 일치 제외)
+  const nJumin= items.map(c=>{ const j=(c.jumin||'').replace(/[^0-9]/g,''); return /^0+$/.test(j)?'':j; });   // 주민/법인등록번호는 숫자만(전부 0 임시번호 제외)
   const nBy = { name:nName, rep:nRep, bizNo:nBiz, jumin:nJumin };
   // 선택한 모든 기준을 동시에 만족(AND)하는 쌍만 같은 묶음으로 — union-find
   const pairMatch = (i,j) => cfgs.every(cfg => {
