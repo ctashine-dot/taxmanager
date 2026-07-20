@@ -12191,6 +12191,9 @@ function _buildOverwriteMsg(pKey, clientId, ex, data) {
 function doRecordTRRWith(clientId, pKey) {
   const data = window._trrReviewData;
   if (!data) return false;
+  // 신고서 유형/연도가 대상 신고리스트와 맞는지 확인
+  const _pm = _periodMismatchMsg(pKey, data);
+  if (_pm && !confirm(_pm)) return false;
   // 기존 기록값이 있으면 비교 후 갱신 여부 확인
   const _existing = (G.julgae[pKey]||{})[clientId];
   if (_existing && _julgaeHasData(_existing) && !confirm(_buildOverwriteMsg(pKey, clientId, _existing, data))) return false;
@@ -12297,25 +12300,59 @@ function _normalizeTaxOffice(v) {
   const hit = TAX_OFFICES.find(o => o===core || o.replace(/세무서$/,'')===core || o===core+'세무서' || o.replace(/세무서$/,'')===s.replace(/세무서$/,''));
   return hit || s;
 }
-// 리스트 반영 시 거래처목록에 누락된 정보(사업자번호·대표자·상호·업종코드·관할세무서)를 신고서 정보로 보완 제안
+// 신고서 유형/연도가 대상 신고리스트와 맞는지 검사(불일치 시 경고 문구, 아니면 '')
+function _periodMismatchMsg(pKey, data) {
+  const p = G.periods.find(x=>x.id===pKey); if (!p) return '';
+  const rt = p.reportType || '';
+  const cat = rt.indexOf('vat')===0 ? 'vat' : (rt==='corp' ? 'corp' : 'income'); // sajup/income/seongsi → income(소득세류)
+  const nm = { vat:'부가가치세', corp:'법인세', income:'소득세' };
+  const warns = [];
+  const rv = window._trrCurrentType || '';
+  if (rv && cat && rv !== cat) warns.push(`· 신고서 유형(${nm[rv]||rv})과 대상 리스트(${nm[cat]||cat})가 다릅니다.`);
+  // 연도 대조: 리스트의 신고연도/귀속연도 중 하나와 신고서 기간의 연도가 맞는지
+  const py = (p.label||'').match(/^(\d{2})년/);
+  const dyy = String(data.period||'').match(/(\d{2})\s*년|(20\d{2})/);
+  if (py && dyy) {
+    const filingY = 2000 + Number(py[1]);
+    const incomeY = (typeof periodIncomeYear==='function' ? periodIncomeYear(p) : filingY) || filingY;
+    const dY = dyy[1] ? 2000 + Number(dyy[1]) : Number(dyy[2]);
+    if (dY && dY !== filingY && dY !== incomeY) warns.push(`· 신고서 기간(${data.period})이 대상 리스트(${p.label})와 연도가 다릅니다.`);
+  }
+  if (!warns.length) return '';
+  return `⚠ 신고서와 대상 신고리스트가 맞지 않을 수 있습니다:\n${warns.join('\n')}\n\n그래도 이 신고리스트에 기록할까요?`;
+}
+// 리스트 반영 시 거래처목록 정보(상호·대표자·사업자번호·연락처·업종코드·관할세무서)를 신고서와 비교해
+// 누락은 채우고, 다르면 수정할지 제안
 function _promptFillMissingClientInfo(clientId, data) {
   const c = G.clients.find(x=>x.id===clientId);
-  if (!c || !data) return;
-  const fills = [];
-  const bn = String(data.bizNo||'').replace(/\D/g,'');
-  if (!(c.bizNo||'').replace(/\D/g,'') && bn.length===10) fills.push({field:'bizNo', label:'사업자번호', val:data.bizNo});
-  if (!(c.rep||'').trim() && String(data.representative||'').trim()) fills.push({field:'rep', label:'대표자', val:data.representative});
-  if (!(c.name||'').trim() && String(data.companyName||'').trim()) fills.push({field:'name', label:'상호', val:data.companyName});
-  const bc = String(data.bizCode||'').replace(/\D/g,'');
-  if (!(c.bizCode||'').trim() && bc.length>=2) fills.push({field:'bizCode', label:'업종코드', val:bc});
-  const office = _normalizeTaxOffice(data.taxOffice);
-  if (!(c.taxOffice||'').trim() && office) fills.push({field:'taxOffice', label:'관할세무서', val:office});
-  if (!fills.length) return;
+  if (!c || !data || c._julgaeAdhoc) return;
+  const norm = s => String(s==null?'':s).trim();
+  const dig = s => String(s==null?'':s).replace(/\D/g,'');
+  const fills = [], updates = [];
+  const add = (field, label, cur, rawNew, prep, cmp) => {
+    const nv = prep ? prep(rawNew) : norm(rawNew);
+    if (!nv) return;
+    const curN = norm(cur);
+    if (!curN) { fills.push({ field, label, val: nv }); return; }
+    if ((cmp?cmp(curN):curN) !== (cmp?cmp(nv):nv)) updates.push({ field, label, cur: curN, val: nv });
+  };
+  add('name','상호', c.name, data.companyName);
+  add('rep','대표자', c.rep, data.representative);
+  add('bizNo','사업자번호', c.bizNo, data.bizNo, v=>{ const d=dig(v); return (d.length===10 && !/^0+$/.test(d)) ? (typeof formatBiz==='function'?formatBiz(v):v) : ''; }, dig);
+  add('phone','연락처', c.phone, data.phone, v=>{ const d=dig(v); return d.length>=9 ? norm(v) : ''; }, dig);
+  add('bizCode','업종코드', c.bizCode, data.bizCode, v=>{ const d=dig(v); return d.length>=2 ? d : ''; }, dig);
+  add('taxOffice','관할세무서', c.taxOffice, data.taxOffice, v=>_normalizeTaxOffice(v), v=>_normalizeTaxOffice(v));
+  if (!fills.length && !updates.length) return;
   setTimeout(()=>{
-    if (!confirm(`'${c.name||clientId}' 거래처목록에 누락된 정보가 있습니다. 신고서 정보로 채울까요?\n\n`+fills.map(f=>`· ${f.label}: ${f.val}`).join('\n'))) return;
+    const lines = [];
+    if (fills.length) { lines.push('▼ 누락 → 채우기'); fills.forEach(f=>lines.push(`· ${f.label}: ${f.val}`)); }
+    if (updates.length) { lines.push('▼ 목록과 다름 → 수정'); updates.forEach(u=>lines.push(`· ${u.label}: ${u.cur} → ${u.val}`)); }
+    if (!confirm(`'${c.name||clientId}' 거래처 정보를 신고서 기준으로 반영할까요?\n\n${lines.join('\n')}\n\n[확인] 반영  [취소] 유지`)) return;
     fills.forEach(f=>{ c[f.field] = f.val; });
+    updates.forEach(u=>{ c[u.field] = u.val; });
     saveToLS();
-    toast('거래처 정보를 보완했습니다 ('+fills.map(f=>f.label).join(', ')+')', 'success', 3000);
+    if (typeof renderClients==='function') renderClients();
+    toast('거래처 정보를 반영했습니다', 'success', 3000);
   }, 400);
 }
 
