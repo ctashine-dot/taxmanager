@@ -5835,7 +5835,7 @@ function renderJulgae() {
     ['j_col_totalsum','합계'],['j_col_prevrevenue','직전매출'],
     ['j_col_purchase', isVatType?'매입액':'필요경비'],['j_col_vat','부가세'],
     ['j_feess','성실신고료'],
-    ['j_fee', isIncomeType?'조정료':'수수료청구'],['j_col_unpaid','미수'],
+    ['j_fee', isIncomeType?'조정료':'신고수수료'],['j_col_unpaid','미수'],
     ['j_col_fee25','25년'],['j_col_fee24','24년'],['j_col_fee23','23년'],
     ['j_collect','수금'],['j_link','자료링크'],
   ];
@@ -6285,7 +6285,7 @@ function renderJulgae() {
         <th style="text-align:right;${_hcStyle('j_col_income')}"><div style="display:flex;align-items:center;justify-content:flex-end">소득금액${_hcBtn('j_col_income')}</div></th>
         <th style="text-align:right;${_hcStyle('j_col_taxbase')}"><div style="display:flex;align-items:center;justify-content:flex-end">과세표준${_hcBtn('j_col_taxbase')}</div></th>
       `}
-      ${isSeongsiType?`<th style="text-align:right;${_hcStyle('j_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">조정료${_jnfBtn('fee')}${_hcBtn('j_fee')}</div></th><th style="text-align:right;${_hcStyle('j_feess')}"><div style="display:flex;align-items:center;justify-content:flex-end">성실신고료${_hcBtn('j_feess')}</div></th>`:isIncomeType?`<th style="text-align:right;${_hcStyle('j_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">조정료${_jnfBtn('fee')}${_hcBtn('j_fee')}</div></th>`:`<th style="text-align:right;${_hcStyle('j_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">수수료청구${_hcBtn('j_fee')}</div></th>`}
+      ${isSeongsiType?`<th style="text-align:right;${_hcStyle('j_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">조정료${_jnfBtn('fee')}${_hcBtn('j_fee')}</div></th><th style="text-align:right;${_hcStyle('j_feess')}"><div style="display:flex;align-items:center;justify-content:flex-end">성실신고료${_hcBtn('j_feess')}</div></th>`:isIncomeType?`<th style="text-align:right;${_hcStyle('j_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">조정료${_jnfBtn('fee')}${_hcBtn('j_fee')}</div></th>`:`<th style="text-align:right;${_hcStyle('j_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">신고수수료${_hcBtn('j_fee')}</div></th>`}
       ${isIncomeType?`
         <th style="width:84px;text-align:center;padding:3px;${_hcStyle('j_collect')}"><div style="display:flex;align-items:center;justify-content:center">${julgaeCycleBtn('julgaeFeeFilter','수금',['전체','수금','미수금'])}${_hcBtn('j_collect')}</div></th>
         <th style="text-align:right;${_hcStyle('j_col_unpaid')}"><div style="display:flex;align-items:center;justify-content:flex-end">미수${_jnfBtn('unpaid')}${_hcBtn('j_col_unpaid')}</div></th>
