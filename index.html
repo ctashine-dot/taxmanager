@@ -11031,9 +11031,12 @@ ${text.slice(0, 12000)}
     card.id = `batch-card-${bIdx}`;
     card.style.cssText='border:1.5px solid #e0e0e0;border-radius:12px;padding:14px;margin-bottom:10px;transition:border-color .2s,background .2s';
     const clientParts = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업').sort((a,b)=>a.name.localeCompare(b.name,'ko'));
+    const _fl = _feeLabelConfig(pKey);
     card.innerHTML = `
       <div style="font-size:13px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;flex-wrap:wrap;gap:6px">
         <span>${reviewData?.companyName ? esc(reviewData.companyName) : esc(f.name)}</span>
+        ${reviewData?.representative?`<span style="font-size:11px;color:#666;font-weight:500">${esc(reviewData.representative)}</span>`:''}
+        ${reviewData?.bizNo?`<span style="font-size:11px;color:#888;font-weight:400;font-family:monospace">${esc(reviewData.bizNo)}</span>`:''}
         ${matchedClient
           ? `<span id="bc-match-${bIdx}" style="font-size:11px;color:#2e7d32;background:#e8f5e9;padding:2px 8px;border-radius:10px">✓ ${esc(matchedClient.name)}</span>`
           : `<span id="bc-match-${bIdx}" style="font-size:11px;color:#e65100;background:#fff3e0;padding:2px 8px;border-radius:10px">⚠ 거래처 미매칭</span>`}
@@ -11051,24 +11054,24 @@ ${text.slice(0, 12000)}
         <div id="bc-search-${bIdx}" style="max-height:120px;overflow-y:auto;border:1px solid #e0e0e0;border-radius:6px;background:#fff;display:none;margin-top:2px"></div>
       </div>`:``}
       ${reviewData ? `<div id="bc-btn-area-${bIdx}">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+        <div style="display:grid;grid-template-columns:${_fl.showSeongsi?'1fr 1fr':'1fr'};gap:6px;margin-bottom:6px">
           <div>
-            <label style="font-size:10px;color:#555;display:block;margin-bottom:2px">조정료 (원)</label>
+            <label style="font-size:10px;color:#555;display:block;margin-bottom:2px">${_fl.feeLabel} (원)</label>
             <input id="bc-fee-${bIdx}" type="text" inputmode="numeric"
               value="${reviewData.feeRecommendation ? reviewData.feeRecommendation.toLocaleString() : ''}"
               placeholder="0"
               style="width:100%;border:1px solid #ffcc80;border-radius:5px;padding:5px 7px;font-size:12px;box-sizing:border-box;text-align:right;font-family:inherit"
               onfocus="this.value=this.value.replace(/,/g,'')"
-              onblur="const n=Number(this.value.replace(/,/g,''));this.value=n?n.toLocaleString():''">
+              onblur="const s=this.value.replace(/,/g,'').trim();this.value=(s===''?'':(Number(s)||0).toLocaleString())">
           </div>
-          <div>
+          ${_fl.showSeongsi?`<div>
             <label style="font-size:10px;color:#555;display:block;margin-bottom:2px">성실확인비용 (원)</label>
             <input id="bc-seongsi-${bIdx}" type="text" inputmode="numeric"
               placeholder="해당없음"
               style="width:100%;border:1px solid #e0e0e0;border-radius:5px;padding:5px 7px;font-size:12px;box-sizing:border-box;text-align:right;font-family:inherit"
               onfocus="this.value=this.value.replace(/,/g,'')"
               onblur="const n=Number(this.value.replace(/,/g,''));if(n)this.value=n.toLocaleString();else this.value=''">
-          </div>
+          </div>`:''}
         </div>
         <button onclick="batchRecord(${bIdx})"
           style="width:100%;padding:7px;background:#4f8ef7;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">
@@ -11087,18 +11090,55 @@ function filterBatchClientSearch(q, bIdx) {
   const listEl = document.getElementById(`bc-search-${bIdx}`);
   if (!listEl) return;
   const kw = q.trim().toLowerCase();
-  if (!kw) { listEl.style.display='none'; return; }
-  const matches = G.clients.filter(c => c.status!=='해지' && c.status!=='폐업' &&
-    ((c.name||'').toLowerCase().includes(kw) || (c.rep||'').toLowerCase().includes(kw))
-  ).slice(0,10);
-  if (!matches.length) { listEl.innerHTML='<div style="padding:8px;font-size:12px;color:#aaa;text-align:center">검색 결과 없음</div>'; listEl.style.display='block'; return; }
-  listEl.innerHTML = matches.map(c=>`
+  const digits = q.replace(/\D/g,'');
+  const matches = G.clients.filter(c => c.status!=='해지' && c.status!=='폐업' && (
+    (kw && ((c.name||'').toLowerCase().includes(kw) || (c.rep||'').toLowerCase().includes(kw))) ||
+    (digits.length>=3 && (c.bizNo||'').replace(/\D/g,'').includes(digits))
+  )).slice(0,10);
+  const rows = matches.map(c=>`
     <div onclick="selectBatchClient(${c.id},'${esc(c.name)}',${bIdx})"
       style="padding:7px 10px;font-size:12px;cursor:pointer;border-bottom:1px solid #f0f0f0"
       onmouseover="this.style.background='#e8f0fe'" onmouseout="this.style.background=''">
-      <b>${esc(c.name)}</b> <span style="color:#888">${esc(c.rep||'')}</span>
+      <b>${esc(c.name)}</b> <span style="color:#888">${esc(c.rep||'')}</span>${c.bizNo?` <span style="color:#aaa;font-family:monospace;font-size:11px">${esc(c.bizNo)}</span>`:''}
     </div>`).join('');
+  // 목록에 없으면 신규 거래처로 추가 (검토 문서의 상호 기준)
+  const dName = (_batchResults[bIdx] && _batchResults[bIdx].data && _batchResults[bIdx].data.companyName) || q.trim();
+  const addRow = dName ? `<div onclick="addNewClientFromBatch(${bIdx})"
+      style="padding:8px 10px;font-size:12px;cursor:pointer;border-top:1px solid #eee;background:#f1f8e9;color:#2e7d32;font-weight:700"
+      onmouseover="this.style.background='#dcedc8'" onmouseout="this.style.background='#f1f8e9'">➕ "${esc(dName)}" 신규 거래처로 추가</div>` : '';
+  if (!rows && !addRow) { listEl.style.display='none'; return; }
+  listEl.innerHTML = (rows || (kw||digits?'<div style="padding:8px;font-size:12px;color:#aaa;text-align:center">일치하는 거래처 없음</div>':'')) + addRow;
   listEl.style.display='block';
+}
+// 검토 문서 정보로 신규 거래처를 만들어 즉시 매칭
+function addNewClientFromBatch(bIdx) {
+  const item = _batchResults[bIdx];
+  if (!item || !item.data) { toast('검토 데이터가 없습니다','warning'); return; }
+  const d = item.data;
+  const name = (d.companyName||'').trim();
+  if (!name) { toast('상호를 확인할 수 없어 추가할 수 없습니다','warning'); return; }
+  const p = G.periods.find(x=>x.id===item.pKey);
+  const rt = (p && p.reportType) || '';
+  const taxType = rt==='corp' ? '법인' : '개인';
+  const newId = Date.now();
+  const newClient = {
+    id:newId, name, rep:(d.representative||'').trim(), bizNo:(d.bizNo||'').trim(), jumin:'',
+    relatedGroup:'', phone:'', email:'', taxType, vatType:'일반', bizType:'', taxOffice:'',
+    manager:(G.settings?.managers?.[0]||''), managers:[],
+    fee:0, feeSingo:0, feeJojung:0, feeSeongsi:0, feeStatus:'청구완료',
+    dealType:'신고대리', dealTypes:['신고대리'], contracts:['신고대리'],
+    status:'정상', dataReceived:false, bookkeeping:false, approved:false, memo:'',
+    contractDate:new Date().toISOString().slice(0,10), terminationDate:'', terminationReason:'',
+    closureYear:'', closureTaxFiled:false, closureTaxApproved:false, jointBiz:false, openDate:'', closeDate:''
+  };
+  G.clients.push(newClient);
+  saveToLS();
+  item.matchedClient = newClient;
+  const matchEl = document.getElementById(`bc-match-${bIdx}`);
+  if (matchEl) { matchEl.textContent = `✓ ${name} (신규)`; matchEl.style.color='#2e7d32'; matchEl.style.background='#e8f5e9'; }
+  const searchEl = document.getElementById(`bc-search-${bIdx}`); if (searchEl) searchEl.style.display='none';
+  toast(`신규 거래처 "${name}" 추가 — 이제 기록하세요`,'success',3000);
+  if (typeof renderClients==='function') renderClients();
 }
 
 function selectBatchClient(clientId, name, bIdx) {
@@ -11111,14 +11151,25 @@ function selectBatchClient(clientId, name, bIdx) {
   if (input) input.value = name;
 }
 
+// 신고유형별 수수료 필드 라벨: 부가세·사업장현황=신고수수료, 법인·소득=조정료, 성실=조정료+성실확인비용
+function _feeLabelConfig(pKey, typeFallback) {
+  const p = G.periods.find(x => x.id === pKey);
+  let rt = (p && p.reportType) || '';
+  if (!rt && typeFallback) rt = typeFallback; // 'vat'|'corp'|'income'|'seongsi'|'sajup'
+  if (rt.indexOf('vat') === 0 || rt === 'sajup') return { feeLabel:'신고수수료', showSeongsi:false };
+  if (rt === 'seongsi') return { feeLabel:'조정료', showSeongsi:true };
+  return { feeLabel:'조정료', showSeongsi:false };
+}
+
 function batchRecord(bIdx) {
   const item = _batchResults[bIdx];
   if (!item || item.recorded) return;
   if (!item.pKey) { toast('신고기간이 선택되지 않았습니다', 'warning'); return; }
   if (!item.matchedClient?.id) { toast('거래처를 먼저 선택해주세요 (위 검색창에서)', 'warning'); return; }
+  const _fl = _feeLabelConfig(item.pKey);
   const _feeRaw = (document.getElementById(`bc-fee-${bIdx}`)?.value||'').replace(/,/g,'').trim();
   const feeVal = _feeRaw === '' ? null : Number(_feeRaw);
-  if (feeVal === null) { toast('조정료를 입력해주세요 (0도 가능)', 'warning'); return; }
+  if (feeVal === null) { toast(`${_fl.feeLabel}을(를) 입력해주세요 (0도 가능)`, 'warning'); return; }
   const feeNum = feeVal || 0;
   const seongsiVal = Number((document.getElementById(`bc-seongsi-${bIdx}`)?.value||'').replace(/,/g,'')) || 0;
   window._trrReviewData = {...(item.data||{}), feeRecommendation: feeNum, feeSeongsi: seongsiVal};
@@ -11339,6 +11390,7 @@ ${text.slice(0, 14000)}
         <div style="font-size:13px;font-weight:800;color:#3949ab;margin-bottom:10px">📊 추출된 신고 데이터</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">
           ${reviewData.companyName?`<div><span style="color:#888">상호:</span> <b>${esc(reviewData.companyName)}</b></div>`:''}
+          ${reviewData.representative?`<div><span style="color:#888">대표자:</span> <b>${esc(reviewData.representative)}</b></div>`:''}
           ${reviewData.bizNo?`<div><span style="color:#888">사업자번호:</span> <b>${esc(reviewData.bizNo)}</b></div>`:''}
           ${reviewData.period?`<div><span style="color:#888">신고기간:</span> <b>${esc(reviewData.period)}</b></div>`:''}
           ${reviewData.revenue?`<div><span style="color:#888">수입금액:</span> <b style="color:#1565c0">${fmtN(reviewData.revenue)}</b></div>`:''}
@@ -11399,6 +11451,7 @@ ${text.slice(0, 14000)}
     window._trrReviewPlainText = reviewText;
     window._trrReviewFileName = `신고서검토_${(reviewData?.companyName||'').replace(/[\\/:*?"<>|]/g,'')||'결과'}_${(reviewData?.period||'').replace(/[\\/:*?"<>|\s]/g,'')}`.replace(/_+$/,'')||'신고서검토';
     const initFee = reviewData?.feeRecommendation || 0;
+    const _fl = _feeLabelConfig(pKey, type);
     const errCount = sortedF.filter(f=>f.level==='error').length;
     const warnCount = sortedF.filter(f=>f.level==='warn').length;
     const tipCount = sortedF.filter(f=>f.level==='tip').length;
@@ -11416,21 +11469,21 @@ ${text.slice(0, 14000)}
       ${reviewData ? `
       <div style="background:#f1f8e9;border:1.5px solid #a5d6a7;border-radius:12px;padding:14px 16px;margin-top:12px">
         <div style="font-size:13px;font-weight:700;color:#2e7d32;margin-bottom:10px">💰 수수료 직접 입력 후 데이터 반영</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div style="display:grid;grid-template-columns:${_fl.showSeongsi?'1fr 1fr':'1fr'};gap:10px;margin-bottom:10px">
           <div>
-            <label style="font-size:11px;color:#555;display:block;margin-bottom:4px">청구 조정료</label>
+            <label style="font-size:11px;color:#555;display:block;margin-bottom:4px">청구 ${_fl.feeLabel}</label>
             <input id="trr-fee-input" type="text" inputmode="numeric" value="${initFee ? initFee.toLocaleString() : ''}" placeholder="0"
               style="width:100%;border:1px solid #a5d6a7;border-radius:6px;padding:7px 8px;font-size:13px;box-sizing:border-box;text-align:right;font-family:inherit"
               onfocus="this.value=this.value.replace(/,/g,'')"
-              onblur="const n=Number(this.value.replace(/,/g,''));this.value=n?n.toLocaleString():''">
+              onblur="const s=this.value.replace(/,/g,'').trim();this.value=(s===''?'':(Number(s)||0).toLocaleString())">
           </div>
-          <div>
-            <label style="font-size:11px;color:#555;display:block;margin-bottom:4px">성실신고수수료 <span style="color:#bbb">(해당 없으면 빈칸)</span></label>
+          ${_fl.showSeongsi?`<div>
+            <label style="font-size:11px;color:#555;display:block;margin-bottom:4px">성실확인비용 <span style="color:#bbb">(해당 없으면 빈칸)</span></label>
             <input id="trr-seongsi-input" type="text" inputmode="numeric" value="" placeholder="해당 없음"
               style="width:100%;border:1px solid #a5d6a7;border-radius:6px;padding:7px 8px;font-size:13px;box-sizing:border-box;text-align:right;font-family:inherit"
               onfocus="this.value=this.value.replace(/,/g,'')"
               onblur="const n=Number(this.value.replace(/,/g,''));if(n)this.value=n.toLocaleString();else this.value=''">
-          </div>
+          </div>`:''}
         </div>
         <button onclick="applyTRRManualFee()" style="width:100%;padding:8px;background:#388e3c;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">✅ 데이터 반영</button>
       </div>
@@ -11852,20 +11905,21 @@ function doRecordTRRWith(clientId, pKey) {
   const cur = julgaeVal(pKey, clientId);
   const num = x => { const n = Number(String(x==null?'':x).replace(/[,\s원]/g,'')); return isNaN(n)?0:n; };
   const updated = {...cur};
-  const setIf = (k, val) => { if (val) updated[k] = val; }; // 0/미추출은 기존값 유지
-  setIf('revenue', num(data.revenue));
-  setIf('income', num(data.income));
-  setIf('taxBase', num(data.taxBase));
-  setIf('totalTax', num(data.totalTax));
-  setIf('payTax', num(data.payTax));
-  setIf('salesAmount', num(data.salesAmount));
-  setIf('purchaseAmount', num(data.purchaseAmount));
-  setIf('vatAmount', num(data.vatAmount));
-  setIf('prevRevenue', num(data.prevRevenue));
-  // 주민세(지방소득세): 신고서 명시값 우선, 없으면 결정세액(totalTax)의 10% 자동
-  setIf('residentTax', num(data.residentTax) || (num(data.totalTax) ? Math.round(num(data.totalTax)*0.1) : 0));
-  setIf('fee', num(data.feeRecommendation));
-  setIf('feeSeongsi', num(data.feeSeongsi));
+  const setIf = (k, val) => { if (val) updated[k] = val; }; // 문맥값(직전매출 등)은 미추출 시 기존값 유지
+  // 신고서상 금액은 미추출·없음이면 0으로 명시 기록 (수입·매출·세액·수수료 등)
+  updated.revenue        = num(data.revenue);
+  updated.income         = num(data.income);
+  updated.taxBase        = num(data.taxBase);
+  updated.totalTax       = num(data.totalTax);
+  updated.payTax         = num(data.payTax);
+  updated.salesAmount    = num(data.salesAmount);
+  updated.purchaseAmount = num(data.purchaseAmount);
+  updated.vatAmount      = num(data.vatAmount);
+  // 주민세(지방소득세): 신고서 명시값 우선, 없으면 결정세액(totalTax)의 10% 자동, 그래도 없으면 0
+  updated.residentTax    = num(data.residentTax) || (num(data.totalTax) ? Math.round(num(data.totalTax)*0.1) : 0);
+  updated.fee            = num(data.feeRecommendation);
+  updated.feeSeongsi     = num(data.feeSeongsi);
+  setIf('prevRevenue', num(data.prevRevenue)); // 직전매출은 신고서에 없을 수 있어 미추출 시 기존값 유지
   // 신고서를 검토·반영했으므로 진행상태(자료수령·기장·상담·결재) 자동 완료 처리
   updated.d = true; updated.b = true; updated.c = true; updated.a = true;
   G.julgae[pKey][clientId] = updated;
