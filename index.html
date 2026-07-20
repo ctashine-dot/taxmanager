@@ -11136,6 +11136,8 @@ ${text.slice(0, 12000)}
   "companyName": "상호명",
   "representative": "대표자명 (없으면 빈 문자열)",
   "bizNo": "사업자번호 (000-00-00000 형식)",
+  "bizCode": "업종코드/종목코드(숫자, 신고서에 표기된 주업종 코드. 없으면 빈 문자열)",
+  "taxOffice": "관할 세무서명(예: 역삼세무서 — 신고서 상단/제출처에 표기된 세무서. 없으면 빈 문자열)",
   "period": "신고기간",
   "revenue": 수입금액(숫자, 없으면 0),
   "income": 소득금액(숫자, 없으면 0),
@@ -11318,7 +11320,10 @@ function openNewClientFromBatch(bIdx) {
     <div><div style="color:#888;margin-bottom:2px">수임유형</div><select id="ncb-deal-${bIdx}" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:6px;padding:5px 7px;font-family:inherit">${deals.map(v=>`<option${v==='신고대리'?' selected':''}>${esc(v)}</option>`).join('')}</select></div>
     <div><div style="color:#888;margin-bottom:2px">담당자</div><select id="ncb-mgr-${bIdx}" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:6px;padding:5px 7px;font-family:inherit"><option value="">(미지정)</option>${mgrs.map(v=>`<option${v===defMgr?' selected':''}>${esc(v)}</option>`).join('')}</select></div>
     <div><div style="color:#888;margin-bottom:2px">기장료(월,원)</div><input id="ncb-fee-${bIdx}" type="number" inputmode="numeric" value="0" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:6px;padding:5px 7px;font-family:inherit"></div>
+    <div><div style="color:#888;margin-bottom:2px">업종코드</div><input id="ncb-bizcode-${bIdx}" value="${esc(d.bizCode||'')}" inputmode="numeric" placeholder="예: 743002" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:6px;padding:5px 7px;font-family:inherit"></div>
+    <div><div style="color:#888;margin-bottom:2px">관할세무서</div><input id="ncb-office-${bIdx}" value="${esc(_normalizeTaxOffice(d.taxOffice))}" list="taxoffice-list" placeholder="예: 역삼세무서" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:6px;padding:5px 7px;font-family:inherit"></div>
     <div style="grid-column:span 2"><div style="color:#888;margin-bottom:2px">수임경로</div><select id="ncb-route-${bIdx}" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:6px;padding:5px 7px;font-family:inherit">${['세무사','직원','거래처','컨설팅업체'].map(v=>`<option>${v}</option>`).join('')}</select></div>
+    <datalist id="taxoffice-list">${TAX_OFFICES.map(o=>`<option value="${esc(o)}">`).join('')}</datalist>
     <button onclick="_submitNewClientFromBatch(${bIdx})" style="grid-column:span 2;padding:8px;background:#4f8ef7;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:2px">추가하고 매칭</button>
   </div>`;
 }
@@ -11334,7 +11339,8 @@ function _submitNewClientFromBatch(bIdx) {
   const newId = Date.now();
   const newClient = {
     id:newId, name, rep:(g('ncb-rep')?.value||'').trim(), bizNo:formatBiz(g('ncb-bizno')?.value||''), jumin:'',
-    relatedGroup:'', phone:'', email:'', taxType, vatType:'일반', bizType:'', taxOffice:'',
+    relatedGroup:'', phone:'', email:'', taxType, vatType:'일반', bizType:'',
+    bizCode: String(g('ncb-bizcode')?.value||'').replace(/\s/g,''), taxOffice: _normalizeTaxOffice(g('ncb-office')?.value||''),
     manager: mgr, managers: mgr?[mgr]:[],
     fee: Number(String(g('ncb-fee')?.value||'0').replace(/[,\s]/g,''))||0, feeSingo:0, feeJojung:0, feeSeongsi:0, feeStatus:'청구완료',
     dealType: deal, dealTypes:[deal], contracts: (typeof getDefaultContracts==='function'?getDefaultContracts(deal, taxType, '일반'):[deal]),
@@ -11566,6 +11572,8 @@ ${text.slice(0, 14000)}
   "companyName": "상호명",
   "representative": "대표자명 (없으면 빈 문자열)",
   "bizNo": "사업자번호 (000-00-00000 형식)",
+  "bizCode": "업종코드/종목코드(숫자, 신고서에 표기된 주업종 코드. 없으면 빈 문자열)",
+  "taxOffice": "관할 세무서명(예: 역삼세무서 — 신고서 상단/제출처에 표기된 세무서. 없으면 빈 문자열)",
   "period": "신고기간 (예: 25년 1기 확정)",
   "revenue": 수입금액(숫자, 없으면 0),
   "income": 소득금액(숫자, 없으면 0),
@@ -12280,7 +12288,16 @@ function _applyBusinessSites(leadId, pKey, sites) {
   }, 800);
 }
 
-// 리스트 반영 시 거래처목록에 누락된 정보(사업자번호·대표자·상호)를 신고서 정보로 보완 제안
+// 신고서에서 읽은 세무서명을 전국 세무서 목록에 맞춰 정규화(못 찾으면 원문 유지)
+function _normalizeTaxOffice(v) {
+  let s = String(v||'').trim().replace(/\s+/g,'');
+  if (!s) return '';
+  if (TAX_OFFICES.includes(s)) return s;
+  const core = s.replace(/세무서$/,'');
+  const hit = TAX_OFFICES.find(o => o===core || o.replace(/세무서$/,'')===core || o===core+'세무서' || o.replace(/세무서$/,'')===s.replace(/세무서$/,''));
+  return hit || s;
+}
+// 리스트 반영 시 거래처목록에 누락된 정보(사업자번호·대표자·상호·업종코드·관할세무서)를 신고서 정보로 보완 제안
 function _promptFillMissingClientInfo(clientId, data) {
   const c = G.clients.find(x=>x.id===clientId);
   if (!c || !data) return;
@@ -12289,6 +12306,10 @@ function _promptFillMissingClientInfo(clientId, data) {
   if (!(c.bizNo||'').replace(/\D/g,'') && bn.length===10) fills.push({field:'bizNo', label:'사업자번호', val:data.bizNo});
   if (!(c.rep||'').trim() && String(data.representative||'').trim()) fills.push({field:'rep', label:'대표자', val:data.representative});
   if (!(c.name||'').trim() && String(data.companyName||'').trim()) fills.push({field:'name', label:'상호', val:data.companyName});
+  const bc = String(data.bizCode||'').replace(/\D/g,'');
+  if (!(c.bizCode||'').trim() && bc.length>=2) fills.push({field:'bizCode', label:'업종코드', val:bc});
+  const office = _normalizeTaxOffice(data.taxOffice);
+  if (!(c.taxOffice||'').trim() && office) fills.push({field:'taxOffice', label:'관할세무서', val:office});
   if (!fills.length) return;
   setTimeout(()=>{
     if (!confirm(`'${c.name||clientId}' 거래처목록에 누락된 정보가 있습니다. 신고서 정보로 채울까요?\n\n`+fills.map(f=>`· ${f.label}: ${f.val}`).join('\n'))) return;
