@@ -10881,7 +10881,7 @@ function openTaxReturnReviewer(type) {
         📥 내용만 불러오기
       </button>
     </div>
-    ${type==='vat'?`<button onclick="runVatScrapeNoKey('${type}')" style="width:100%;margin-top:8px;padding:9px;background:#f5f5f5;color:#555;border:1.5px solid #e0e0e0;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit" title="API 키 없이 텍스트 PDF에서 항목만 추출(부가세 전용)">🔑 API 키 없이 스크랩 (텍스트 PDF·부가세)</button>`:''}
+    ${['vat','income','seongsi'].includes(type)?`<button onclick="runVatScrapeNoKey('${type}')" style="width:100%;margin-top:8px;padding:9px;background:#f5f5f5;color:#555;border:1.5px solid #e0e0e0;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit" title="API 키 없이 텍스트 PDF에서 항목만 추출">🔑 API 키 없이 스크랩 (텍스트 PDF·${type==='vat'?'부가세':type==='seongsi'?'성실신고':'소득세'})</button>`:''}
     <div id="trr-status" style="margin-top:8px;font-size:12px;color:#888;text-align:center"></div>
     <div id="trr-result" style="margin-top:14px"></div>
     </div><!-- /trr-pane-single -->
@@ -11468,7 +11468,10 @@ function autoMatchTRRClient(text) {
 
 // ── API 키 없이 부가세 신고서 텍스트에서 항목 스크랩 (텍스트 레이어 PDF 전용) ──
 function _scrapeVatReturn(text) {
-  const T = String(text||'');
+  // 여러 페이지(표지·목록 포함) 중 부가가치세 신고서 본문을 찾아 그 부분만 스크랩
+  let T = String(text||'');
+  const _vi = T.search(/부\s*가\s*가\s*치\s*세[^\n]*신\s*고\s*서/);
+  if (_vi >= 0) T = T.slice(_vi);
   const dig = s => String(s||'').replace(/\D/g,'');
   const numAfter = re => { const m=T.match(re); return m ? (Number(dig(m[1]))||0) : 0; };
   const strAfter = re => { const m=T.match(re); return m ? m[1].trim() : ''; };
@@ -11494,25 +11497,114 @@ function _scrapeVatReturn(text) {
   d.taxType = '개인';
   return d;
 }
+// ── API 키 없이 종합소득세·성실신고 신고서 텍스트에서 항목 스크랩 ──
+// 표지(과세표준확정신고 및 납부계산서) + 사업소득명세서. 페이지 위치와 무관하게 내용으로 섹션을 탐색.
+function _scrapeIncomeReturn(text) {
+  const T = String(text||'');
+  const numFrom = s => Number(String(s||'').replace(/[^\d]/g,''))||0;
+  // 라벨 문자 사이 임의 공백 허용 정규식
+  const lbl = s => s.split('').map(c=>c.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('\\s*');
+  const d = { businessSites: [] };
+
+  // ── 표지: '과세표준확정신고' 또는 '납부계산서'가 있는 위치부터 슬라이스(어느 페이지든) ──
+  let cover = T;
+  const ci = T.search(new RegExp(lbl('과세표준확정신고')+'|'+lbl('납부계산서')));
+  if (ci >= 0) cover = T.slice(ci);
+  // 라벨 다음 줄(들)에서 첫 값/숫자 추출
+  const strAfterIn = (src, labelStr) => {
+    const m = src.match(new RegExp(lbl(labelStr)+'[^\\n]*\\n\\s*([^\\n]+)'));
+    return m ? m[1].replace(/\s+/g,' ').trim() : '';
+  };
+  const amtAfterIn = (src, labelRe, maxLines=4) => {
+    const idx = src.search(new RegExp(labelRe));
+    if (idx < 0) return 0;
+    const lines = src.slice(idx).split('\n').slice(1, 1+maxLines);
+    for (const ln of lines) { const m = ln.match(/\d[\d,]{2,}/); if (m) return numFrom(m[0]); }
+    return 0;
+  };
+  // 성명 (세무대리인 성명보다 앞의 ① 성명이 먼저 매칭됨)
+  d.representative = strAfterIn(cover, '성명');
+  // 주민등록번호(칸마다 공백/전각대시): 라벨 뒤 13자리
+  const jm = cover.match(new RegExp(lbl('주민등록번호')+'([\\s\\S]{0,60})'));
+  if (jm) { const jd = String(jm[1]).replace(/[^\d]/g,'').slice(0,13); if (jd.length===13) d.jumin = jd.slice(0,6)+'-'+jd.slice(6); }
+  // 연락처: 휴대전화 우선, 없으면 사업장 전화번호
+  const ppick = s => { const m = String(s).match(/01[016789][\s\-]*\d{3,4}[\s\-]*\d{4}/) || String(s).match(/0\d{1,2}[\s\-]*\d{3,4}[\s\-]*\d{4}/); return m ? m[0].replace(/\s/g,'') : ''; };
+  d.phone = ppick(strAfterIn(cover,'휴대전화')) || ppick(strAfterIn(cover,'사업장전화번호'));
+  // 금액: 종합소득금액→소득금액, 과세표준, 납부할총세액→총부담세액, 충당후납부할세액→납부세액
+  d.income   = amtAfterIn(cover, lbl('종합소득금액'));
+  d.taxBase  = amtAfterIn(cover, lbl('과세표준')+'\\s*\\(');
+  d.totalTax = amtAfterIn(cover, lbl('납부')+'[^\\n]{0,12}'+lbl('총세액'));
+  d.payTax   = amtAfterIn(cover, lbl('충당후납부')+'[^\\n]{0,12}'+lbl('세액'));
+  if (!d.payTax) d.payTax = d.totalTax;
+
+  // ── 사업소득명세서: 어느 페이지든 내용으로 탐색 ──
+  const si = T.search(new RegExp(lbl('사업소득명세서')));
+  const sec = si >= 0 ? T.slice(si) : '';
+  if (sec) {
+    // 두 라벨 사이 텍스트 블록
+    const between = (startRe, endRe) => {
+      const sm = sec.match(new RegExp(startRe)); if (!sm) return '';
+      const rest = sec.slice(sm.index + sm[0].length);
+      const em = rest.match(new RegExp(endRe));
+      return em ? rest.slice(0, em.index) : rest;
+    };
+    const bizNos = (between(lbl('사업자등록번호'), lbl('기장의무')).match(/\d{3}-\d{2}-\d{5}/g)) || [];
+    const N = bizNos.length;
+    if (N) {
+      // 상호: 상호~사업자등록번호 사이의 비(非)라벨·비(非)숫자 줄
+      const names = between(lbl('상호'), lbl('사업자등록번호'))
+        .split('\n').map(s=>s.replace(/\s+/g,' ').trim())
+        .filter(s => s && !/상\s*호/.test(s) && !/^[①-⑳\d.\-()]+$/.test(s))
+        .slice(0, N);
+      const codes = (between(lbl('주업종코드'), lbl('총수입금액')).match(/\d{4,6}/g) || []).slice(0, N);
+      const revAll = (between(lbl('총수입금액'), lbl('필요경비')).match(/[\d,]{4,}/g) || []).map(numFrom);
+      const incAll = (between(lbl('소득금액'), lbl('과세기간')).match(/[\d,]{4,}/g) || []).map(numFrom);
+      for (let k=0; k<N; k++) d.businessSites.push({ name: names[k]||'', bizNo: bizNos[k], bizCode: codes[k]||'', revenue: revAll[k]||0, income: incAll[k]||0 });
+      // 총수입금액 합계(사업장 수 다음 값) → 대표 매출액
+      d.revenue = revAll.length > N ? revAll[N] : d.businessSites.reduce((a,s)=>a+s.revenue, 0);
+    }
+  }
+  if (!d.revenue) d.revenue = d.businessSites.reduce((a,s)=>a+s.revenue, 0);
+  if (d.businessSites[0]) { d.companyName = d.businessSites[0].name; d.bizNo = d.businessSites[0].bizNo; d.bizCode = d.businessSites[0].bizCode; }
+  d.taxType = '개인';
+  return d;
+}
 function runVatScrapeNoKey(type) {
-  if (type !== 'vat') { toast('키 없이 스크랩은 현재 부가세 신고서만 지원합니다','warning'); return; }
+  const isIncome = (type === 'income' || type === 'seongsi');
+  if (type !== 'vat' && !isIncome) { toast('키 없이 스크랩은 부가세·소득세(성실) 신고서만 지원합니다','warning'); return; }
   const text = (document.getElementById('trr-text-input')||{}).value||'';
   if (!text.trim()) { toast('신고서 텍스트가 없습니다. PDF 업로드/붙여넣기 후 다시 시도하세요 (스캔 이미지 PDF는 불가)','warning'); return; }
-  const d = _scrapeVatReturn(text);
-  if (!d.bizNo && !d.companyName && !d.salesAmount) { toast('신고서에서 정보를 추출하지 못했습니다 (텍스트 레이어 없는 PDF일 수 있음)','warning'); return; }
+  const d = isIncome ? _scrapeIncomeReturn(text) : _scrapeVatReturn(text);
+  const _empty = isIncome ? (!d.representative && !d.income && !d.businessSites.length) : (!d.bizNo && !d.companyName && !d.salesAmount);
+  if (_empty) { toast('신고서에서 정보를 추출하지 못했습니다 (텍스트 레이어 없는 PDF일 수 있음)','warning'); return; }
   window._trrReviewData = { ...d, feeRecommendation: 0 };
   window._trrMatchedClientId = null;
   autoMatchTRRClient(text);
   const won = n => (Number(n)||0).toLocaleString();
-  const rows = [['신고기간',d.period||'-'],['상호',d.companyName||'-'],['대표자',d.representative||'-'],['사업자번호',d.bizNo||'-'],['전화번호',d.phone||'-'],['매출액(과세표준)',won(d.salesAmount)+'원'],['매입액(차감계)',won(d.purchaseAmount)+'원'],['납부할세액',won(d.vatAmount)+'원'],['업종코드',d.bizCode||'-'],['관할세무서',d.taxOffice||'-']];
   const el = document.getElementById('trr-result'); if (!el) return;
+  const feeLabel = (type === 'seongsi') ? '조정료 (원)' : (isIncome ? '조정료 (원)' : '신고수수료 (원)');
+  const feeInput = `<div style="margin-top:10px"><label class="flabel">${feeLabel}</label>
+      <input id="scrape-fee" type="text" inputmode="numeric" value="" placeholder="0" style="width:100%;box-sizing:border-box;border:1px solid #a5d6a7;border-radius:6px;padding:7px 8px;text-align:right;font-family:inherit" onblur="const s=this.value.replace(/,/g,'').trim();this.value=(s===''?'':(Number(s)||0).toLocaleString())"></div>`;
+  const recordBtn = `<button onclick="_recordScrape()" style="width:100%;margin-top:10px;padding:10px;background:#4f8ef7;color:#fff;border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit">📋 신고리스트에 기록</button>
+    <div style="font-size:10px;color:#aaa;margin-top:6px">※ 텍스트 PDF 자동추출(무키). 값이 맞는지 확인 후, 위 '거래처 연결·신고기간'을 선택하고 기록하세요.</div>`;
+  if (isIncome) {
+    const rows = [['성명',d.representative||'-'],['주민등록번호',d.jumin||'-'],['연락처',d.phone||'-'],['종합소득금액(소득)',won(d.income)+'원'],['과세표준',won(d.taxBase)+'원'],['총부담세액',won(d.totalTax)+'원'],['납부세액',won(d.payTax)+'원'],['총수입금액(합계)',won(d.revenue)+'원']];
+    const siteRows = d.businessSites.length ? `<div style="margin-top:10px;font-size:11px;font-weight:700;color:#1565c0">사업소득명세서 · 사업장 ${d.businessSites.length}개</div>
+      <table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:4px"><thead><tr style="color:#888;text-align:right"><th style="text-align:left;font-weight:600">상호</th><th style="font-weight:600">사업자번호</th><th style="font-weight:600">업종</th><th style="font-weight:600">매출액</th><th style="font-weight:600">소득금액</th></tr></thead><tbody>${d.businessSites.map(s=>`<tr style="text-align:right"><td style="text-align:left;font-weight:600">${esc(s.name||'-')}</td><td>${esc(s.bizNo||'-')}</td><td>${esc(s.bizCode||'-')}</td><td>${won(s.revenue)}</td><td>${won(s.income)}</td></tr>`).join('')}</tbody></table>
+      <div style="font-size:10px;color:#aaa;margin-top:4px">※ 대표사업장에 총부담세액·납부세액이 기록되고, 각 사업장은 그룹으로 묶여 매출·소득이 반영됩니다.</div>` : '';
+    el.innerHTML = `<div style="background:#eef4ff;border:1.5px solid #a9c9f5;border-radius:12px;padding:14px">
+      <div style="font-size:13px;font-weight:700;color:#1565c0;margin-bottom:8px">🔑 키 없이 스크랩 결과 (${type==='seongsi'?'성실신고':'종합소득세'})</div>
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:12px">${rows.map(([k,v])=>`<div style="color:#888">${esc(k)}</div><div style="font-weight:600;text-align:right">${esc(String(v))}</div>`).join('')}</div>
+      ${siteRows}${feeInput}${recordBtn}
+    </div>`;
+    toast('소득세 신고서 스크랩 완료 — 값 확인 후 기록하세요','success',2500);
+    return;
+  }
+  const rows = [['신고기간',d.period||'-'],['상호',d.companyName||'-'],['대표자',d.representative||'-'],['사업자번호',d.bizNo||'-'],['전화번호',d.phone||'-'],['매출액(과세표준)',won(d.salesAmount)+'원'],['매입액(차감계)',won(d.purchaseAmount)+'원'],['납부할세액',won(d.vatAmount)+'원'],['업종코드',d.bizCode||'-'],['관할세무서',d.taxOffice||'-']];
   el.innerHTML = `<div style="background:#eef4ff;border:1.5px solid #a9c9f5;border-radius:12px;padding:14px">
     <div style="font-size:13px;font-weight:700;color:#1565c0;margin-bottom:8px">🔑 키 없이 스크랩 결과 (부가세)</div>
     <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:12px">${rows.map(([k,v])=>`<div style="color:#888">${esc(k)}</div><div style="font-weight:600;text-align:right">${esc(String(v))}</div>`).join('')}</div>
-    <div style="margin-top:10px"><label class="flabel">신고수수료 (원)</label>
-      <input id="scrape-fee" type="text" inputmode="numeric" value="" placeholder="0" style="width:100%;box-sizing:border-box;border:1px solid #a5d6a7;border-radius:6px;padding:7px 8px;text-align:right;font-family:inherit" onblur="const s=this.value.replace(/,/g,'').trim();this.value=(s===''?'':(Number(s)||0).toLocaleString())"></div>
-    <button onclick="_recordScrape()" style="width:100%;margin-top:10px;padding:10px;background:#4f8ef7;color:#fff;border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit">📋 신고리스트에 기록</button>
-    <div style="font-size:10px;color:#aaa;margin-top:6px">※ 텍스트 PDF 자동추출(무키). 값이 맞는지 확인 후, 위 '거래처 연결·신고기간'을 선택하고 기록하세요.</div>
+    ${feeInput}${recordBtn}
   </div>`;
   toast('부가세 신고서 스크랩 완료 — 값 확인 후 기록하세요','success',2500);
 }
