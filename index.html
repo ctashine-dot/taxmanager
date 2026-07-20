@@ -684,6 +684,16 @@ function periodIncomeYear(period) {
   if (['corp','income','seongsi','sajup','vat_hak_2'].includes(rt)) return filingYear - 1;
   return filingYear; // vat_hak_1, vat_yej 등 당해연도 활동분
 }
+// 신고기간의 신고시점(YYYY-MM) — 라벨의 신고연도 + 템플릿 마감월
+function periodFilingYM(period) {
+  const m = (period && period.label || '').match(/^(\d{2})년/);
+  if (!m) return '';
+  const yr = 2000 + Number(m[1]);
+  const tpl = PERIOD_TEMPLATES.find(t => t.reportType === period.reportType || t.tpl === period.reportType || t.tpl === period.tpl);
+  let mo = 12;
+  if (tpl && tpl.deadline) { const dm = tpl.deadline.match(/(\d+)월/); if (dm) mo = Number(dm[1]); }
+  return yr + '-' + String(mo).padStart(2,'0');
+}
 function clientCloseYear(c) {
   if (c.closureYear) return Number(c.closureYear) || 0;
   const d = c.closeDate || c.terminationDate || '';
@@ -703,6 +713,13 @@ function periodHasClientData(period, c) {
 // - 폐업: 폐업연도가 해당 신고의 귀속연도 이상이면 그 해 영업분 신고 대상이므로 포함
 //   예) 26년 성실신고는 25년 귀속 → 26년 폐업이어도 25년 영업분은 신고 대상
 function clientInFilingPeriod(c, period) {
+  // 수임일 이후 신고분만 포함 — 수임일이 해당 신고기간의 신고시점(마감월)보다 뒤면 소급 제외
+  // (단, 이미 입력된 데이터가 있으면 작업내역 보존을 위해 유지)
+  if (c.contractDate) {
+    const fym = periodFilingYM(period);
+    const cym = String(c.contractDate).slice(0,7);
+    if (fym && cym && cym > fym && !periodHasClientData(period, c)) return false;
+  }
   if (c.status !== '해지' && c.status !== '폐업') return true;
   if (c.status === '해지') return periodHasClientData(period, c); // 해지: 데이터 있을 때만 보존
   // 폐업
@@ -11079,6 +11096,7 @@ ${text.slice(0, 12000)}
         <span>${reviewData?.companyName ? esc(reviewData.companyName) : esc(f.name)}</span>
         ${reviewData?.representative?`<span style="font-size:11px;color:#666;font-weight:500">${esc(reviewData.representative)}</span>`:''}
         ${reviewData?.bizNo?`<span style="font-size:11px;color:#888;font-weight:400;font-family:monospace">${esc(reviewData.bizNo)}</span>`:''}
+        <span id="bc-mgr-${bIdx}">${_batchMgrChipHTML(bIdx, matchedClient)}</span>
         ${matchedClient
           ? `<span id="bc-match-${bIdx}" style="font-size:11px;color:#2e7d32;background:#e8f5e9;padding:2px 8px;border-radius:10px">✓ ${esc(matchedClient.name)}</span>`
           : `<span id="bc-match-${bIdx}" style="font-size:11px;color:#e65100;background:#fff3e0;padding:2px 8px;border-radius:10px">⚠ 거래처 미매칭</span>`}
@@ -11179,6 +11197,7 @@ function addNewClientFromBatch(bIdx) {
   const matchEl = document.getElementById(`bc-match-${bIdx}`);
   if (matchEl) { matchEl.textContent = `✓ ${name} (신규)`; matchEl.style.color='#2e7d32'; matchEl.style.background='#e8f5e9'; }
   const searchEl = document.getElementById(`bc-search-${bIdx}`); if (searchEl) searchEl.style.display='none';
+  _renderBatchMgrChip(bIdx);
   toast(`신규 거래처 "${name}" 추가 — 이제 기록하세요`,'success',3000);
   if (typeof renderClients==='function') renderClients();
 }
@@ -11191,6 +11210,47 @@ function selectBatchClient(clientId, name, bIdx) {
   if (searchEl) searchEl.style.display='none';
   const input = searchEl?.previousElementSibling;
   if (input) input.value = name;
+  _renderBatchMgrChip(bIdx);
+}
+
+// 배치 카드: 매칭 거래처의 담당자 칩(클릭하여 지정)
+function _batchMgrChipHTML(bIdx, c) {
+  if (!c) return '';
+  return `<span onclick="_editBatchMgr(${bIdx})" style="font-size:11px;color:#6a3ab2;background:#f3e8fd;border:1px solid #cdb4ef;border-radius:10px;padding:1px 8px;cursor:pointer" title="클릭하여 담당자 지정">👤 ${esc(getManagers(c)[0]||'담당자?')}</span>`;
+}
+function _renderBatchMgrChip(bIdx) {
+  const el = document.getElementById(`bc-mgr-${bIdx}`);
+  const item = _batchResults[bIdx];
+  if (el) el.innerHTML = (item && item.matchedClient) ? _batchMgrChipHTML(bIdx, item.matchedClient) : '';
+}
+function _editBatchMgr(bIdx) {
+  const el = document.getElementById(`bc-mgr-${bIdx}`);
+  const item = _batchResults[bIdx];
+  if (!el || !item || !item.matchedClient) return;
+  const cur = getManagers(item.matchedClient)[0] || '';
+  el.innerHTML = `<select onchange="_setBatchMgr(${bIdx}, this.value)" onblur="_renderBatchMgrChip(${bIdx})" style="font-size:11px;padding:1px 4px;border:1px solid #cdb4ef;border-radius:6px;font-family:inherit">
+    <option value="">(미지정)</option>
+    ${MANAGERS.slice(1).map(m=>`<option value="${esc(m)}"${m===cur?' selected':''}>${esc(m)}</option>`).join('')}
+  </select>`;
+  el.querySelector('select')?.focus();
+}
+function _setBatchMgr(bIdx, mgr) {
+  const item = _batchResults[bIdx];
+  const c = item && item.matchedClient && G.clients.find(x=>x.id===item.matchedClient.id);
+  if (!c) return;
+  const oldStr = getManagers(c).join(',') || '(없음)';
+  const newStr = mgr || '(없음)';
+  c.managers = mgr ? [mgr] : []; c.manager = mgr || '';
+  item.matchedClient = c;
+  if (oldStr !== newStr) {
+    if (!G.managerHistory) G.managerHistory = {};
+    if (!G.managerHistory[c.id]) G.managerHistory[c.id] = [];
+    G.managerHistory[c.id].push({ date: new Date().toLocaleString('ko-KR'), from: oldStr, to: newStr });
+    saveToLS();
+    if (typeof renderClients==='function') renderClients();
+    toast(`${c.name} 담당자 → ${newStr}`, 'success', 2000);
+  }
+  _renderBatchMgrChip(bIdx);
 }
 
 // 신고유형별 수수료 필드 라벨: 부가세·사업장현황=신고수수료, 법인·소득=조정료, 성실=조정료+성실확인비용
