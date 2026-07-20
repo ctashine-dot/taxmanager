@@ -10736,7 +10736,7 @@ function openTaxReturnReviewer(type) {
       ondrop="event.preventDefault();this.style.borderColor='#e0e0e0';handleTRRDrop(event,'${type}')">
       <div style="font-size:32px;margin-bottom:8px">📄</div>
       <div style="font-size:14px;font-weight:700;color:#555">PDF 파일을 여기에 드래그하거나 클릭하여 선택</div>
-      <div style="font-size:12px;color:#aaa;margin-top:4px">홈택스 / 세무사랑 신고서 PDF (여러 파일 선택 가능)</div>
+      <div style="font-size:12px;color:#aaa;margin-top:4px">홈택스 / 세무사랑 신고서 PDF · <b>1개=단일 검토, 여러 개=자동 일괄 검토</b></div>
     </div>
     <input type="file" id="trr-file-input" accept=".pdf" multiple style="display:none" onchange="handleTRRFiles(this.files,'${type}')">
 
@@ -10764,9 +10764,14 @@ function openTaxReturnReviewer(type) {
       </div>
     </div>
 
-    <button id="trr-run-btn" class="btn-primary" style="width:100%;margin-top:14px" onclick="runTaxReturnReview('${type}')">
-      ✦ AI 검토 시작
-    </button>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button id="trr-run-btn" class="btn-primary" style="flex:2" onclick="runTaxReturnReview('${type}')">
+        ✦ AI 검토 시작
+      </button>
+      <button id="trr-extract-btn" style="flex:1;padding:11px;background:#eef4ff;color:#1565c0;border:1.5px solid #a9c9f5;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit" onclick="runTaxReturnReview('${type}', true)" title="AI 검토 의견 없이 신고서 내용(숫자)만 추출해 리스트에 기록">
+        📥 내용만 불러오기
+      </button>
+    </div>
     <div id="trr-status" style="margin-top:8px;font-size:12px;color:#888;text-align:center"></div>
     <div id="trr-result" style="margin-top:14px"></div>
     </div><!-- /trr-pane-single -->
@@ -10796,6 +10801,10 @@ function openTaxReturnReviewer(type) {
       </div>
       <div id="trr-batch-list" style="margin-top:10px"></div>
       <div id="trr-batch-controls" style="display:none;margin-top:12px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#555;margin-bottom:8px;cursor:pointer">
+          <input type="checkbox" id="trr-batch-extractonly" style="width:15px;height:15px;cursor:pointer">
+          ⚡ 내용만 불러오기 (AI 검토 생략 · 더 빠름)
+        </label>
         <button onclick="startBatchReview('${type}')" id="trr-batch-run-btn" class="btn-primary" style="width:100%">✦ 일괄 AI 검토 시작</button>
       </div>
       <div id="trr-batch-results" style="margin-top:14px"></div>
@@ -10819,6 +10828,13 @@ function handleTRRDrop(event, type) {
 async function handleTRRFiles(fileList, type) {
   const files = [...fileList].filter(f => f.name.toLowerCase().endsWith('.pdf'));
   if (!files.length) { toast('PDF 파일만 지원됩니다', 'warning'); return; }
+  // 여러 개면 자동으로 일괄 검토로 전환
+  if (files.length > 1) {
+    switchTRRTab('batch', type);
+    addBatchFiles(files, type);
+    toast(`${files.length}개 파일 감지 — 일괄 검토로 전환했습니다`, 'info', 2500);
+    return;
+  }
   const statusEl = document.getElementById('trr-status');
   const uploadArea = document.getElementById('trr-upload-area');
   if (statusEl) statusEl.textContent = `${files.length}개 파일 처리 중...`;
@@ -10921,6 +10937,7 @@ function renderBatchFileList(type) {
 
 async function startBatchReview(type) {
   if (!_batchFiles.length) { toast('파일을 먼저 선택해주세요','warning'); return; }
+  const extractOnly = !!document.getElementById('trr-batch-extractonly')?.checked;
   const pKey = document.getElementById('trr-batch-period')?.value || '';
   const btn = document.getElementById('trr-batch-run-btn');
   const resultsEl = document.getElementById('trr-batch-results');
@@ -11033,10 +11050,11 @@ ${text.slice(0, 12000)}
     let reviewData = null;
     let reviewText = '';
     try {
-      const result = await aiCallStream(null, buildReviewContent(extractPrompt, pdfImages), 3000, null, 'claude-opus-4-8');
+      const _bp = extractOnly ? extractPrompt + `\n\n【빠른 추출 모드】 위 2단계 검토 의견은 작성하지 말고, 1단계 JSON 데이터만 정확히 출력하십시오.` : extractPrompt;
+      const result = await aiCallStream(null, buildReviewContent(_bp, pdfImages), extractOnly?1400:3000, null, 'claude-opus-4-8');
       if (result) {
         reviewData = parseAIJson(result);
-        reviewText = result.replace(/```json[\s\S]*?```/g,'').replace(/```json[\s\S]*$/,'').trim();
+        reviewText = extractOnly ? '' : result.replace(/```json[\s\S]*?```/g,'').replace(/```json[\s\S]*$/,'').trim();
       }
     } catch(e) {
       if(statusEl){ statusEl.textContent='AI 오류'; statusEl.style.color='#c62828'; }
@@ -11229,7 +11247,7 @@ function autoMatchTRRClient(text) {
   }
 }
 
-async function runTaxReturnReview(type) {
+async function runTaxReturnReview(type, extractOnly) {
   const text = (document.getElementById('trr-text-input')||{}).value?.trim();
   if (!text) { toast('신고서 내용을 입력하거나 PDF를 업로드해주세요', 'warning'); return; }
   const resultDiv = document.getElementById('trr-result');
@@ -11369,9 +11387,13 @@ ${text.slice(0, 14000)}
 - ★기장세액공제는 간편장부대상자가 복식부기로 기장한 경우에만 해당. 복식부기의무자(소득세 직전 수입금액 업종별 기준 초과)에게는 기장세액공제를 tip으로 넣지 말 것.
 ※ totalTax(결정세액)=산출세액-세액감면·공제+가산세 / payTax(납부할총세액)=결정세액-기납부세액`;
 
+  const _prompt = extractOnly
+    ? extractPrompt + `\n\n【빠른 추출 모드】 검토 의견(findings)은 작성하지 말고 빈 배열([])로 두십시오. 위 JSON의 데이터 값(상호·대표자·사업자번호·수입·소득·과세표준·세액·수수료 등)만 정확히 추출하는 데 집중하십시오.`
+    : extractPrompt;
+
   try {
     let charCount = 0;
-    const result = await aiCallStream(null, buildReviewContent(extractPrompt, _trrImages), 5000, (chunk, full) => {
+    const result = await aiCallStream(null, buildReviewContent(_prompt, _trrImages), extractOnly?1600:5000, (chunk, full) => {
       charCount += chunk.length;
       const prog = document.getElementById('trr-progress');
       if (prog) prog.textContent = `(${charCount.toLocaleString()}자 분석 중...)`;
