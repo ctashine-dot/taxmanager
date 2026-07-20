@@ -667,6 +667,13 @@ function applyReportFilter(clients, period) {
   return clients;
 }
 
+// 신고서 검토가 반영(금액 기록)됐는지 — 반영됐으면 0도 '0'으로, 미검토면 빈칸으로 표시하기 위함
+function _julgaeReviewed(pKey, cid) {
+  const raw = G.julgae[pKey] && G.julgae[pKey][cid];
+  if (!raw || typeof raw !== 'object') return false;
+  if (raw._reviewed === true) return true;
+  return ['revenue','salesAmount','income','taxBase','totalTax','payTax','purchaseAmount','vatAmount','residentTax'].some(k => raw[k] !== undefined);
+}
 function julgaeVal(pKey, clientId) {
   const v = G.julgae[pKey]?.[clientId];
   const def = {d:false, b:false, a:false, c:false, s:false, revenue:0, income:0, taxBase:0, totalTax:0, payTax:0, residentTax:0, prevRevenue:0, fee:0, paid:0, paidSeongsi:0, fee25:0, fee24:0, fee23:0, feeSeongsi:0, fee25ss:0, fee24ss:0, fee23ss:0};
@@ -5803,7 +5810,8 @@ function renderJulgae() {
   let _sepPrev = null;
 
   const niInput = (cid, field, val, extraStyle='') => {
-    const disp = val ? Number(val).toLocaleString() : '';
+    const _num = Number(val) || 0;
+    const disp = _num !== 0 ? _num.toLocaleString() : (_julgaeReviewed(pKey2, cid) ? '0' : '');
     const w = disp ? Math.max(58, Math.ceil(disp.length * 6.5) + 10) : 58;
     return `<input type="text" inputmode="numeric" class="julgae-num-input" data-jni="${pKey2}_${cid}_${field}" value="${disp}" placeholder=""
       onfocus="this.value=this.value.replace(/,/g,'');this.select();this._selAll=true;"
@@ -12055,6 +12063,7 @@ function doRecordTRRWith(clientId, pKey) {
   setIf('prevRevenue', num(data.prevRevenue)); // 직전매출은 신고서에 없을 수 있어 미추출 시 기존값 유지
   // 신고서를 검토·반영했으므로 진행상태(자료수령·기장·상담·결재) 자동 완료 처리
   updated.d = true; updated.b = true; updated.c = true; updated.a = true;
+  updated._reviewed = true; // 금액 0도 '0'으로 표시(미검토 구분)
   G.julgae[pKey][clientId] = updated;
   syncJulgaeFeeToClient(clientId, G.periods.find(p=>p.id===pKey), updated.fee, updated.feeSeongsi); // 거래처목록 조정료·성실료 동기화
   // enrolled가 이미 명시적으로 사용 중인 경우에만 추가 (빈 배열이면 "전체 자동" 상태이므로 건드리지 않음)
