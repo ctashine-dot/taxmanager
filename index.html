@@ -10681,6 +10681,26 @@ function parseAIJson(result) {
   return null;
 }
 
+// 상호·대표자·사업자번호로 거래처 매칭 (사업자번호 > 상호+대표자 > 상호 유일 > 부분일치 유일)
+function _matchClientByInfo(bizNo, name, rep) {
+  const active = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업');
+  const bn = String(bizNo||'').replace(/\D/g,'');
+  if (bn.length===10) { const m=active.find(c=>(c.bizNo||'').replace(/\D/g,'')===bn); if(m) return m; }
+  const nn = s => String(s||'').replace(/\s/g,'').toLowerCase();
+  const tn = nn(name), tr = nn(rep);
+  if (tn && tr) { const m=active.find(c=>nn(c.name)===tn && nn(c.rep)===tr); if(m) return m; }
+  if (tn) { const cand=active.filter(c=>nn(c.name)===tn); if(cand.length===1) return cand[0]; if(cand.length>1 && tr){ const m=cand.find(c=>nn(c.rep)===tr); if(m) return m; } }
+  if (tn && tn.length>=2) { const cand=active.filter(c=>{const n=nn(c.name); return n && (n.includes(tn)||tn.includes(n));}); if(cand.length===1) return cand[0]; }
+  return null;
+}
+// 신고서 검토 상태 초기화 (데이터 교체·새 검토 시 stale 방지)
+function _resetTRRState() {
+  _batchFiles = []; _batchResults = [];
+  window._trrReviewData = null; window._trrFiles = []; window._trrSavedResults = {};
+  ['trr-result','trr-batch-list','trr-batch-results','trr-status'].forEach(id=>{ const e=document.getElementById(id); if(e) e.innerHTML=''; });
+  const bc=document.getElementById('trr-batch-controls'); if(bc) bc.style.display='none';
+}
+
 function openTaxReturnReviewer(type) {
   const typeInfo = {
     vat:    { label: '부가가치세', icon: '🔍', color: '#e65100', bg: '#fff3e0' },
@@ -10689,6 +10709,8 @@ function openTaxReturnReviewer(type) {
   };
   const t = typeInfo[type] || typeInfo.vat;
   window._trrCurrentType = type;
+  // 일괄 검토 상태는 열 때마다 새로 시작(이전 파일 누적 방지)
+  _batchFiles = []; _batchResults = [];
   showModal(`<div style="max-width:640px;width:100%;max-height:calc(100vh - 48px);display:flex;flex-direction:column">
   <div class="modal-header">
     <h3>${t.icon} ${t.label} 신고서 AI 검토</h3>
@@ -10924,9 +10946,9 @@ async function startBatchReview(type) {
     }
     if(statusEl){ statusEl.textContent='AI 분석 중...'; statusEl.style.color='#1565c0'; }
 
-    // 거래처 자동 매칭
+    // 거래처 자동 매칭 (우선 텍스트 사업자번호로)
     const bn = extractBizNo(text);
-    const matchedClient = bn ? G.clients.find(c=>(c.bizNo||'').replace(/\D/g,'')===bn) : null;
+    let matchedClient = _matchClientByInfo(bn, '', '');
 
     // 전년도 비교 데이터 및 업종 컨텍스트 구성
     let _clientCtx = '';
@@ -11022,6 +11044,8 @@ ${text.slice(0, 12000)}
       continue;
     }
     if(statusEl){ statusEl.textContent='완료 ✓'; statusEl.style.color='#2e7d32'; }
+    // 사업자번호 미매칭이면 AI가 읽은 상호·대표자·사업자번호로 재매칭
+    if (!matchedClient && reviewData) matchedClient = _matchClientByInfo(reviewData.bizNo||bn, reviewData.companyName, reviewData.representative);
     const bIdx = _batchResults.length;
     _batchResults.push({file:f.name, data:reviewData, text:reviewText, matchedClient, pKey, recorded:false});
 
@@ -11619,8 +11643,10 @@ function _trrAfterRecord(clientId, pKey) {
       cb.textContent = '🗑 결과 삭제';
       cb.style.cssText = 'padding:10px 14px;background:#fff;color:#e53935;border:1.5px solid #ffcdd2;border-radius:10px;font-size:13px;cursor:pointer;font-family:inherit';
       cb.onclick = () => {
-        document.getElementById('trr-result').innerHTML = '';
-        window._trrReviewData = null;
+        const rz=document.getElementById('trr-result'); if(rz) rz.innerHTML='';
+        const st=document.getElementById('trr-status'); if(st) st.textContent='';
+        const ta=document.getElementById('trr-text-input'); if(ta) ta.value='';
+        window._trrReviewData = null; window._trrFiles = [];
         if (window._trrSavedResults) delete window._trrSavedResults[window._trrCurrentType||''];
       };
       row.appendChild(cb);
@@ -12953,6 +12979,7 @@ function importBackup(input) {
       G.periods  = data.periods  || G.periods;
       G.julgae   = data.julgae   || G.julgae;
       G.settings = data.settings || G.settings;
+      if (typeof _resetTRRState==='function') _resetTRRState(); // 신고서 검토 stale 상태 초기화
       saveToLS();
       st.innerHTML = `<span style="color:#2e7d32">✔ 복원 완료 — 거래처 ${G.clients.length}개</span>`;
       closeModal();
