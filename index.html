@@ -10896,6 +10896,13 @@ function openTaxReturnReviewer(type) {
           ${(G.periods||[]).filter(p=>!p.locked).slice(-20).reverse().map(p=>`<option value="${p.id}">${esc(p.label||p.id)}</option>`).join('')}
         </select>
       </div>
+      <div style="flex:1">
+        <label class="flabel">담당자 (선택)</label>
+        <select id="trr-manager-sel" class="fsel" title="매칭된 거래처의 담당자가 다르면 기록 시 변경 여부를 확인합니다">
+          <option value="">-- 담당자 --</option>
+          ${MANAGERS.slice(1).map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join('')}
+        </select>
+      </div>
     </div>
 
     <div style="display:flex;gap:8px;margin-top:14px">
@@ -10931,12 +10938,21 @@ function openTaxReturnReviewer(type) {
         <div style="font-size:12px;color:#aaa;margin-top:4px">여러 파일 동시 선택 가능</div>
       </div>
       <input type="file" id="trr-batch-input" accept=".pdf" multiple style="display:none" onchange="addBatchFiles(this.files,'${type}')">
-      <div style="margin-top:10px">
-        <label class="flabel">신고기간 (전체 공통 적용)</label>
-        <select id="trr-batch-period" class="fsel">
-          <option value="">-- 선택 --</option>
-          ${(G.periods||[]).filter(p=>!p.locked).slice(-20).reverse().map(p=>`<option value="${p.id}">${esc(p.label||p.id)}</option>`).join('')}
-        </select>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <div style="flex:1">
+          <label class="flabel">신고기간 (전체 공통 적용)</label>
+          <select id="trr-batch-period" class="fsel">
+            <option value="">-- 선택 --</option>
+            ${(G.periods||[]).filter(p=>!p.locked).slice(-20).reverse().map(p=>`<option value="${p.id}">${esc(p.label||p.id)}</option>`).join('')}
+          </select>
+        </div>
+        <div style="flex:1">
+          <label class="flabel">담당자 (전체 공통)</label>
+          <select id="trr-batch-manager" class="fsel" title="담당자별 일괄검토용 — 매칭 거래처의 담당자가 다르면 기록 시 변경 여부를 확인하고, 신규 등록 시 이 담당자로 기본 지정합니다">
+            <option value="">-- 담당자 --</option>
+            ${MANAGERS.slice(1).map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join('')}
+          </select>
+        </div>
       </div>
       <div id="trr-batch-list" style="margin-top:10px"></div>
       <div id="trr-batch-controls" style="display:none;margin-top:12px">
@@ -11335,7 +11351,8 @@ function openNewClientFromBatch(bIdx) {
   const defTax = ((p&&p.reportType)==='corp') ? '법인' : '개인';
   const deals = (typeof DEAL_TYPES!=='undefined'?DEAL_TYPES.slice(1):['기장','신고대리','종소세대리','사업소득자']);
   const mgrs = MANAGERS.slice(1);
-  const defMgr = (G.settings&&G.settings.managers&&G.settings.managers[0])||'';
+  // 담당자별 일괄검토: 상단에서 선택한 담당자를 신규 등록 기본값으로
+  const defMgr = (document.getElementById('trr-batch-manager')?.value) || (G.settings&&G.settings.managers&&G.settings.managers[0])||'';
   el.style.maxHeight='360px'; el.style.display='block';
   el.innerHTML = `<div style="padding:10px;display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px">
     <div style="grid-column:span 2;font-weight:700;color:#2e7d32">➕ 신규 거래처 등록</div>
@@ -11437,6 +11454,24 @@ function _setBatchMgr(bIdx, mgr) {
   _renderBatchMgrChip(bIdx);
 }
 
+// 신고서 검토 기록 시: 선택한 담당자와 매칭 거래처의 담당자가 다르면 변경 여부 확인
+function _promptManagerChange(clientId, selMgr) {
+  if (!selMgr) return;
+  const c = G.clients.find(x => x.id === clientId);
+  if (!c) return;
+  const cur = getManagers(c);
+  if (cur.includes(selMgr)) return; // 이미 해당 담당자면 물어볼 필요 없음
+  const curStr = cur.join(',') || '(미지정)';
+  if (!confirm(`'${c.name}'의 담당자(${curStr})가 선택한 담당자 '${selMgr}'와(과) 다릅니다.\n이 거래처의 담당자를 '${selMgr}'(으)로 변경할까요?`)) return;
+  c.managers = [selMgr]; c.manager = selMgr;
+  if (!G.managerHistory) G.managerHistory = {};
+  if (!G.managerHistory[c.id]) G.managerHistory[c.id] = [];
+  G.managerHistory[c.id].push({ date: new Date().toLocaleString('ko-KR'), from: curStr, to: selMgr });
+  saveToLS();
+  if (typeof renderClients === 'function') renderClients();
+  toast(`${c.name} 담당자 → ${selMgr}`, 'success', 2200);
+}
+
 // 신고유형별 수수료 필드 라벨: 부가세·사업장현황=신고수수료, 법인·소득=조정료, 성실=조정료+성실확인비용
 function _feeLabelConfig(pKey, typeFallback) {
   const p = G.periods.find(x => x.id === pKey);
@@ -11458,6 +11493,8 @@ function batchRecord(bIdx) {
   if (feeVal === null) { toast(`${_fl.feeLabel}을(를) 입력해주세요 (0도 가능)`, 'warning'); return; }
   const feeNum = feeVal || 0;
   const seongsiVal = Number((document.getElementById(`bc-seongsi-${bIdx}`)?.value||'').replace(/,/g,'')) || 0;
+  // 담당자별 일괄검토: 선택한 담당자와 다르면 거래처 담당자 변경 여부 확인
+  _promptManagerChange(item.matchedClient.id, document.getElementById('trr-batch-manager')?.value || '');
   window._trrReviewData = {...(item.data||{}), feeRecommendation: feeNum, feeSeongsi: seongsiVal};
   if (doRecordTRRWith(item.matchedClient.id, item.pKey) === false) return; // 갱신 취소 — 카드 상태 유지
   item.recorded = true;
@@ -11639,6 +11676,7 @@ function _recordScrape() {
   if (!cid) { toast('거래처를 연결해주세요 (상단 거래처 연결)','warning'); return; }
   if (!pk) { toast('신고기간을 선택해주세요 (상단 신고기간 연결)','warning'); return; }
   const fee = Number(String(document.getElementById('scrape-fee')?.value||'0').replace(/[,\s]/g,''))||0;
+  _promptManagerChange(cid, document.getElementById('trr-manager-sel')?.value || '');
   window._trrReviewData = { ...(window._trrReviewData||{}), feeRecommendation: fee };
   if (doRecordTRRWith(cid, pk) !== false) { if (typeof _trrAfterRecord==='function') _trrAfterRecord(cid, pk); }
 }
@@ -12039,6 +12077,7 @@ function recordTRRToJulgae() {
   const pKey = window._trrPKey || document.getElementById('trr-period-sel')?.value || '';
 
   if (clientId) {
+    _promptManagerChange(clientId, document.getElementById('trr-manager-sel')?.value || '');
     if (pKey) { if (doRecordTRRWith(clientId, pKey) !== false) _trrAfterRecord(clientId, pKey); return; }
     openTRRPeriodModal(clientId);
   } else {
