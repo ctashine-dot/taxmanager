@@ -10881,6 +10881,7 @@ function openTaxReturnReviewer(type) {
         📥 내용만 불러오기
       </button>
     </div>
+    ${type==='vat'?`<button onclick="runVatScrapeNoKey('${type}')" style="width:100%;margin-top:8px;padding:9px;background:#f5f5f5;color:#555;border:1.5px solid #e0e0e0;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit" title="API 키 없이 텍스트 PDF에서 항목만 추출(부가세 전용)">🔑 API 키 없이 스크랩 (텍스트 PDF·부가세)</button>`:''}
     <div id="trr-status" style="margin-top:8px;font-size:12px;color:#888;text-align:center"></div>
     <div id="trr-result" style="margin-top:14px"></div>
     </div><!-- /trr-pane-single -->
@@ -11463,6 +11464,66 @@ function autoMatchTRRClient(text) {
     const sel = document.getElementById('trr-client-sel');
     if (sel) { sel.value = matched.id; toast(`거래처 자동 감지: ${matched.name}`, 'success', 2500); }
   }
+}
+
+// ── API 키 없이 부가세 신고서 텍스트에서 항목 스크랩 (텍스트 레이어 PDF 전용) ──
+function _scrapeVatReturn(text) {
+  const T = String(text||'');
+  const dig = s => String(s||'').replace(/\D/g,'');
+  const numAfter = re => { const m=T.match(re); return m ? (Number(dig(m[1]))||0) : 0; };
+  const strAfter = re => { const m=T.match(re); return m ? m[1].trim() : ''; };
+  const d = {};
+  const pm = T.match(/신고기간\s*(\d{4})\s*년\s*제?\s*(\d)\s*기/);
+  if (pm) { const conf = /확\s*정/.test(T) ? '확정' : (/예\s*정/.test(T)?'예정':''); d.period = `${pm[1].slice(2)}년 ${pm[2]}기${conf?' '+conf:''}`; }
+  d.companyName = strAfter(/\(법인명\)\s*([^\n]+)/);
+  d.representative = strAfter(/\(대표자명\)\s*([^\n]+)/);
+  const bnm = T.match(/사업자등록번호\s*([\d\s\-]{10,})/);
+  if (bnm) { const dd = dig(bnm[1]).slice(0,10); if (dd.length===10) d.bizNo = dd.slice(0,3)+'-'+dd.slice(3,5)+'-'+dd.slice(5); }
+  const _head = T.split(/신\s*고\s*내\s*용/)[0] || T; // 세무대리인 전화 오추출 방지(납세자 헤더만)
+  const ph = _head.match(/(01[016789]|0\d{1,2})\s*-\s*\d{3,4}\s*-\s*\d{4}/);
+  if (ph) d.phone = ph[0].replace(/\s/g,'');
+  d.salesAmount = numAfter(/합\s*계\s*\n?\s*\(9\)\s*([\d,]+)/) || numAfter(/과\s*세\s*표\s*준[\s\S]{0,400}?합\s*계\s*\n?\s*([\d,]{4,})/);
+  d.revenue = d.salesAmount;
+  d.purchaseAmount = numAfter(/차\s*감\s*계[^\n]*\n?\s*\(18\)\s*([\d,]+)/) || numAfter(/\(18\)\s*([\d,]+)/);
+  d.vatAmount = numAfter(/\(30\)\s*([\d,]+)/);
+  d.payTax = d.vatAmount;
+  const bc = T.match(/업\s*종\s*코\s*드[\s\S]{0,100}?(\d{6})/) || T.match(/\(3\d\)[^\n]*\n[^\n]*\n\s*(\d{6})/);
+  if (bc) d.bizCode = bc[1];
+  const to = T.match(/([가-힣]{2,10})\s*세무서장?\s*귀하/) || T.match(/([가-힣]{2,10})\s*세무서장/);
+  if (to) d.taxOffice = _normalizeTaxOffice(to[1]+'세무서');
+  d.taxType = '개인';
+  return d;
+}
+function runVatScrapeNoKey(type) {
+  if (type !== 'vat') { toast('키 없이 스크랩은 현재 부가세 신고서만 지원합니다','warning'); return; }
+  const text = (document.getElementById('trr-text-input')||{}).value||'';
+  if (!text.trim()) { toast('신고서 텍스트가 없습니다. PDF 업로드/붙여넣기 후 다시 시도하세요 (스캔 이미지 PDF는 불가)','warning'); return; }
+  const d = _scrapeVatReturn(text);
+  if (!d.bizNo && !d.companyName && !d.salesAmount) { toast('신고서에서 정보를 추출하지 못했습니다 (텍스트 레이어 없는 PDF일 수 있음)','warning'); return; }
+  window._trrReviewData = { ...d, feeRecommendation: 0 };
+  window._trrMatchedClientId = null;
+  autoMatchTRRClient(text);
+  const won = n => (Number(n)||0).toLocaleString();
+  const rows = [['신고기간',d.period||'-'],['상호',d.companyName||'-'],['대표자',d.representative||'-'],['사업자번호',d.bizNo||'-'],['전화번호',d.phone||'-'],['매출액(과세표준)',won(d.salesAmount)+'원'],['매입액(차감계)',won(d.purchaseAmount)+'원'],['납부할세액',won(d.vatAmount)+'원'],['업종코드',d.bizCode||'-'],['관할세무서',d.taxOffice||'-']];
+  const el = document.getElementById('trr-result'); if (!el) return;
+  el.innerHTML = `<div style="background:#eef4ff;border:1.5px solid #a9c9f5;border-radius:12px;padding:14px">
+    <div style="font-size:13px;font-weight:700;color:#1565c0;margin-bottom:8px">🔑 키 없이 스크랩 결과 (부가세)</div>
+    <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:12px">${rows.map(([k,v])=>`<div style="color:#888">${esc(k)}</div><div style="font-weight:600;text-align:right">${esc(String(v))}</div>`).join('')}</div>
+    <div style="margin-top:10px"><label class="flabel">신고수수료 (원)</label>
+      <input id="scrape-fee" type="text" inputmode="numeric" value="" placeholder="0" style="width:100%;box-sizing:border-box;border:1px solid #a5d6a7;border-radius:6px;padding:7px 8px;text-align:right;font-family:inherit" onblur="const s=this.value.replace(/,/g,'').trim();this.value=(s===''?'':(Number(s)||0).toLocaleString())"></div>
+    <button onclick="_recordScrape()" style="width:100%;margin-top:10px;padding:10px;background:#4f8ef7;color:#fff;border:none;border-radius:10px;font-weight:700;cursor:pointer;font-family:inherit">📋 신고리스트에 기록</button>
+    <div style="font-size:10px;color:#aaa;margin-top:6px">※ 텍스트 PDF 자동추출(무키). 값이 맞는지 확인 후, 위 '거래처 연결·신고기간'을 선택하고 기록하세요.</div>
+  </div>`;
+  toast('부가세 신고서 스크랩 완료 — 값 확인 후 기록하세요','success',2500);
+}
+function _recordScrape() {
+  const cid = Number(document.getElementById('trr-client-sel')?.value)||0;
+  const pk = document.getElementById('trr-period-sel')?.value||'';
+  if (!cid) { toast('거래처를 연결해주세요 (상단 거래처 연결)','warning'); return; }
+  if (!pk) { toast('신고기간을 선택해주세요 (상단 신고기간 연결)','warning'); return; }
+  const fee = Number(String(document.getElementById('scrape-fee')?.value||'0').replace(/[,\s]/g,''))||0;
+  window._trrReviewData = { ...(window._trrReviewData||{}), feeRecommendation: fee };
+  if (doRecordTRRWith(cid, pk) !== false) { if (typeof _trrAfterRecord==='function') _trrAfterRecord(cid, pk); }
 }
 
 async function runTaxReturnReview(type, extractOnly) {
