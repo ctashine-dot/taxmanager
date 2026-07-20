@@ -5820,6 +5820,25 @@ function renderJulgae() {
   const isSeongsiType = rt === 'seongsi';
   const hasGkyeong = isVatType && clients.some(c => c.vatType === '겸영');
 
+  // 부가세: 직전 신고리스트(신고시점 기준 바로 앞의 부가세 신고, 기·유형 무관)의 업체별 신고수수료
+  // → 신고수수료 하단에 '직전:xxx' 표시(0이 아닌 값만). 전년 동일유형(prevFeeTxt)과 별개.
+  const prevVatFeeMap = {};
+  if (isVatType && period) {
+    const curFYM = periodFilingYM(period);
+    const priorVatPeriods = G.periods
+      .filter(p => p.id !== period.id && ['vat','vat_hak_1','vat_hak_2','vat_yej'].includes(p.reportType||'') && periodFilingYM(p) && periodFilingYM(p) < curFYM)
+      .sort((a,b) => periodFilingYM(b).localeCompare(periodFilingYM(a))); // 최근 신고순
+    priorVatPeriods.forEach(pp => {
+      const ppData = G.julgae[pp.id] || {};
+      Object.entries(ppData).forEach(([cidStr, v]) => {
+        const cid = Number(cidStr);
+        if (prevVatFeeMap[cid]) return; // 더 최근 신고를 이미 잡음
+        const fee = (v && v.fee) || 0;
+        if (fee > 0) prevVatFeeMap[cid] = { fee, label: pp.label || '' };
+      });
+    });
+  }
+
   // 공동사업자 그룹별 합산 매출 (성실신고 기준 판단용 — baseClients 전체 기준)
   const _grpRevSum = {};
   baseClients.forEach(c => {
@@ -6478,6 +6497,9 @@ function renderJulgae() {
         prev1?.fee ? `<div style="font-size:10px;color:#aaa">전년:${prev1.fee.toLocaleString()}</div>` : '',
         prev2?.fee ? `<div style="font-size:10px;color:#aaa">전전년:${prev2.fee.toLocaleString()}</div>` : ''
       ].join('');
+      // 부가세: 직전 신고리스트(바로 앞 부가세 신고)의 신고수수료(0이 아닐 때만)
+      const _pvf = prevVatFeeMap[c.id];
+      const prevVatFeeTxt = _pvf ? `<div style="font-size:10px;color:#888" title="직전 부가세 신고(${esc(_pvf.label)})의 신고수수료">직전:${_pvf.fee.toLocaleString()}</div>` : '';
       const autoFee  = v.fee       || 0;
       const autoFee2 = v.feeSeongsi || 0;
       // 행 배경: 공동=teal / 동일인=보라 / 관계사=인디고
@@ -6589,7 +6611,7 @@ function renderJulgae() {
         `:`
           <td style="text-align:right;padding:4px 8px;${hc['j_fee']?'display:none':''}">
             ${isMemberRow?'':`${niInput(c.id,'fee',autoFee,autoFee?'font-weight:700;color:#7b1fa2':'')}
-            ${isIncomeType?bosuBadge:(prevFeeTxt)}`}
+            ${isIncomeType?bosuBadge:(prevVatFeeTxt+prevFeeTxt)}`}
           </td>
         `}
         ${isIncomeType?`
@@ -12413,34 +12435,52 @@ function _applyBusinessSites(leadId, pKey, sites) {
       const cand = G.clients.filter(c=>{const n=nNorm(c.name); return n && (n.includes(sName)||sName.includes(n));});
       if (cand.length===1) tc = cand[0];
     }
-    if (!tc) { notFound.push(site.name||'(상호미상)'); return; }
+    if (!tc) { notFound.push({ name: site.name||'(상호미상)', rev, inc }); return; }
     if (matched.some(m=>m.tc.id===tc.id)) return; // 중복 매칭 방지
     matched.push({ tc, rev, inc, isLead: tc.id===lead.id, siteName: site.name||'' });
   });
-  // 실질적으로 그룹(둘 이상 사업장)일 때만 진행
+  // 신고리스트에 없는(매칭 실패) 사업장의 매출·소득은 대표사업장에 합산
+  const unmatchedRev = notFound.reduce((a,s)=>a+s.rev,0);
+  const unmatchedInc = notFound.reduce((a,s)=>a+s.inc,0);
+  // 그룹(둘 이상 매칭)도 아니고 합산할 미매칭 소득도 없으면 종료
   if (matched.length < 2 && !notFound.length) return;
   setTimeout(() => {
+    const isGroup = matched.length >= 2;
     const mLines = matched.map(m=>`· ${esc(m.tc.name)}${m.isLead?' (대표)':''} : 매출 ${m.rev.toLocaleString()} / 소득 ${m.inc.toLocaleString()}`).join('\n');
-    const nfLines = notFound.length ? `\n\n※ 거래처목록에 없어 자동추가 못한 사업장: ${notFound.join(', ')}\n(거래처목록에 먼저 등록 후 다시 반영하세요)` : '';
-    if (!confirm(`사업소득명세서에 사업장이 ${sites.length}개 확인됩니다.\n각 사업장을 '${lead.name}' 그룹으로 묶고 사업장별 매출·소득을 반영할까요?\n\n${mLines}${nfLines}`)) return;
-    const groupKey = lead.incomeGroupKey || ('pgk_' + lead.id);
-    lead.incomeGroupKey = groupKey;
-    lead.groupMain = true;
+    const nfLines = notFound.length ? `\n\n※ 신고리스트에 없는 사업장 → 대표('${lead.name}')에 합산:\n${notFound.map(s=>`· ${esc(s.name)} : 매출 ${s.rev.toLocaleString()} / 소득 ${s.inc.toLocaleString()}`).join('\n')}\n(합산 매출 ${unmatchedRev.toLocaleString()} / 소득 ${unmatchedInc.toLocaleString()})` : '';
+    const q = isGroup
+      ? `사업소득명세서에 사업장이 ${sites.length}개 확인됩니다.\n각 사업장을 '${lead.name}' 그룹으로 묶고 사업장별 매출·소득을 반영할까요?\n\n${mLines}${nfLines}`
+      : `사업소득명세서에 신고리스트에 없는 사업장 ${notFound.length}개가 있습니다.\n이 매출·소득을 대표사업장 '${lead.name}'에 합산할까요?${nfLines}`;
+    if (!confirm(q)) return;
     if (!G.julgae[pKey]) G.julgae[pKey] = {};
     const period = G.periods.find(x=>x.id===pKey);
-    let cnt = 0;
+    const groupKey = lead.incomeGroupKey || ('pgk_' + lead.id);
+    if (isGroup) { lead.incomeGroupKey = groupKey; lead.groupMain = true; }
+    let cnt = 0, leadApplied = false;
     matched.forEach(m => {
-      m.tc.incomeGroupKey = groupKey;
+      if (isGroup) m.tc.incomeGroupKey = groupKey;
       const upd = {...julgaeVal(pKey, m.tc.id)};
-      if (m.rev) upd.revenue = m.rev;
-      if (m.inc) upd.income = m.inc;
+      // 대표사업장: 자기 사업장 값 + 미매칭 사업장 합산
+      const mRev = m.rev + (m.isLead ? unmatchedRev : 0);
+      const mInc = m.inc + (m.isLead ? unmatchedInc : 0);
+      if (mRev) upd.revenue = mRev;
+      if (mInc) upd.income = mInc;
       G.julgae[pKey][m.tc.id] = upd;
+      if (m.isLead) leadApplied = true;
       if (period && period.enrolled?.length>0 && !period.enrolled.includes(m.tc.id)) period.enrolled.push(m.tc.id);
       cnt++;
     });
+    // 대표사업장이 사업소득명세서에서 매칭되지 않은 경우에도 미매칭 소득은 대표에 합산
+    if (!leadApplied && (unmatchedRev || unmatchedInc)) {
+      const upd = {...julgaeVal(pKey, lead.id)};
+      upd.revenue = (upd.revenue||0) + unmatchedRev;
+      upd.income  = (upd.income||0)  + unmatchedInc;
+      G.julgae[pKey][lead.id] = upd;
+    }
     saveToLS();
     renderJulgae();
-    toast(`사업장 ${cnt}개 그룹 반영 완료${notFound.length?` / 미등록 ${notFound.length}개 제외`:''}`, notFound.length?'warning':'success', 5000);
+    const _sumMsg = notFound.length ? ` / 미매칭 ${notFound.length}개 대표합산` : '';
+    toast(isGroup ? `사업장 ${cnt}개 그룹 반영 완료${_sumMsg}` : `미매칭 소득 대표합산 완료`, 'success', 5000);
   }, 800);
 }
 
