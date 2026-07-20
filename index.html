@@ -10830,10 +10830,6 @@ function openTaxReturnReviewer(type) {
     <button class="close-btn" onclick="navBack()">✕</button>
   </div>
   <div class="modal-body" style="overflow-y:auto;flex:1;min-height:0">
-    <div style="display:flex;gap:0;margin-bottom:14px;border:1.5px solid #e0e0e0;border-radius:10px;overflow:hidden">
-      <button id="trr-tab-single" onclick="switchTRRTab('single','${type}')" style="flex:1;padding:9px;background:${t.color};color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">📄 단일 검토</button>
-      <button id="trr-tab-batch" onclick="switchTRRTab('batch','${type}')" style="flex:1;padding:9px;background:#f5f5f5;color:#888;border:none;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">📂 일괄 검토 (여러 파일)</button>
-    </div>
 
     <!-- 단일 검토 탭 -->
     <div id="trr-pane-single">
@@ -10889,11 +10885,15 @@ function openTaxReturnReviewer(type) {
     <div id="trr-result" style="margin-top:14px"></div>
     </div><!-- /trr-pane-single -->
 
-    <!-- 일괄 검토 탭 -->
+    <!-- 일괄 검토(파일 2개 이상 시 자동 전환) -->
     <div id="trr-pane-batch" style="display:none">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <button onclick="switchTRRTab('single','${type}')" style="padding:5px 12px;border-radius:8px;border:1.5px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:12px;cursor:pointer;font-family:inherit">◀ 단일 검토로</button>
+        <span style="font-size:13px;font-weight:700;color:${t.color}">📂 일괄 검토 (여러 파일)</span>
+      </div>
       <div style="font-size:13px;color:#555;line-height:1.7;background:#fafafa;border-radius:10px;padding:12px 14px;margin-bottom:12px">
         여러 거래처의 PDF를 한꺼번에 선택하여 순서대로 AI 검토합니다.<br>
-        각 PDF에서 사업자번호를 자동 감지하여 거래처를 매칭합니다.
+        각 PDF에서 상호·대표자·사업자번호로 거래처를 자동 매칭합니다.
       </div>
       <div id="trr-batch-drop" style="border:2px dashed #e0e0e0;border-radius:12px;padding:24px;text-align:center;cursor:pointer"
         onclick="document.getElementById('trr-batch-input').click()"
@@ -11259,9 +11259,9 @@ function filterBatchClientSearch(q, bIdx) {
     </div>`).join('');
   // 목록에 없으면 신규 거래처로 추가 (검토 문서의 상호 기준)
   const dName = (_batchResults[bIdx] && _batchResults[bIdx].data && _batchResults[bIdx].data.companyName) || q.trim();
-  const addRow = dName ? `<div onclick="addNewClientFromBatch(${bIdx})"
+  const addRow = dName ? `<div onclick="openNewClientFromBatch(${bIdx})"
       style="padding:8px 10px;font-size:12px;cursor:pointer;border-top:1px solid #eee;background:#f1f8e9;color:#2e7d32;font-weight:700"
-      onmouseover="this.style.background='#dcedc8'" onmouseout="this.style.background='#f1f8e9'">➕ "${esc(dName)}" 신규 거래처로 추가</div>` : '';
+      onmouseover="this.style.background='#dcedc8'" onmouseout="this.style.background='#f1f8e9'">➕ "${esc(dName)}" 신규 거래처로 등록…</div>` : '';
   if (!rows && !addRow) { listEl.style.display='none'; return; }
   listEl.innerHTML = (rows || (kw||digits?'<div style="padding:8px;font-size:12px;color:#aaa;text-align:center">일치하는 거래처 없음</div>':'')) + addRow;
   listEl.style.display='block';
@@ -11295,6 +11295,62 @@ function addNewClientFromBatch(bIdx) {
   const searchEl = document.getElementById(`bc-search-${bIdx}`); if (searchEl) searchEl.style.display='none';
   _renderBatchMgrChip(bIdx);
   toast(`신규 거래처 "${name}" 추가 — 이제 기록하세요`,'success',3000);
+  if (typeof renderClients==='function') renderClients();
+}
+// 신규 거래처 등록 — 수임유형·담당자·기장료·수임경로 입력(카드 내 인라인 폼)
+function openNewClientFromBatch(bIdx) {
+  const item = _batchResults[bIdx];
+  const el = document.getElementById(`bc-search-${bIdx}`);
+  if (!item || !item.data || !el) return;
+  const d = item.data;
+  const p = G.periods.find(x=>x.id===item.pKey);
+  const defTax = ((p&&p.reportType)==='corp') ? '법인' : '개인';
+  const deals = (typeof DEAL_TYPES!=='undefined'?DEAL_TYPES.slice(1):['기장','신고대리','종소세대리','사업소득자']);
+  const mgrs = MANAGERS.slice(1);
+  const defMgr = (G.settings&&G.settings.managers&&G.settings.managers[0])||'';
+  el.style.maxHeight='360px'; el.style.display='block';
+  el.innerHTML = `<div style="padding:10px;display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px">
+    <div style="grid-column:span 2;font-weight:700;color:#2e7d32">➕ 신규 거래처 등록</div>
+    <div style="grid-column:span 2"><div style="color:#888;margin-bottom:2px">상호 *</div><input id="ncb-name-${bIdx}" value="${esc(d.companyName||'')}" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:6px;padding:5px 7px;font-family:inherit"></div>
+    <div><div style="color:#888;margin-bottom:2px">대표자</div><input id="ncb-rep-${bIdx}" value="${esc(d.representative||'')}" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:6px;padding:5px 7px;font-family:inherit"></div>
+    <div><div style="color:#888;margin-bottom:2px">사업자번호</div><input id="ncb-bizno-${bIdx}" value="${esc(d.bizNo||'')}" inputmode="numeric" oninput="formatBiz(this.value,this)" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:6px;padding:5px 7px;font-family:inherit"></div>
+    <div><div style="color:#888;margin-bottom:2px">인격</div><select id="ncb-tax-${bIdx}" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:6px;padding:5px 7px;font-family:inherit">${['개인','법인'].map(v=>`<option${v===defTax?' selected':''}>${v}</option>`).join('')}</select></div>
+    <div><div style="color:#888;margin-bottom:2px">수임유형</div><select id="ncb-deal-${bIdx}" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:6px;padding:5px 7px;font-family:inherit">${deals.map(v=>`<option${v==='신고대리'?' selected':''}>${esc(v)}</option>`).join('')}</select></div>
+    <div><div style="color:#888;margin-bottom:2px">담당자</div><select id="ncb-mgr-${bIdx}" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:6px;padding:5px 7px;font-family:inherit"><option value="">(미지정)</option>${mgrs.map(v=>`<option${v===defMgr?' selected':''}>${esc(v)}</option>`).join('')}</select></div>
+    <div><div style="color:#888;margin-bottom:2px">기장료(월,원)</div><input id="ncb-fee-${bIdx}" type="number" inputmode="numeric" value="0" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:6px;padding:5px 7px;font-family:inherit"></div>
+    <div style="grid-column:span 2"><div style="color:#888;margin-bottom:2px">수임경로</div><select id="ncb-route-${bIdx}" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:6px;padding:5px 7px;font-family:inherit">${['세무사','직원','거래처','컨설팅업체'].map(v=>`<option>${v}</option>`).join('')}</select></div>
+    <button onclick="_submitNewClientFromBatch(${bIdx})" style="grid-column:span 2;padding:8px;background:#4f8ef7;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:2px">추가하고 매칭</button>
+  </div>`;
+}
+function _submitNewClientFromBatch(bIdx) {
+  const item = _batchResults[bIdx]; if (!item) return;
+  const g = id => document.getElementById(`${id}-${bIdx}`);
+  const name = (g('ncb-name')?.value||'').trim();
+  if (!name) { toast('상호를 입력해주세요','warning'); return; }
+  const deal = g('ncb-deal')?.value || '신고대리';
+  const mgr = g('ncb-mgr')?.value || '';
+  const route = g('ncb-route')?.value || '세무사';
+  const taxType = g('ncb-tax')?.value || '개인';
+  const newId = Date.now();
+  const newClient = {
+    id:newId, name, rep:(g('ncb-rep')?.value||'').trim(), bizNo:formatBiz(g('ncb-bizno')?.value||''), jumin:'',
+    relatedGroup:'', phone:'', email:'', taxType, vatType:'일반', bizType:'', taxOffice:'',
+    manager: mgr, managers: mgr?[mgr]:[],
+    fee: Number(String(g('ncb-fee')?.value||'0').replace(/[,\s]/g,''))||0, feeSingo:0, feeJojung:0, feeSeongsi:0, feeStatus:'청구완료',
+    dealType: deal, dealTypes:[deal], contracts: (typeof getDefaultContracts==='function'?getDefaultContracts(deal, taxType, '일반'):[deal]),
+    route, routeDetail: route==='세무사' ? ((G.settings&&G.settings.rep)||'대표 세무사') : '',
+    status:'정상', dataReceived:false, bookkeeping:false, approved:false, memo:'',
+    contractDate:new Date().toISOString().slice(0,10), terminationDate:'', terminationReason:'',
+    closureYear:'', closureTaxFiled:false, closureTaxApproved:false, jointBiz:false, openDate:'', closeDate:''
+  };
+  G.clients.push(newClient);
+  saveToLS();
+  item.matchedClient = newClient;
+  const matchEl = document.getElementById(`bc-match-${bIdx}`);
+  if (matchEl) { matchEl.textContent = `✓ ${name} (신규)`; matchEl.style.color='#2e7d32'; matchEl.style.background='#e8f5e9'; }
+  const searchEl = document.getElementById(`bc-search-${bIdx}`); if (searchEl) searchEl.style.display='none';
+  _renderBatchMgrChip(bIdx);
+  toast(`신규 거래처 "${name}"(${deal}${mgr?'·'+mgr:''}) 추가 — 이제 기록하세요`,'success',3200);
   if (typeof renderClients==='function') renderClients();
 }
 
