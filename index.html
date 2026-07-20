@@ -11173,7 +11173,7 @@ function batchRecord(bIdx) {
   const feeNum = feeVal || 0;
   const seongsiVal = Number((document.getElementById(`bc-seongsi-${bIdx}`)?.value||'').replace(/,/g,'')) || 0;
   window._trrReviewData = {...(item.data||{}), feeRecommendation: feeNum, feeSeongsi: seongsiVal};
-  doRecordTRRWith(item.matchedClient.id, item.pKey);
+  if (doRecordTRRWith(item.matchedClient.id, item.pKey) === false) return; // 갱신 취소 — 카드 상태 유지
   item.recorded = true;
   const card = document.getElementById(`batch-card-${bIdx}`);
   if (card) {
@@ -11595,7 +11595,7 @@ function recordTRRToJulgae() {
   const pKey = window._trrPKey || document.getElementById('trr-period-sel')?.value || '';
 
   if (clientId) {
-    if (pKey) { doRecordTRRWith(clientId, pKey); _trrAfterRecord(clientId, pKey); return; }
+    if (pKey) { if (doRecordTRRWith(clientId, pKey) !== false) _trrAfterRecord(clientId, pKey); return; }
     openTRRPeriodModal(clientId);
   } else {
     openTRRUnmatchedModal();
@@ -11658,7 +11658,7 @@ function openTRRPeriodModal(clientId) {
         <option value="">-- 선택 --</option>
         ${(G.periods||[]).filter(p=>!p.locked).slice(-20).reverse().map(p=>`<option value="${p.id}">${esc(p.label||p.id)}</option>`).join('')}
       </select>
-      <button class="btn-primary" style="width:100%" onclick="(()=>{const pk=document.getElementById('trr-period-only')?.value;if(!pk){toast('신고기간을 선택해주세요','warning');return;}closeModal();doRecordTRRWith(${clientId},pk);_trrAfterRecord(${clientId},pk)})()">기록하기</button>
+      <button class="btn-primary" style="width:100%" onclick="(()=>{const pk=document.getElementById('trr-period-only')?.value;if(!pk){toast('신고기간을 선택해주세요','warning');return;}closeModal();if(doRecordTRRWith(${clientId},pk)!==false)_trrAfterRecord(${clientId},pk)})()">기록하기</button>
     </div>
   </div>`);
 }
@@ -11898,9 +11898,34 @@ function doRecordTRR() {
   doRecordTRRWith(cid, pk);
 }
 
+// 신고리스트 값에 유의미한 기록이 있는지
+function _julgaeHasData(v) {
+  if (!v || typeof v !== 'object') return false;
+  return !!(v.revenue||v.salesAmount||v.income||v.taxBase||v.totalTax||v.payTax||v.purchaseAmount||v.vatAmount||v.fee||v.feeSeongsi||v.d||v.a||v.s);
+}
+// 기존값 → 신규값 비교 확인 메시지
+function _buildOverwriteMsg(pKey, clientId, ex, data) {
+  const c = G.clients.find(x=>x.id===clientId);
+  const p = G.periods.find(x=>x.id===pKey);
+  const fl = _feeLabelConfig(pKey);
+  const won = n => (Number(n)||0).toLocaleString();
+  const num = x => { const n=Number(String(x==null?'':x).replace(/[,\s원]/g,'')); return isNaN(n)?0:n; };
+  const rows = [];
+  const cmp = (label, oldV, newV) => rows.push(`· ${label}: ${won(oldV)} → ${won(newV)}`);
+  cmp('수입금액', ex.revenue, num(data.revenue));
+  if (fl.feeLabel==='신고수수료') cmp('매출액', ex.salesAmount, num(data.salesAmount));
+  cmp('납부세액', ex.payTax, num(data.payTax));
+  cmp(fl.feeLabel, ex.fee, num(data.feeRecommendation));
+  if (fl.showSeongsi) cmp('성실확인비용', ex.feeSeongsi, num(data.feeSeongsi));
+  return `이미 '${c?.name||clientId}' / '${p?.label||pKey}'에 기록된 값이 있습니다.\n새 검토 결과로 갱신할까요?\n\n(기존 → 신규)\n${rows.join('\n')}\n\n[확인] 갱신   [취소] 유지`;
+}
+
 function doRecordTRRWith(clientId, pKey) {
   const data = window._trrReviewData;
-  if (!data) return;
+  if (!data) return false;
+  // 기존 기록값이 있으면 비교 후 갱신 여부 확인
+  const _existing = (G.julgae[pKey]||{})[clientId];
+  if (_existing && _julgaeHasData(_existing) && !confirm(_buildOverwriteMsg(pKey, clientId, _existing, data))) return false;
   if (!G.julgae[pKey]) G.julgae[pKey] = {};
   const cur = julgaeVal(pKey, clientId);
   const num = x => { const n = Number(String(x==null?'':x).replace(/[,\s원]/g,'')); return isNaN(n)?0:n; };
@@ -11941,6 +11966,7 @@ function doRecordTRRWith(clientId, pKey) {
   toast(`✅ ${c?.name||clientId} / ${p?.label||pKey} 신고리스트에 기록 완료`, 'success', 3500);
   _promptFillMissingClientInfo(clientId, data); // 거래처목록 누락 정보 보완 제안
   _applyBusinessSites(clientId, pKey, data.businessSites); // 사업소득명세서 사업장별 매출·소득 반영(그룹)
+  return true;
 }
 
 // 종합소득세 사업소득명세서: 사업장이 2개 이상이면 각 사업장을 그룹으로 묶고 사업장별 매출·소득 반영
