@@ -4072,21 +4072,94 @@ function applyStatusChange(id) {
 function deleteClient(id) {
   const c = G.clients.find(x=>x.id===id);
   if (!c) return;
-  // 신고리스트에 기록된 데이터가 있으면 완전삭제 대신 '목록 제외'로 보존
   const hasJulgaeData = (G.periods||[]).some(p => periodHasClientData(p, c));
-  if (hasJulgaeData) {
-    if (!confirm(`"${c.name}"에는 신고리스트에 기록된 데이터(매출액 등)가 있습니다.\n\n거래처 목록에서는 제외하되, 신고리스트 기록은 '거래처목록 제외' 상태로 그대로 보존합니다.\n계속하시겠습니까?`)) return;
-    c.listRemoved = true;               // 거래처목록에서 숨김
-    if (!G.managerHistory) G.managerHistory = {};
-    // 신고리스트(G.julgae) 데이터는 삭제하지 않음
-  } else {
-    if (!confirm(`"${c.name}" 거래처를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
-    G.clients = G.clients.filter(x=>x.id!==id);
-    for (const pKey of Object.keys(G.julgae)) { delete G.julgae[pKey][id]; }
-  }
-  saveToLS();
-  renderClients();
+  const dataMsg = hasJulgaeData
+    ? `<div style="font-size:12px;color:#c62828;background:#fdecea;border:1px solid #f3a3c3;border-radius:8px;padding:8px 10px;margin-bottom:12px">⚠ 이 거래처는 <b>신고리스트에 기록된 데이터(매출액 등)</b>가 있습니다.</div>`
+    : `<div style="font-size:12px;color:#888;margin-bottom:12px">신고리스트에 기록된 데이터는 없습니다.</div>`;
+  showModal(`<div style="max-width:420px;width:92vw">
+    <div class="modal-header"><h3>🗑 거래처 삭제 — ${esc(c.name)}</h3><button class="close-btn" onclick="navBack()">✕</button></div>
+    <div class="modal-body">
+      ${dataMsg}
+      <div style="display:flex;flex-direction:column;gap:8px">
+        ${hasJulgaeData?`<button onclick="_deleteClientListRemove(${id})" style="padding:11px;border-radius:10px;border:1.5px solid #90caf9;background:#e8f0fe;color:#1565c0;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left">📋 목록에서만 제외 <span style="font-weight:400;font-size:11px;color:#555">(신고리스트 기록 보존 · 권장)</span></button>`:''}
+        <button onclick="openMergeClient(${id})" style="padding:11px;border-radius:10px;border:1.5px solid #a5d6a7;background:#e8f5e9;color:#2e7d32;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left">🔀 다른 업체로 병합 후 삭제 <span style="font-weight:400;font-size:11px;color:#555">(중복 업체 정리)</span></button>
+        <button onclick="_deleteClientFull(${id})" style="padding:11px;border-radius:10px;border:1.5px solid #ef9a9a;background:#fdecea;color:#c62828;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left">🗑 완전 삭제 <span style="font-weight:400;font-size:11px;color:#555">(신고리스트 기록도 함께 삭제 · 복구 불가)</span></button>
+        <button onclick="navBack()" style="padding:10px;border-radius:10px;border:1px solid #e0e0e0;background:#f5f5f5;color:#555;font-size:13px;cursor:pointer;font-family:inherit">보류 (취소)</button>
+      </div>
+    </div>
+  </div>`);
+}
+function _deleteClientListRemove(id) {
+  const c = G.clients.find(x=>x.id===id); if (!c) return;
+  c.listRemoved = true; // 목록에서만 제외, 신고리스트 데이터 보존
+  saveToLS(); closeModal(); renderClients();
   if (typeof renderJulgae==='function') renderJulgae();
+  toast(`"${c.name}" 목록에서 제외(신고리스트 보존)`, 'success', 2500);
+}
+function _deleteClientFull(id) {
+  const c = G.clients.find(x=>x.id===id); if (!c) return;
+  if (!confirm(`"${c.name}"를 완전 삭제합니다.\n신고리스트에 기록된 데이터도 함께 삭제되며 되돌릴 수 없습니다.\n계속하시겠습니까?`)) return;
+  G.clients = G.clients.filter(x=>x.id!==id);
+  for (const pKey of Object.keys(G.julgae||{})) { delete G.julgae[pKey][id]; }
+  saveToLS(); closeModal(); renderClients();
+  if (typeof renderJulgae==='function') renderJulgae();
+  toast(`"${c.name}" 완전 삭제됨`, 'info', 2500);
+}
+// 중복 업체 병합: source를 target에 합치고 source 삭제
+function openMergeClient(sourceId) {
+  const src = G.clients.find(c=>c.id===sourceId); if (!src) return;
+  const nn = s => String(s||'').replace(/\s+/g,'');
+  const bnn = s => String(s||'').replace(/\D/g,'');
+  // 후보: 같은 상호 또는 같은(유효) 사업자번호
+  const cand = G.clients.filter(c=>c.id!==sourceId && !c.listRemoved && (
+    nn(c.name)===nn(src.name) ||
+    (src.bizNo && c.bizNo && bnn(c.bizNo)===bnn(src.bizNo) && !/^0+$/.test(bnn(src.bizNo)))
+  ));
+  const row = c => `<div onclick="mergeClients(${sourceId},${c.id})" style="padding:9px 10px;border-bottom:1px solid #f0f0f0;cursor:pointer;font-size:13px" onmouseover="this.style.background='#f0f7ff'" onmouseout="this.style.background=''"><b>${esc(c.name)}</b> <span style="color:#888;font-size:11px">${esc(c.rep||'')}</span>${c.bizNo?` <span style="color:#aaa;font-family:monospace;font-size:11px">${esc(c.bizNo)}</span>`:''} <span style="color:#2e7d32;font-size:11px">← 여기로 병합</span></div>`;
+  showModal(`<div style="max-width:460px;width:92vw">
+    <div class="modal-header"><h3>🔀 병합 대상 선택 — ${esc(src.name)}</h3><button class="close-btn" onclick="navBack()">✕</button></div>
+    <div class="modal-body">
+      <div style="font-size:12px;color:#555;margin-bottom:8px">"${esc(src.name)}"의 신고리스트·수수료·태그·메모를 아래에서 고른 <b>남길 업체</b>로 옮긴 뒤 이 업체는 삭제됩니다.</div>
+      <input type="text" placeholder="남길 업체 검색 (상호/대표자/사업자번호)" oninput="_mergeSearch(this.value,${sourceId})" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;margin-bottom:6px">
+      <div id="merge-cand-list" style="max-height:300px;overflow-y:auto;border:1px solid #eee;border-radius:8px">${cand.length?cand.map(row).join(''):'<div style="padding:12px;color:#aaa;font-size:12px;text-align:center">동일 상호·사업자번호 후보 없음 — 위에서 검색하세요</div>'}</div>
+    </div>
+  </div>`);
+}
+function _mergeSearch(q, sourceId) {
+  const el = document.getElementById('merge-cand-list'); if (!el) return;
+  const kw = q.trim().toLowerCase(); const dg = q.replace(/\D/g,'');
+  const list = G.clients.filter(c=>c.id!==sourceId && !c.listRemoved && (
+    (kw && ((c.name||'').toLowerCase().includes(kw) || (c.rep||'').toLowerCase().includes(kw))) ||
+    (dg.length>=3 && (c.bizNo||'').replace(/\D/g,'').includes(dg))
+  )).slice(0,20);
+  const row = c => `<div onclick="mergeClients(${sourceId},${c.id})" style="padding:9px 10px;border-bottom:1px solid #f0f0f0;cursor:pointer;font-size:13px" onmouseover="this.style.background='#f0f7ff'" onmouseout="this.style.background=''"><b>${esc(c.name)}</b> <span style="color:#888;font-size:11px">${esc(c.rep||'')}</span>${c.bizNo?` <span style="color:#aaa;font-family:monospace;font-size:11px">${esc(c.bizNo)}</span>`:''} <span style="color:#2e7d32;font-size:11px">← 여기로 병합</span></div>`;
+  el.innerHTML = list.length ? list.map(row).join('') : '<div style="padding:12px;color:#aaa;font-size:12px;text-align:center">검색 결과 없음</div>';
+}
+function mergeClients(sourceId, targetId) {
+  if (sourceId===targetId) return;
+  const src = G.clients.find(c=>c.id===sourceId), tgt = G.clients.find(c=>c.id===targetId);
+  if (!src || !tgt) return;
+  if (!confirm(`"${src.name}"를 "${tgt.name}"(으)로 병합합니다.\n신고리스트·수수료·태그·메모가 "${tgt.name}"로 옮겨지고 "${src.name}"는 삭제됩니다.\n계속하시겠습니까?`)) return;
+  // 신고리스트: 대상에 데이터 없는 기간만 이동
+  for (const pKey of Object.keys(G.julgae||{})) {
+    const pv = G.julgae[pKey]; if (!pv || pv[sourceId]===undefined) continue;
+    if (pv[targetId]===undefined || !_julgaeHasData(pv[targetId])) pv[targetId] = pv[sourceId];
+    delete pv[sourceId];
+  }
+  const moveMap = (m) => { if (m && m[sourceId]!==undefined) { if (m[targetId]===undefined) m[targetId]=m[sourceId]; else if (Array.isArray(m[targetId])&&Array.isArray(m[sourceId])) m[targetId]=[...m[targetId],...m[sourceId]]; else if (typeof m[targetId]==='object') m[targetId]={...m[sourceId],...m[targetId]}; delete m[sourceId]; } };
+  moveMap(G.monthlyFees); moveMap(G.feePayments); moveMap(G.adHocFees); moveMap(G.docChecklist); moveMap(G.feeHistory);
+  if (G.clientTags && G.clientTags[sourceId]) { G.clientTags[targetId]=[...new Set([...(G.clientTags[targetId]||[]), ...G.clientTags[sourceId]])]; delete G.clientTags[sourceId]; }
+  if (G.clientNotes && G.clientNotes[sourceId]) { G.clientNotes[targetId]=[...(G.clientNotes[targetId]||[]), ...G.clientNotes[sourceId]]; delete G.clientNotes[sourceId]; }
+  if (G.managerHistory && G.managerHistory[sourceId]) { G.managerHistory[targetId]=[...(G.managerHistory[targetId]||[]), ...G.managerHistory[sourceId]]; delete G.managerHistory[sourceId]; }
+  if (Array.isArray(G.favorites)) G.favorites = G.favorites.filter(x=>x!==sourceId);
+  // 대상의 빈 정보는 원본값으로 보완
+  ['bizNo','jumin','phone','email','bizType','bizCode','taxOffice','contractDate','openDate','rep'].forEach(f=>{ if (!String(tgt[f]||'').trim() && String(src[f]||'').trim()) tgt[f]=src[f]; });
+  // 신고기간 enrolled/excluded에서 source→target 치환
+  (G.periods||[]).forEach(pp=>{ if (Array.isArray(pp.enrolled)) pp.enrolled=[...new Set(pp.enrolled.map(x=>x===sourceId?targetId:x))]; if (Array.isArray(pp.excluded)) pp.excluded=pp.excluded.filter(x=>x!==sourceId); });
+  G.clients = G.clients.filter(c=>c.id!==sourceId);
+  saveToLS(); closeModal(); renderClients();
+  if (typeof renderJulgae==='function') renderJulgae();
+  toast(`"${src.name}" → "${tgt.name}" 병합 완료`, 'success', 3000);
 }
 
 function toggleClientSelect(id) {
@@ -4958,18 +5031,18 @@ window.saveForm = function(id) {
     if (!confirm(`동일한 상호(${d.name})와 대표자명(${d.rep})의 거래처가 이미 있습니다.\n중복 업체입니까?\n\n[확인] 계속 추가  [취소] 돌아가기`)) return;
   }
 
-  // 사업자번호 중복 검사
+  // 사업자번호 중복 검사 (000-00-00000 등 임시번호(전부 0)는 중복 검사 제외)
   const bn = (d.bizNo||'').replace(/[-\s]/g,'');
-  if (bn) {
+  if (bn && !/^0+$/.test(bn)) {
     const bizDup = G.clients.find(c => c.id !== id && c.bizNo && c.bizNo.replace(/[-\s]/g,'') === bn);
     if (bizDup) {
       if (!confirm(`사업자번호(${d.bizNo})가 이미 등록된 거래처(${bizDup.name})와 중복됩니다.\n부가세는 사업장별로 신고하므로 결재리스트에서 중복될 수 있습니다.\n\n[확인] 계속 추가  [취소] 돌아가기`)) return;
     }
   }
 
-  // 주민번호/법인등록번호 중복 검사
+  // 주민번호/법인등록번호 중복 검사 (전부 0인 임시번호는 제외)
   const jn = (d.jumin||'').replace(/[-\s]/g,'');
-  if (jn) {
+  if (jn && !/^0+$/.test(jn)) {
     const juminDup = G.clients.find(c => c.id !== id && c.jumin && c.jumin.replace(/[-\s]/g,'') === jn);
     if (juminDup) {
       const lbl = d.taxType === '법인' ? '법인등록번호' : '주민번호';
