@@ -11905,20 +11905,21 @@ function doRecordTRRWith(clientId, pKey) {
   const cur = julgaeVal(pKey, clientId);
   const num = x => { const n = Number(String(x==null?'':x).replace(/[,\s원]/g,'')); return isNaN(n)?0:n; };
   const updated = {...cur};
-  const setIf = (k, val) => { if (val) updated[k] = val; }; // 0/미추출은 기존값 유지
-  setIf('revenue', num(data.revenue));
-  setIf('income', num(data.income));
-  setIf('taxBase', num(data.taxBase));
-  setIf('totalTax', num(data.totalTax));
-  setIf('payTax', num(data.payTax));
-  setIf('salesAmount', num(data.salesAmount));
-  setIf('purchaseAmount', num(data.purchaseAmount));
-  setIf('vatAmount', num(data.vatAmount));
-  setIf('prevRevenue', num(data.prevRevenue));
-  // 주민세(지방소득세): 신고서 명시값 우선, 없으면 결정세액(totalTax)의 10% 자동
-  setIf('residentTax', num(data.residentTax) || (num(data.totalTax) ? Math.round(num(data.totalTax)*0.1) : 0));
-  setIf('fee', num(data.feeRecommendation));
-  setIf('feeSeongsi', num(data.feeSeongsi));
+  const setIf = (k, val) => { if (val) updated[k] = val; }; // 문맥값(직전매출 등)은 미추출 시 기존값 유지
+  // 신고서상 금액은 미추출·없음이면 0으로 명시 기록 (수입·매출·세액·수수료 등)
+  updated.revenue        = num(data.revenue);
+  updated.income         = num(data.income);
+  updated.taxBase        = num(data.taxBase);
+  updated.totalTax       = num(data.totalTax);
+  updated.payTax         = num(data.payTax);
+  updated.salesAmount    = num(data.salesAmount);
+  updated.purchaseAmount = num(data.purchaseAmount);
+  updated.vatAmount      = num(data.vatAmount);
+  // 주민세(지방소득세): 신고서 명시값 우선, 없으면 결정세액(totalTax)의 10% 자동, 그래도 없으면 0
+  updated.residentTax    = num(data.residentTax) || (num(data.totalTax) ? Math.round(num(data.totalTax)*0.1) : 0);
+  updated.fee            = num(data.feeRecommendation);
+  updated.feeSeongsi     = num(data.feeSeongsi);
+  setIf('prevRevenue', num(data.prevRevenue)); // 직전매출은 신고서에 없을 수 있어 미추출 시 기존값 유지
   // 신고서를 검토·반영했으므로 진행상태(자료수령·기장·상담·결재) 자동 완료 처리
   updated.d = true; updated.b = true; updated.c = true; updated.a = true;
   G.julgae[pKey][clientId] = updated;
