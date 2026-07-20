@@ -14131,8 +14131,11 @@ function checkAllJulgaeField(field) {
   const pKey = period.id;
   // 현재 화면에 실제로 보이는 목록(_julgaeVisible)에만 적용 — 필터/검색 적용된 집합과 일치, 숨겨진 거래처 오염 방지
   const ids = (window._julgaeVisible || []).filter(c => !c._julgaeAdhoc).map(c => c.id);
+  if (!ids.length) { toast('대상 거래처가 없습니다', 'info'); return; }
   const allOn = ids.every(id => !!(G.julgae[pKey]?.[id]?.[field]));
   const newVal = !allOn;
+  const _label = { b:'기장', c:'상담', a:'결재' }[field] || field;
+  if (!confirm(`${_label} 항목을 현재 목록 ${ids.length}개 거래처 전체 ${newVal?'선택':'해제'} 하시겠습니까?`)) return; // 실수 방지
   if (!G.julgae[pKey]) G.julgae[pKey] = {};
   ids.forEach(id => {
     if (!G.julgae[pKey][id]) G.julgae[pKey][id] = {};
