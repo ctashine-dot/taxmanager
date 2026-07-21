@@ -576,10 +576,10 @@ const PERIOD_TEMPLATES = [
 ];
 
 const REPORT_TYPE_FILTERS = {
-  vat:      c => c.vatType === '일반' || c.vatType === '간이' || c.vatType === '간세',
-  vat_hak_1:c => c.vatType === '일반',
-  vat_hak_2:c => c.vatType === '일반' || c.vatType === '간이' || c.vatType === '간세',
-  vat_yej:  c => c.taxType === '법인' && c.vatType === '일반',
+  vat:      c => ['일반','영세','겸영','간이','간세'].includes(c.vatType),
+  vat_hak_1:c => ['일반','영세','겸영'].includes(c.vatType), // 겸영·영세도 일반과세 확정신고 대상
+  vat_hak_2:c => ['일반','영세','겸영','간이','간세'].includes(c.vatType),
+  vat_yej:  c => c.taxType === '법인' && ['일반','영세','겸영'].includes(c.vatType),
   corp:     c => c.taxType === '법인',
   income:   c => (c.taxType === '개인' && !getDealTypes(c).includes('성실')) || (c.taxType === '법인' && c.repIncomeTaxFiling),
   seongsi:  c => c.taxType === '개인' && getDealTypes(c).includes('성실'),
@@ -6665,8 +6665,8 @@ function renderJulgae() {
           ${(()=>{const _rt=v.residentTax||Math.round((v.totalTax||0)*0.1);const ts=(v.payTax||0)+_rt;return`<td data-jsum="${pKey2}_${c.id}" style="text-align:right;padding:4px 8px;font-size:12px;font-weight:600;color:#333;${hc['j_col_totalsum']?'display:none':''}">${isMemberRow?'':(ts?ts.toLocaleString():'-')}</td>`})()}
           <td style="text-align:right;padding:4px 8px;${hc['j_col_prevrevenue']?'display:none':''}">${isMemberRow?'':niInput(c.id,'prevRevenue',v.prevRevenue)}</td>
         `:isVatType?`
-          <td style="text-align:right;padding:4px 8px;${hc['j_col_revenue']?'display:none':''}">${niInput(c.id,'salesAmount',v.salesAmount)}${prevRevTxt}${revAuxBadge}</td>
-          <td style="text-align:right;padding:4px 8px;${hc['j_col_purchase']?'display:none':''}">${niInput(c.id,'purchaseAmount',v.purchaseAmount)}</td>
+          <td style="text-align:right;padding:4px 8px;${hc['j_col_revenue']?'display:none':''}">${niInput(c.id,'salesAmount',v.salesAmount)}${v.salesExempt>0?`<div style="font-size:9px;color:#7b1fa2;font-weight:700" title="계산서 발급(면세) ${(v.salesExempt||0).toLocaleString()}원 포함">(과+면)</div>`:''}${prevRevTxt}${revAuxBadge}</td>
+          <td style="text-align:right;padding:4px 8px;${hc['j_col_purchase']?'display:none':''}">${niInput(c.id,'purchaseAmount',v.purchaseAmount)}${v.purchaseExempt>0?`<div style="font-size:9px;color:#7b1fa2;font-weight:700" title="계산서 수취(면세) ${(v.purchaseExempt||0).toLocaleString()}원 포함">(과+면)</div>`:''}</td>
           <td style="text-align:right;padding:4px 8px;${hc['j_col_vat']?'display:none':''}">${niInput(c.id,'vatAmount',v.vatAmount)}</td>
           ${hasGkyeong?`<td style="text-align:right;padding:4px 8px;${hc['j_col_exempt_sales']?'display:none':''}">${c.vatType==='겸영'?niInput(c.id,'taxExemptSales',v.taxExemptSales):''}</td><td style="text-align:right;padding:4px 8px;${hc['j_col_exempt_purchase']?'display:none':''}">${c.vatType==='겸영'?niInput(c.id,'taxExemptPurchases',v.taxExemptPurchases):''}</td>`:''}
         `:isSajupType?`
@@ -11798,10 +11798,20 @@ function _scrapeVatReturn(text) {
   const _head = T.split(/신\s*고\s*내\s*용/)[0] || T; // 세무대리인 전화 오추출 방지(납세자 헤더만)
   const ph = _head.match(/(01[016789]|0\d{1,2})\s*-\s*\d{3,4}\s*-\s*\d{4}/);
   if (ph) d.phone = ph[0].replace(/\s/g,'');
-  d.salesAmount = numAfter(/합\s*계\s*\n?\s*\(9\)\s*([\d,]+)/) || numAfter(/과\s*세\s*표\s*준[\s\S]{0,400}?합\s*계\s*\n?\s*([\d,]{4,})/);
+  // 부호 보존 숫자(환급=음수): 앞의 -,△,▲ 또는 '환급' 문구면 음수
+  const numAfterS = re => { const m=T.match(re); if(!m) return 0; const n=Number(dig(m[1]))||0; const neg=/^\s*[-△▲]/.test(m[1])||/환\s*급/.test(m[0]); return neg?-n:n; };
+  // 매출액 = 과세표준및매출세액 '합계'(9). (9)가 공란이면 0(과세 매출 없음) — 느슨한 fallback은 계산서합계표를 잘못 잡으므로 제거
+  d.salesAmount = numAfter(/합\s*계\s*\n?\s*\(9\)\s*([\d,]+)/) || numAfter(/\(9\)\s*([\d,]+)/) || 0;
+  // 매입액 = 매입세액 '차감계'(18)
+  d.purchaseAmount = numAfter(/차\s*감\s*계[^\n]*\(18\)\s*([\d,]+)/) || numAfter(/\(18\)\s*([\d,]+)/);
+  // 납부세액 = 차가감하여 납부할세액(30)(음수=환급). (30)이 없으면 총괄납부 사업자 납부세액
+  d.vatAmount = numAfterS(/\(30\)\s*(-?[\d,]+)/) || numAfterS(/총\s*괄\s*납\s*부[^\n]*납\s*부\s*할\s*세\s*액[^\n]*?(-?[\d,]+)/);
+  // 계산서(면세) 발급·수취 명세 (89 발급금액=면세매출 / 90 수취금액=면세매입) — 있으면 각각 매출·매입에 합산하고 (과+면) 표시
+  const issued = Number(dig((T.match(/\(89\)\s*계\s*산\s*서\s*발\s*급\s*금\s*액\s*([\d,]{4,})/)||[])[1]||'')) || 0;
+  const recv   = Number(dig((T.match(/\(90\)\s*계\s*산\s*서\s*수\s*취\s*금\s*액\s*([\d,]{4,})/)||[])[1]||'')) || 0;
+  if (issued > 0) { d.salesExempt = issued; d.salesAmount = (d.salesAmount||0) + issued; }
+  if (recv   > 0) { d.purchaseExempt = recv; d.purchaseAmount = (d.purchaseAmount||0) + recv; }
   d.revenue = d.salesAmount;
-  d.purchaseAmount = numAfter(/차\s*감\s*계[^\n]*\n?\s*\(18\)\s*([\d,]+)/) || numAfter(/\(18\)\s*([\d,]+)/);
-  d.vatAmount = numAfter(/\(30\)\s*([\d,]+)/);
   d.payTax = d.vatAmount;
   const bc = T.match(/업\s*종\s*코\s*드[\s\S]{0,100}?(\d{6})/) || T.match(/\(3\d\)[^\n]*\n[^\n]*\n\s*(\d{6})/);
   if (bc) d.bizCode = bc[1];
@@ -11917,7 +11927,8 @@ function runVatScrapeNoKey(type) {
     toast('소득세 신고서 스크랩 완료 — 값 확인 후 기록하세요','success',2500);
     return;
   }
-  const rows = [['신고기간',d.period||'-'],['상호',d.companyName||'-'],['대표자',d.representative||'-'],['사업자번호',d.bizNo||'-'],['전화번호',d.phone||'-'],['매출액(과세표준)',won(d.salesAmount)+'원'],['매입액(차감계)',won(d.purchaseAmount)+'원'],['납부할세액',won(d.vatAmount)+'원'],['업종코드',d.bizCode||'-'],['관할세무서',d.taxOffice||'-']];
+  const _gm = (a,ex)=> won(a)+'원'+(ex>0?` (과+면 · 면세 ${won(ex)})`:'');
+  const rows = [['신고기간',d.period||'-'],['상호',d.companyName||'-'],['대표자',d.representative||'-'],['사업자번호',d.bizNo||'-'],['전화번호',d.phone||'-'],['매출액(과세표준)',_gm(d.salesAmount,d.salesExempt)],['매입액(차감계)',_gm(d.purchaseAmount,d.purchaseExempt)],['납부할세액',won(d.vatAmount)+'원'+(d.vatAmount<0?' (환급)':'')],['업종코드',d.bizCode||'-'],['관할세무서',d.taxOffice||'-']];
   el.innerHTML = `<div style="background:#eef4ff;border:1.5px solid #a9c9f5;border-radius:12px;padding:14px">
     <div style="font-size:13px;font-weight:700;color:#1565c0;margin-bottom:8px">🔑 키 없이 스크랩 결과 (부가세)</div>
     <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:12px">${rows.map(([k,v])=>`<div style="color:#888">${esc(k)}</div><div style="font-weight:600;text-align:right">${esc(String(v))}</div>`).join('')}</div>
@@ -12145,8 +12156,13 @@ ${text.slice(0, 14000)}
           ${reviewData.representative?`<div><span style="color:#888">대표자:</span> <b>${esc(reviewData.representative)}</b></div>`:''}
           ${reviewData.bizNo?`<div><span style="color:#888">사업자번호:</span> <b>${esc(reviewData.bizNo)}</b></div>`:''}
           ${reviewData.period?`<div><span style="color:#888">신고기간:</span> <b>${esc(reviewData.period)}</b></div>`:''}
-          ${reviewData.revenue?`<div><span style="color:#888">수입금액:</span> <b style="color:#1565c0">${fmtN(reviewData.revenue)}</b></div>`:''}
-          ${reviewData.income?`<div><span style="color:#888">소득금액:</span> <b>${fmtN(reviewData.income)}</b></div>`:''}
+          ${type==='vat'?`
+            <div><span style="color:#888">매출액(과세표준):</span> <b style="color:#1565c0">${fmtN(reviewData.salesAmount)}</b>${reviewData.salesExempt?' <span style="color:#7b1fa2;font-weight:700">(과+면)</span>':''}</div>
+            <div><span style="color:#888">매입액(차감계):</span> <b>${fmtN(reviewData.purchaseAmount)}</b>${reviewData.purchaseExempt?' <span style="color:#7b1fa2;font-weight:700">(과+면)</span>':''}</div>
+            <div><span style="color:#888">납부세액:</span> <b style="color:#c62828">${fmtN(reviewData.vatAmount)}</b>${(reviewData.vatAmount||0)<0?' <span style="color:#2e7d32;font-weight:700">(환급)</span>':''}</div>
+          `:''}
+          ${type!=='vat'&&reviewData.revenue?`<div><span style="color:#888">수입금액:</span> <b style="color:#1565c0">${fmtN(reviewData.revenue)}</b></div>`:''}
+          ${type!=='vat'&&reviewData.income?`<div><span style="color:#888">소득금액:</span> <b>${fmtN(reviewData.income)}</b></div>`:''}
           ${reviewData.taxBase?`<div><span style="color:#888">과세표준:</span> <b>${fmtN(reviewData.taxBase)}</b></div>`:''}
           ${reviewData.totalTax?`<div><span style="color:#888">결정세액:</span> <b>${fmtN(reviewData.totalTax)}</b></div>`:''}
           ${reviewData.payTax?`<div><span style="color:#888">납부세액:</span> <b style="color:#c62828">${fmtN(reviewData.payTax)}</b></div>`:''}
@@ -12698,6 +12714,8 @@ function doRecordTRRWith(clientId, pKey) {
   updated.salesAmount    = num(data.salesAmount);
   updated.purchaseAmount = num(data.purchaseAmount);
   updated.vatAmount      = num(data.vatAmount);
+  updated.salesExempt    = num(data.salesExempt);    // 계산서 발급(면세) 합산분 — (과+면) 표시용
+  updated.purchaseExempt = num(data.purchaseExempt); // 계산서 수취(면세) 합산분
   // 주민세(지방소득세): 신고서 명시값 우선, 없으면 결정세액(totalTax)의 10% 자동, 그래도 없으면 0
   updated.residentTax    = num(data.residentTax) || (num(data.totalTax) ? Math.round(num(data.totalTax)*0.1) : 0);
   updated.fee            = num(data.feeRecommendation);
