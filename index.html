@@ -711,7 +711,7 @@ function periodHasClientData(period, c) {
   const v = G.julgae[period && period.id]?.[c.id];
   if (!v) return false;
   if (v === true) return true;
-  if (typeof v === 'object') return !!(v.d||v.b||v.a||v.c||v.s||v.revenue||v.salesAmount||v.income||v.taxBase||v.totalTax||v.payTax||v.fee||v.feeSeongsi||v.paid);
+  if (typeof v === 'object') return !!(v.d||v.b||v.a||v.c||v.s||v.revenue||v.salesAmount||v.income||v.taxBase||v.totalTax||v.payTax||v.fee||v.feeSeongsi||v.paid||v.paidSeongsi||v._reviewed);
   return false;
 }
 // 신고리스트 포함 여부.
@@ -8424,8 +8424,8 @@ function consultingFeeCardsHTML() {
   // ── 그룹: 컨설팅 업체 수수료 관리 (기본 접힘) — 지급 → 기장료 → CMS 순 ──
   const groupCollapsed = !!(G.sectionCollapsed && G.sectionCollapsed['fees-consulting']);
   return `<div style="margin-bottom:16px;border:1.5px solid #e6dcf7;border-radius:12px;overflow:hidden">
-    <div onclick="toggleSection('fees-consulting')" style="display:flex;align-items:center;gap:8px;padding:12px 14px;background:#f4eefe;cursor:pointer">
-      <span style="font-size:13px;color:#6a1b9a;width:16px">${groupCollapsed?'▶':'▼'}</span>
+    <div style="display:flex;align-items:center;gap:8px;padding:12px 14px;background:#f4eefe">
+      ${sectionToggleBtn('fees-consulting')}
       <div style="font-weight:800;font-size:15px;color:#6a1b9a">🤝 컨설팅 업체 수수료 관리</div>
       <span style="font-size:12px;color:#888;margin-left:auto">지급 ${payList.length} · 기장료 ${feeList.length} · CMS ${cmsList.length}</span>
     </div>
@@ -8485,7 +8485,7 @@ function renderFees() {
   if (G.filingSearch) filingAggList = filingAggList.filter(a=>(a.client.name||'').replace(/\s+/g,'').includes(G.filingSearch.replace(/\s+/g,'')));
   if (G.filingRepSearch) filingAggList = filingAggList.filter(a=>(a.client.rep||'').includes(G.filingRepSearch));
   if ((G.filingManagerFilter||[]).length>0) filingAggList = filingAggList.filter(a=>{const ms=getManagers(a.client);return G.filingManagerFilter.some(m=>m==='(없음)'?ms.length===0:ms.includes(m));});
-  filingAggList.sort((a,b)=>a.client.name.localeCompare(b.client.name,'ko'));
+  filingAggList.sort((a,b)=> (b.total||0)-(a.total||0) || a.client.name.localeCompare(b.client.name,'ko')); // 미수금 많은 순
 
   // 추가 청구 (신고대리/조정료/성실신고) — G.adHocFees
   const allAdHocFees = Object.entries(G.adHocFees||{}).flatMap(([cidStr, fees]) => {
@@ -8506,7 +8506,7 @@ function renderFees() {
     const billed = Number(r.billed)||0, paid = Number(r.paid)||0;
     return { cid, client, billed, paid, unpaid: Math.max(0, billed-paid), note: r.note||'' };
   }).filter(x=>x && x.billed>0);
-  bookArrList.sort((a,b)=> (b.unpaid>0)-(a.unpaid>0) || a.client.name.localeCompare(b.client.name,'ko'));
+  bookArrList.sort((a,b)=> (b.unpaid||0)-(a.unpaid||0) || a.client.name.localeCompare(b.client.name,'ko')); // 미수금 많은 순
   const bookArrUnpaid = bookArrList.reduce((s,x)=>s+x.unpaid,0);
 
   const grandTotal     = mFeeTotal + fTotal + adhocTotal;
@@ -8604,37 +8604,6 @@ function renderFees() {
       </td>
     </tr>`).join('');
 
-  // 미수금 에이징 분석
-  const agingData = (()=>{
-    const now2 = new Date();
-    const curYM = currentYM();
-    const adjYM2 = (ym, delta) => {
-      const [y,m] = ym.split('-').map(Number);
-      const d = new Date(y, m-1+delta, 1);
-      return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-    };
-    const aging = {m1:{count:0,total:0,items:[]}, m23:{count:0,total:0,items:[]}, m4p:{count:0,total:0,items:[]}};
-    const activeClients = G.clients.filter(c=>getDealTypes(c).some(d=>['기장','고문','성실'].includes(d)));
-    activeClients.forEach(c=>{
-      for (let i=1; i<=6; i++) {
-        const checkYM = adjYM2(curYM, -i);
-        if (checkYM < '2026-01') continue;
-        if (!isMonthlyBillable(c, checkYM)) continue; // 수임~휴업/해지/폐업 기간 내만
-        if (G.monthlyFees[c.id]?.[checkYM]) continue; // already collected
-        const amt = getFeeForYM(c, checkYM) || c.fee || 0;
-        const entry = {id:c.id, name:c.name, manager:getManagers(c).join(','), ym:checkYM, amount:amt};
-        if (i===1) { aging.m1.count++; aging.m1.total += amt; aging.m1.items.push(entry); }
-        else if (i<=3) { aging.m23.count++; aging.m23.total += amt; aging.m23.items.push(entry); }
-        else { aging.m4p.count++; aging.m4p.total += amt; aging.m4p.items.push(entry); }
-      }
-    });
-    window._agingBuckets = {m1:aging.m1.items, m23:aging.m23.items, m4p:aging.m4p.items};
-    return aging;
-  })();
-  const agingOpen = !!G.feesAgingOpen; // 기본 접힘
-  const agingTotCnt = agingData.m1.count + agingData.m23.count + agingData.m4p.count;
-  const agingTotAmt = agingData.m1.total + agingData.m23.total + agingData.m4p.total;
-
   document.getElementById('page-fees').innerHTML = `
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
     <h2 style="font-size:20px;font-weight:800">💰 수수료 관리</h2>
@@ -8654,32 +8623,6 @@ function renderFees() {
       <button class="btn-sm" style="background:#f3e5f5;color:#6a1b9a;border:1.5px solid #ce93d8" onclick="openUnpaidSMSBuilder()">💬 미수금 문자 생성</button>
       <button class="btn-sm" style="background:#e0f2f1;color:#00695c;border:1.5px solid #80cbc4" onclick="openFeeSyncReview()">🔄 수수료 동기화 검토</button>
     </div>`:''}
-  </div>
-
-  <div class="card" style="margin-bottom:14px;border-left:4px solid #e53935">
-    <div style="display:flex;align-items:center;gap:8px;${agingOpen?'margin-bottom:0':''}">
-      <button onclick="G.feesAgingOpen=!G.feesAgingOpen;renderFees()" style="padding:2px 8px;border-radius:6px;border:1.5px solid #e0e0e0;background:${agingOpen?'#fff':'#f5f5f5'};color:#888;font-size:12px;cursor:pointer;font-family:inherit;line-height:1.4">${agingOpen?'▼':'▶'}</button>
-      <div class="card-title" style="margin-bottom:0">📊 미수금 에이징 분석</div>
-      ${!agingOpen?`<span style="font-size:12px;color:#888;margin-left:auto">총 ${agingTotCnt}건 · <b style="color:#e53935">${agingTotAmt.toLocaleString()}원</b></span>`:''}
-    </div>
-    ${agingOpen ? `
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px">
-      <div onclick="showAgingBucket('m1')" style="background:#fff3e0;border-radius:10px;padding:12px;border-left:3px solid #f57c00;cursor:pointer" title="업체 목록 보기">
-        <div style="font-size:11px;color:#888;margin-bottom:4px">1개월 ›</div>
-        <div style="font-size:18px;font-weight:800;color:#f57c00">${agingData.m1.count}건</div>
-        <div style="font-size:12px;color:#aaa">${agingData.m1.total.toLocaleString()}원</div>
-      </div>
-      <div onclick="showAgingBucket('m23')" style="background:#fdecea;border-radius:10px;padding:12px;border-left:3px solid #e53935;cursor:pointer" title="업체 목록 보기">
-        <div style="font-size:11px;color:#888;margin-bottom:4px">2~3개월 ›</div>
-        <div style="font-size:18px;font-weight:800;color:#e53935">${agingData.m23.count}건</div>
-        <div style="font-size:12px;color:#aaa">${agingData.m23.total.toLocaleString()}원</div>
-      </div>
-      <div onclick="showAgingBucket('m4p')" style="background:#fce4ec;border-radius:10px;padding:12px;border-left:3px solid #c62828;cursor:pointer" title="업체 목록 보기">
-        <div style="font-size:11px;color:#888;margin-bottom:4px">3개월+ ›</div>
-        <div style="font-size:18px;font-weight:800;color:#c62828">${agingData.m4p.count}건</div>
-        <div style="font-size:12px;color:#aaa">${agingData.m4p.total.toLocaleString()}원</div>
-      </div>
-    </div>` : ''}
   </div>
 
   ${consultingFeeCardsHTML()}
