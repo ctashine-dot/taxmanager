@@ -10942,13 +10942,22 @@ async function parsePDFToText(file) {
   if (typeof pdfjsLib === 'undefined') throw new Error('PDF.js 라이브러리가 로드되지 않았습니다');
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  // cMapUrl/cMapPacked: 한글(CID-keyed, Adobe-Korea1) 폰트를 쓰는 홈택스·세무사랑 신고서의 텍스트 디코딩에 필수
+  const pdf = await pdfjsLib.getDocument({
+    data: arrayBuffer,
+    cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+    cMapPacked: true
+  }).promise;
   let text = '';
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
-    const pageText = content.items.map(item => item.str).join(' ');
-    text += `\n[${i}페이지]\n${pageText}`;
+    // 한글 CID 폰트는 글리프가 개별 항목으로 나옴 → 공백으로 join하면 숫자가 "2 3 6"처럼 쪼개짐.
+    // 항목 str을 그대로 이어붙이고(실제 공백은 str에 포함됨), 줄끝(hasEOL)에서만 개행하여 숫자·표 구조 보존.
+    let line = ''; const parts = [];
+    for (const it of content.items) { line += it.str; if (it.hasEOL) { parts.push(line); line = ''; } }
+    if (line) parts.push(line);
+    text += `\n[${i}페이지]\n` + parts.join('\n');
   }
   return text.trim();
 }
@@ -11012,6 +11021,25 @@ function returnStructureGuide(type) {
 - 점검: 성실신고확인 대상 여부·확인서 첨부, 의료비·교육비 세액공제(성실신고자 특례), 사업용 계좌·접대비 적정성.`,
   };
   return g[type] || g.income;
+}
+
+// 전문가(세무사) 검토 관점 — 신고서는 세무사랑 등으로 전문가가 이미 작성됨. 인격·업종에 맞는 '적정 작성 여부'를 동료검토(peer review)함.
+function professionalReviewGuide(type) {
+  const perEntity = {
+    corp: `▶ 법인 점검: 결산서→세무조정(익금산입·손금불산입/손금산입·익금불산입) 적정성 · 접대비(기업업무추진비)·감가상각·기부금·대손충당금 한도초과 · 가지급금 인정이자·업무무관자산 · 이월결손금 잔액 활용 · 세액감면·공제(중소기업특별·통합투자·고용증대·연구인력개발·사회보험료) 적정/누락 · 지방소득세(법인세할) 안분 · 특수관계자 거래·부당행위 · 최저한세 검토.`,
+    income: `▶ 개인 점검: 복식부기의무/간편장부대상 판정과 기장방식 적정 · 기준경비율/단순경비율 대상 여부 · 여러 사업장 소득 인별 합산·통산 · 성실신고확인 대상 판정 · 노란우산공제·연금계좌·기부·의료·교육·표준세액공제 최적 적용 · 부가세·원천세 수입금액과 일치 여부 · 업종별 소득률 적정.`,
+    seongsi: `▶ 성실신고(개인) 점검: 성실신고확인 대상 판정·확인서 첨부 · 사업용 계좌·접대비·인건비 적정 · 복식부기 기장 · 사업장별 소득 인별 합산 · 노란우산·연금·의료·교육·기부 공제 · 부가세·원천세 수입금액과 일치.`,
+    vat: `▶ 부가세 점검: 과세·면세·겸영 구분과 공통매입세액 안분 · 세금계산서 발급·수취 의무 및 지연·미발급 가산세 · 신용카드·현금영수증 발행세액공제 요건(법인·직전 공급가액 10억 초과 개인 제외) · 의제매입·대손세액공제 요건 · 영세율 첨부서류 · 예정고지/예정신고 누락분 반영 · 부가세 과세표준과 소득세·법인세 수입금액 정합.`,
+    sajup: `▶ 면세 사업장현황신고 점검: 수입금액 누락·과소신고 여부 · 매입처별 세금계산서·계산서합계표 정합 · 종합소득세 수입금액과 일치 · 면세대상·업종 적정.`,
+  };
+  return `
+【전문가(세무사) 검토 관점 — 필독】 이 신고서는 세무사랑 등 전문 세무프로그램으로 '세무 전문가가 이미 작성'한 것입니다. 단순 오탈자·판독 지적이 목적이 아니라, 동료 세무사의 재검토(peer review) 관점에서 아래를 검토하십시오.
+1) 인격(개인/법인)·업종 특성에 맞는 '올바른 신고서·부속명세서 구조'로 작성되었는가.
+2) 계산 흐름(수입→소득/과세표준→산출세액→감면·공제→결정세액→기납부→납부세액)의 정합성과 부속명세 간 일관성.
+3) 유·불리 선택(기장방식·경비율·공제 택일 등)과 세액공제·감면이 '최적'으로 적용·반영되었는가(누락 또는 과다).
+4) 업종 특유의 쟁점(소득률·경비구조, 업종별 감면요건, 세금계산서·계산서 발급의무 등)이 반영되었는가.
+${perEntity[type] || perEntity.income}
+※ 정상적으로 잘 작성된 핵심 항목은 'ok'로 명시 확인해 주고(세무사가 안심하고 넘어갈 수 있도록), 부적정·누락·재검토 사항은 근거(금액·요건·조문)와 함께 지적하십시오.`;
 }
 
 // AI 응답에서 JSON 추출 — 닫힌 블록 → 잘린 블록 → 첫 '{' 순으로 시도하고, 잘린 경우 괄호 균형을 맞춰 best-effort 복구
@@ -11365,7 +11393,7 @@ async function startBatchReview(type) {
     }
 
     const extractPrompt = `당신은 대한민국 세무법인의 숙련된 세무사입니다. 아래 ${typeLabel} 신고서를 전문가 수준으로 검토하십시오.
-${returnStructureGuide(type)}${_clientCtx}
+${returnStructureGuide(type)}${professionalReviewGuide(type)}${_clientCtx}
 
 【업종별 소득률 기준 (국세청 기준경비율 기반)】
 제조업 5~15% | 건설업 8~18% | 도소매업 3~12% | 서비스·전문직 20~50%
@@ -11762,8 +11790,9 @@ function _scrapeVatReturn(text) {
   const d = {};
   const pm = T.match(/신고기간\s*(\d{4})\s*년\s*제?\s*(\d)\s*기/);
   if (pm) { const conf = /확\s*정/.test(T) ? '확정' : (/예\s*정/.test(T)?'예정':''); d.period = `${pm[1].slice(2)}년 ${pm[2]}기${conf?' '+conf:''}`; }
-  d.companyName = strAfter(/\(법인명\)\s*([^\n]+)/);
-  d.representative = strAfter(/\(대표자명\)\s*([^\n]+)/);
+  // 상호·대표자: 같은 줄에 뒤 라벨이 이어질 수 있으므로(성명/대표자명/사업자등록번호 등) 그 앞까지만 캡처
+  d.companyName = strAfter(/\(법인명\)\s*([^\n]+?)(?=\s*성\s*명|\s*\(대표|\s*사업자등록|\s{2,}|\n|$)/);
+  d.representative = strAfter(/\(대표자명\)\s*([^\n]+?)(?=\s*사업자등록|\s*생\s*년|\s*전화|\s{2,}|\n|$)/);
   const bnm = T.match(/사업자등록번호\s*([\d\s\-]{10,})/);
   if (bnm) { const dd = dig(bnm[1]).slice(0,10); if (dd.length===10) d.bizNo = dd.slice(0,3)+'-'+dd.slice(3,5)+'-'+dd.slice(5); }
   const _head = T.split(/신\s*고\s*내\s*용/)[0] || T; // 세무대리인 전화 오추출 방지(납세자 헤더만)
@@ -11794,17 +11823,21 @@ function _scrapeIncomeReturn(text) {
   let cover = T;
   const ci = T.search(new RegExp(lbl('과세표준확정신고')+'|'+lbl('납부계산서')));
   if (ci >= 0) cover = T.slice(ci);
-  // 라벨 다음 줄(들)에서 첫 값/숫자 추출
+  // 라벨 뒤(같은 줄 인라인 값 우선, 없으면 다음 줄)에서 값/숫자 추출 — pdf.js(인라인)·pymupdf(다음줄) 모두 대응
+  const _nextLabel = /②|③|④|⑤|⑥|⑦|⑧|주\s*민\s*등\s*록|사\s*업\s*자\s*등\s*록|생\s*년\s*월\s*일|전\s*화\s*번\s*호|\(대\s*표|성\s*명/;
   const strAfterIn = (src, labelStr) => {
-    const m = src.match(new RegExp(lbl(labelStr)+'[^\\n]*\\n\\s*([^\\n]+)'));
-    return m ? m[1].replace(/\s+/g,' ').trim() : '';
+    const m = src.match(new RegExp(lbl(labelStr)+'\\s*([^\\n]*)(?:\\n\\s*([^\\n]+))?'));
+    if (!m) return '';
+    let v = (m[1]||'').split(_nextLabel)[0].trim(); // 같은 줄 값에서 다음 라벨 앞까지
+    if (!v && m[2]) v = m[2].split(_nextLabel)[0].trim(); // 같은 줄에 값 없으면 다음 줄
+    return v.replace(/\s+/g,' ').trim();
   };
-  const amtAfterIn = (src, labelRe, maxLines=4) => {
-    const idx = src.search(new RegExp(labelRe));
-    if (idx < 0) return 0;
-    const lines = src.slice(idx).split('\n').slice(1, 1+maxLines);
-    for (const ln of lines) { const m = ln.match(/\d[\d,]{2,}/); if (m) return numFrom(m[0]); }
-    return 0;
+  const amtAfterIn = (src, labelRe, maxChars=90) => {
+    const m = src.match(new RegExp(labelRe));
+    if (!m) return 0;
+    const after = src.slice(m.index + m[0].length, m.index + m[0].length + maxChars);
+    const nm = after.match(/\d[\d,]{2,}/); // 라벨 바로 뒤(같은 줄 또는 다음 줄)의 첫 금액
+    return nm ? numFrom(nm[0]) : 0;
   };
   // 성명 (세무대리인 성명보다 앞의 ① 성명이 먼저 매칭됨)
   d.representative = strAfterIn(cover, '성명');
@@ -11959,7 +11992,7 @@ async function runTaxReturnReview(type, extractOnly) {
   }
 
   const extractPrompt = `당신은 대한민국 세무법인의 숙련된 세무사입니다. 아래 ${typeLabel} 신고서를 전문가 수준으로 검토하십시오.
-${returnStructureGuide(type)}${_singleCtx}
+${returnStructureGuide(type)}${professionalReviewGuide(type)}${_singleCtx}
 
 【업종별 소득률 기준 (국세청 기준경비율 기반 — 이 기준 대비 차이 시 반드시 언급)】
 제조업 5~15% | 건설업 8~18% | 도소매업 3~12% | 서비스·전문직 20~50%
