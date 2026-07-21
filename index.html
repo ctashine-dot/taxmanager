@@ -11461,6 +11461,24 @@ ${text.slice(0, 12000)}
       if (result) {
         reviewData = parseAIJson(result);
         reviewText = extractOnly ? '' : result.replace(/```json[\s\S]*?```/g,'').replace(/```json[\s\S]*$/,'').trim();
+        // AI 오독 방지: 텍스트 레이어가 있으면 결정적 스크랩 값으로 핵심 금액 보정
+        if (reviewData && ['vat','income','seongsi'].includes(type) && text && text.length > 300) {
+          try {
+            const _sd = (type==='vat') ? _scrapeVatReturn(text) : _scrapeIncomeReturn(text);
+            if (type==='vat' && ((_sd.salesAmount>0)||(_sd.purchaseAmount>0)||(_sd.vatAmount!==0)||_sd.bizNo)) {
+              reviewData.salesAmount=_sd.salesAmount||0; reviewData.revenue=_sd.salesAmount||0;
+              reviewData.purchaseAmount=_sd.purchaseAmount||0; reviewData.vatAmount=_sd.vatAmount||0;
+              reviewData.salesExempt=_sd.salesExempt||0; reviewData.purchaseExempt=_sd.purchaseExempt||0;
+              if(_sd.companyName) reviewData.companyName=_sd.companyName; if(_sd.bizNo) reviewData.bizNo=_sd.bizNo;
+              reviewData._scrapedAmounts=true;
+            } else if (type!=='vat' && ((_sd.income>0)||(_sd.revenue>0)||(_sd.businessSites&&_sd.businessSites.length))) {
+              if(_sd.revenue>0)reviewData.revenue=_sd.revenue; if(_sd.income>0)reviewData.income=_sd.income;
+              if(_sd.taxBase>0)reviewData.taxBase=_sd.taxBase; if(_sd.totalTax>0)reviewData.totalTax=_sd.totalTax; if(_sd.payTax>0)reviewData.payTax=_sd.payTax;
+              if(_sd.businessSites&&_sd.businessSites.length)reviewData.businessSites=_sd.businessSites;
+              reviewData._scrapedAmounts=true;
+            }
+          } catch(_){}
+        }
       }
     } catch(e) {
       if(statusEl){ statusEl.textContent='AI 오류'; statusEl.style.color='#c62828'; }
@@ -12123,6 +12141,34 @@ ${text.slice(0, 14000)}
       return;
     }
 
+    // AI 비전은 숫자를 오독할 수 있으므로, 텍스트 레이어가 있으면 '결정적 텍스트 스크랩' 값으로 핵심 금액을 보정
+    // (AI는 검토 의견·findings 용도로 사용, 금액은 신고서 원문 그대로 확정)
+    try {
+      if (['vat','income','seongsi'].includes(type) && text && text.length > 300) {
+        const _sd = (type==='vat') ? _scrapeVatReturn(text) : _scrapeIncomeReturn(text);
+        if (type==='vat') {
+          if ((_sd.salesAmount>0) || (_sd.purchaseAmount>0) || (_sd.vatAmount!==0) || _sd.bizNo) {
+            reviewData.salesAmount = _sd.salesAmount||0; reviewData.revenue = _sd.salesAmount||0;
+            reviewData.purchaseAmount = _sd.purchaseAmount||0; reviewData.vatAmount = _sd.vatAmount||0;
+            reviewData.salesExempt = _sd.salesExempt||0; reviewData.purchaseExempt = _sd.purchaseExempt||0;
+            if (_sd.companyName) reviewData.companyName = _sd.companyName;
+            if (_sd.bizNo) reviewData.bizNo = _sd.bizNo;
+            reviewData._scrapedAmounts = true;
+          }
+        } else {
+          if ((_sd.income>0) || (_sd.revenue>0) || (_sd.businessSites && _sd.businessSites.length)) {
+            if (_sd.revenue>0) reviewData.revenue = _sd.revenue;
+            if (_sd.income>0) reviewData.income = _sd.income;
+            if (_sd.taxBase>0) reviewData.taxBase = _sd.taxBase;
+            if (_sd.totalTax>0) reviewData.totalTax = _sd.totalTax;
+            if (_sd.payTax>0) reviewData.payTax = _sd.payTax;
+            if (_sd.businessSites && _sd.businessSites.length) reviewData.businessSites = _sd.businessSites;
+            reviewData._scrapedAmounts = true;
+          }
+        }
+      }
+    } catch(_) {}
+
     // 결과 UI 구성
     const clientId = Number(document.getElementById('trr-client-sel')?.value) || 0;
     const pKey = document.getElementById('trr-period-sel')?.value || '';
@@ -12150,7 +12196,7 @@ ${text.slice(0, 14000)}
     if (reviewData) {
       const fmtN = n => (n||0).toLocaleString()+'원';
       dataCard = `<div style="background:#f8f9ff;border-radius:12px;padding:14px 16px;margin-bottom:14px;border:1.5px solid #e8eaf6">
-        <div style="font-size:13px;font-weight:800;color:#3949ab;margin-bottom:10px">📊 추출된 신고 데이터</div>
+        <div style="font-size:13px;font-weight:800;color:#3949ab;margin-bottom:10px">📊 추출된 신고 데이터${reviewData._scrapedAmounts?` <span style="font-size:10px;font-weight:600;color:#2e7d32;background:#e8f5e9;border-radius:8px;padding:1px 7px">신고서 원문 확정</span>`:''}</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px">
           ${reviewData.companyName?`<div><span style="color:#888">상호:</span> <b>${esc(reviewData.companyName)}</b></div>`:''}
           ${reviewData.representative?`<div><span style="color:#888">대표자:</span> <b>${esc(reviewData.representative)}</b></div>`:''}
