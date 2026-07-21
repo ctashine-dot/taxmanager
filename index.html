@@ -946,13 +946,13 @@ const TAX_OFFICES = [
 
 const CONTRACT_GROUPS = [
   { key:'항목', label:'', items:[
-    {key:'기장_일반', label:'기장 (일반)', vat:['일반','간이','간세','면세'], tax:['법인','개인']},
-    {key:'부가세신고', label:'부가세 신고', vat:['일반','간이','간세'], tax:['법인','개인']},
+    {key:'기장_일반', label:'기장 (일반)', vat:['일반','영세','겸영','간이','간세','면세'], tax:['법인','개인']},
+    {key:'부가세신고', label:'부가세 신고', vat:['일반','영세','겸영','간이','간세'], tax:['법인','개인']},
     {key:'사업장현황신고', label:'사업장현황 신고', vat:['면세'], tax:['개인']},
-    {key:'법인세', label:'법인세 신고', vat:['일반','간이','간세','면세'], tax:['법인']},
-    {key:'원천세', label:'원천세 신고', vat:['일반','간이','간세','면세'], tax:['법인','개인']},
-    {key:'소득세', label:'소득세 신고', vat:['일반','간이','간세','면세'], tax:['개인']},
-    {key:'세무조정', label:'세무조정', vat:['일반','간이','간세','면세'], tax:['법인','개인']},
+    {key:'법인세', label:'법인세 신고', vat:['일반','영세','겸영','간이','간세','면세'], tax:['법인']},
+    {key:'원천세', label:'원천세 신고', vat:['일반','영세','겸영','간이','간세','면세'], tax:['법인','개인']},
+    {key:'소득세', label:'소득세 신고', vat:['일반','영세','겸영','간이','간세','면세'], tax:['개인']},
+    {key:'세무조정', label:'세무조정', vat:['일반','영세','겸영','간이','간세','면세'], tax:['법인','개인']},
   ]},
 ];
 
@@ -999,7 +999,7 @@ function getDefaultContracts(dealType, taxType, vatType) {
   const cs = [];
   const isBook = ['기장','고문','성실'].includes(dt);
   const isCorp = taxType === '법인';
-  const isVat = ['일반','간이','간세'].includes(vatType);
+  const isVat = ['일반','영세','겸영','간이','간세'].includes(vatType); // 겸영·영세도 부가세 신고 대상
   const isExempt = vatType === '면세';
   if (isBook) {
     cs.push('기장_일반');
