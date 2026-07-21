@@ -5781,11 +5781,13 @@ function renderJulgae() {
   if (G.julgaeConsulFilter==='완료') clients = clients.filter(c=>julgaeVal(pKey2,c.id).c);
   else if (G.julgaeConsulFilter==='미완료') clients = clients.filter(c=>!julgaeVal(pKey2,c.id).c);
 
-  const consulCount    = clients.filter(c => julgaeVal(pKey2, c.id).c).length;
-  const bookCount     = clients.filter(c => julgaeVal(pKey2, c.id).b).length;
-  const doneCount     = clients.filter(c => julgaeVal(pKey2, c.id).a).length;
-  const collectCount  = clients.filter(c => julgaeVal(pKey2, c.id).s).length;
-  const total = clients.length;
+  // 요약은 필터와 무관하게 리스트 전체(대상 업체 + 미등록 추가)를 기준으로 집계
+  const summaryClients = baseClients.concat(((G.julgaeAdhoc||{})[pKey2]||[]).map(a=>_makeAdhocClientObj(a)));
+  const consulCount    = summaryClients.filter(c => julgaeVal(pKey2, c.id).c).length;
+  const bookCount     = summaryClients.filter(c => julgaeVal(pKey2, c.id).b).length;
+  const doneCount     = summaryClients.filter(c => julgaeVal(pKey2, c.id).a).length;
+  const collectCount  = summaryClients.filter(c => julgaeVal(pKey2, c.id).s).length;
+  const total = summaryClients.length;
   const pct = total ? Math.round(doneCount / total * 100) : 0;
 
   const managerSet = ['전체', ...new Set(baseClients.flatMap(c=>getManagers(c)))];
@@ -5872,8 +5874,8 @@ function renderJulgae() {
     - jTypeHideable.filter(k=>hc[k]).length
     - jSeongsiExtra.filter(k=>hc[k]).length;
   const _jFeeSum    = c => julgaeBilled(period, julgaeVal(pKey2,c.id));
-  const feeTotal    = clients.reduce((a,c) => a + _jFeeSum(c), 0);
-  const feeCollected= clients.reduce((a,c) => a + julgaeCollectedAmt(period, julgaeVal(pKey2,c.id)), 0); // 일부입금 포함
+  const feeTotal    = summaryClients.reduce((a,c) => a + _jFeeSum(c), 0);
+  const feeCollected= summaryClients.reduce((a,c) => a + julgaeCollectedAmt(period, julgaeVal(pKey2,c.id)), 0); // 일부입금 포함(리스트 전체 기준)
   // 정렬
   const _jSort = G.julgaeSort || 'name';
   const _jDir  = G.julgaeSortDir === 'desc' ? -1 : 1;
@@ -6211,12 +6213,12 @@ function renderJulgae() {
   <div style="margin-bottom:8px"><button class="btn-sm" onclick="G.julgaeSummaryOpen=!G.julgaeSummaryOpen;renderJulgae()" style="background:#e0f7fa;color:#00838f;border:1px solid #80deea;font-weight:600">${G.julgaeSummaryOpen?'▾ 요약 접기':'▸ 요약'} — 업체 ${total} · 청구 ${feeTotal.toLocaleString()}원</button></div>
   ${G.julgaeSummaryOpen?`
   <div style="display:flex;align-items:stretch;gap:8px;margin-bottom:12px;overflow-x:auto">
-    <div class="stat-card" style="border-left:3px solid #4f8ef7;flex:1 1 0;min-width:150px;padding:8px 12px">
+    <div class="stat-card" style="border-left:3px solid #4f8ef7;flex:1 1 0;width:150px;min-width:150px;max-width:220px;padding:8px 12px;box-sizing:border-box">
       <div class="stat-label" style="font-size:11px">대상 업체</div>
-      <div style="font-size:18px;font-weight:800">${total}<span style="font-size:12px;color:#aaa;font-weight:400"> 개</span></div>
+      <div style="font-size:16px;font-weight:800">${total}<span style="font-size:12px;color:#aaa;font-weight:400"> 개</span></div>
       <div class="stat-sub" style="font-size:10px">${(reportLabel[period.reportType]||'전체')} · ${hasEnroll?'수동':'자동'}</div>
     </div>
-    <div class="stat-card" style="border-left:3px solid #7b1fa2;flex:1 1 0;min-width:150px;padding:8px 12px">
+    <div class="stat-card" style="border-left:3px solid #7b1fa2;flex:1 1 0;width:150px;min-width:150px;max-width:220px;padding:8px 12px;box-sizing:border-box">
       <div class="stat-label" style="font-size:11px">수수료 청구</div>
       <div style="font-size:16px;font-weight:800;color:#7b1fa2">${feeTotal.toLocaleString()}원</div>
       <div class="stat-sub" style="font-size:10px">수금 ${feeCollected.toLocaleString()} · 미수금 ${(feeTotal-feeCollected).toLocaleString()}</div>
@@ -6242,21 +6244,32 @@ function renderJulgae() {
     </div>` : ''}
   </div>
   ${(()=>{
+    // 담당자별 업체수 (리스트 전체 기준)
+    const mc = {};
+    summaryClients.forEach(c => { const ms = getManagers(c); if (!ms.length) { mc['(미지정)'] = (mc['(미지정)']||0)+1; } else ms.forEach(m => mc[m] = (mc[m]||0)+1); });
+    const entries = Object.entries(mc).sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0],'ko'));
+    if (!entries.length) return '';
+    return `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:12px;padding:8px 10px;background:#f5f7ff;border:1px solid #e3e8f7;border-radius:10px">
+      <span style="font-size:11px;font-weight:800;color:#3949ab;margin-right:2px">👤 담당자별 업체수</span>
+      ${entries.map(([m,n])=>`<span style="font-size:11px;background:#fff;border:1px solid #dfe4f5;border-radius:12px;padding:2px 10px;color:#3949ab"><b>${esc(m)}</b> ${n}</span>`).join('')}
+    </div>`;
+  })()}
+  ${(()=>{
     // 전년도 비교 — 모든 신고리스트에 적용. 전년 동일유형 리스트가 있으면 그 데이터(prevMap1)를,
     // 없으면 각 업체에 저장된 직전연도 값(prevRevenue·fee25)을 사용한다.
     const hasPrevPeriod = prevPeriods1.length > 0;
     const prevPeriodLabel = hasPrevPeriod ? (prevPeriods1[0]?.label || '') : '';
     const labelTxt = hasPrevPeriod ? esc(prevPeriodLabel.replace(/^\d{2}년 /,'')) : '전년도';
-    const curRevTotal = clients.reduce((a,c)=>{
+    const curRevTotal = summaryClients.reduce((a,c)=>{
       const v2=julgaeVal(pKey2,c.id);
       return a+(isVatType?(v2.salesAmount||0):(v2.revenue||0));
     },0);
-    const prevRevTotal1 = clients.reduce((a,c)=>{
+    const prevRevTotal1 = summaryClients.reduce((a,c)=>{
       if (hasPrevPeriod) { const p1=prevMap1[c.id]; return a+(isVatType?(p1?.salesAmount||0):(p1?.revenue||0)); }
       return a+(julgaeVal(pKey2,c.id).prevRevenue||0);
     },0);
-    const curFeeTotal = clients.reduce((a,c)=>a+_jFeeSum(c),0);
-    const prevFeeTotal1 = clients.reduce((a,c)=>{
+    const curFeeTotal = summaryClients.reduce((a,c)=>a+_jFeeSum(c),0);
+    const prevFeeTotal1 = summaryClients.reduce((a,c)=>{
       if (hasPrevPeriod) return a+(prevMap1[c.id]?.fee||0);
       return a+(julgaeVal(pKey2,c.id).fee25||0);
     },0);
@@ -6265,7 +6278,7 @@ function renderJulgae() {
     const prevDoneClients1 = prevPeriods1.flatMap(pp=>Object.entries(G.julgae[pp.id]||{}).filter(([,v2])=>v2?.a).map(([cid])=>Number(cid)));
     const prevDoneSet = new Set(prevDoneClients1);
     const curDone = doneCount; const curTotal = total;
-    const prevDone = clients.filter(c=>prevDoneSet.has(c.id)).length;
+    const prevDone = summaryClients.filter(c=>prevDoneSet.has(c.id)).length;
     const hasAnyPrev = hasPrevPeriod || prevRevTotal1>0 || prevFeeTotal1>0;
     return `<div style="margin-top:6px;margin-bottom:12px;padding:10px 12px;background:#fbfcff;border:1px solid #eef1f8;border-radius:12px">
       <div class="card-title" style="margin-bottom:8px;font-size:13px">📊 전년도 비교 (${labelTxt})</div>
@@ -6811,8 +6824,22 @@ function removeFromJulgaeGroup(pKey2, clientId) {
     period.enrolled = applyReportFilter(base, period).map(c => c.id);
   }
   period.enrolled = period.enrolled.filter(id => id !== clientId);
+  // 제거를 영구 반영 — 이후 자동등록으로 되살아나지 않도록 excluded에 기록
+  period.excluded = period.excluded || [];
+  if (!period.excluded.includes(clientId)) period.excluded.push(clientId);
   saveToLS();
   renderJulgae();
+}
+
+// 자동등록(신고 기록 등) 시: 기존 리스트(enrolled)에 없는 업체는 확인 후 추가, 제거(excluded)된 업체는 자동등록 안 함
+function _maybeAutoEnroll(period, clientId) {
+  if (!period || !Array.isArray(period.enrolled) || period.enrolled.length === 0) return; // 자동(전체) 모드면 관여 안 함
+  if (period.enrolled.includes(clientId)) return;
+  if (Array.isArray(period.excluded) && period.excluded.includes(clientId)) return; // 제거된 업체는 되살리지 않음(수동 추가만 허용)
+  const c = G.clients.find(x=>x.id===clientId);
+  if (confirm(`'${c?.name||clientId}'은(는) '${period.label}' 신고리스트에 없습니다.\n이 리스트에 추가할까요?`)) {
+    period.enrolled.push(clientId);
+  }
 }
 
 // 거래처명 팝업에서 현재 신고리스트에서 제외
@@ -6829,6 +6856,8 @@ function removeClientFromJulgaeList(id) {
       period.enrolled = applyReportFilter(G.clients.filter(cc=>clientInFilingPeriod(cc, period)), period).map(cc=>cc.id);
     }
     period.enrolled = period.enrolled.filter(x=>x!==id);
+    period.excluded = period.excluded || [];
+    if (!period.excluded.includes(id)) period.excluded.push(id); // 제거 영구 반영(자동등록 방지)
   }
   saveToLS(); closeModal(); renderJulgae();
   toast('신고리스트에서 제외했습니다','success',2000);
@@ -12588,11 +12617,9 @@ function doRecordTRRWith(clientId, pKey) {
   if (((updated.fee||0)+(updated.feeSeongsi||0)) === 0) updated.s = true; // 청구 수수료 0이면 수금 자동 체크
   G.julgae[pKey][clientId] = updated;
   syncJulgaeFeeToClient(clientId, G.periods.find(p=>p.id===pKey), updated.fee, updated.feeSeongsi); // 거래처목록 조정료·성실료 동기화
-  // enrolled가 이미 명시적으로 사용 중인 경우에만 추가 (빈 배열이면 "전체 자동" 상태이므로 건드리지 않음)
+  // enrolled가 이미 명시적으로 사용 중이면: 없는 업체는 확인 후 추가, 제거(excluded)된 업체는 자동등록 안 함
   const period = G.periods.find(p=>p.id===pKey);
-  if (period && period.enrolled?.length > 0 && !period.enrolled.includes(clientId)) {
-    period.enrolled.push(clientId);
-  }
+  _maybeAutoEnroll(period, clientId);
   // AI 검토 메모 저장
   if (!G.julgaeNotes) G.julgaeNotes = {};
   const noteKey = `${pKey}_${clientId}`;
@@ -12659,7 +12686,7 @@ function _applyBusinessSites(leadId, pKey, sites) {
       if (mInc) upd.income = mInc;
       G.julgae[pKey][m.tc.id] = upd;
       if (m.isLead) leadApplied = true;
-      if (period && period.enrolled?.length>0 && !period.enrolled.includes(m.tc.id)) period.enrolled.push(m.tc.id);
+      if (period && period.enrolled?.length>0 && !period.enrolled.includes(m.tc.id) && !(period.excluded||[]).includes(m.tc.id)) period.enrolled.push(m.tc.id);
       cnt++;
     });
     // 대표사업장이 사업소득명세서에서 매칭되지 않은 경우에도 미매칭 소득은 대표에 합산
