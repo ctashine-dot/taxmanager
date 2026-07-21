@@ -11508,10 +11508,18 @@ ${text.slice(0, 12000)}
           ? `<span id="bc-match-${bIdx}" style="font-size:11px;color:#2e7d32;background:#e8f5e9;padding:2px 8px;border-radius:10px">✓ ${esc(matchedClient.name)}</span>`
           : `<span id="bc-match-${bIdx}" style="font-size:11px;color:#e65100;background:#fff3e0;padding:2px 8px;border-radius:10px">⚠ 거래처 미매칭</span>`}
       </div>
-      ${reviewData ? `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;font-size:12px;color:#555;margin-bottom:8px">
-        ${reviewData.revenue?`<div>수입: <b style="color:#1565c0">${fmtN(reviewData.revenue)}</b></div>`:''}
-        ${reviewData.payTax?`<div>납부세액: <b style="color:#c62828">${fmtN(reviewData.payTax)}</b></div>`:''}
+      ${reviewData ? `<div style="display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:#555;margin-bottom:8px">
+        ${type==='vat' ? `
+          <div>매출: <b style="color:#1565c0">${fmtN(reviewData.salesAmount)}</b>${reviewData.salesExempt?' <span style="color:#7b1fa2">(과+면)</span>':''}</div>
+          <div>매입: <b>${fmtN(reviewData.purchaseAmount)}</b>${reviewData.purchaseExempt?' <span style="color:#7b1fa2">(과+면)</span>':''}</div>
+          <div>납부세액: <b style="color:#c62828">${fmtN(reviewData.vatAmount)}</b>${(reviewData.vatAmount||0)<0?' <span style="color:#2e7d32">(환급)</span>':''}</div>
+        ` : `
+          ${reviewData.revenue?`<div>수입: <b style="color:#1565c0">${fmtN(reviewData.revenue)}</b></div>`:''}
+          ${reviewData.income?`<div>소득: <b>${fmtN(reviewData.income)}</b></div>`:''}
+          ${reviewData.payTax?`<div>납부세액: <b style="color:#c62828">${fmtN(reviewData.payTax)}</b></div>`:''}
+        `}
         ${reviewData.feeRecommendation?`<div>추천: <b style="color:#2e7d32">${fmtN(reviewData.feeRecommendation)}</b></div>`:''}
+        ${reviewData._scrapedAmounts?`<span style="font-size:10px;color:#2e7d32;background:#e8f5e9;border-radius:8px;padding:0 6px">원문확정</span>`:''}
       </div>`:''}
       ${reviewText ? `<div style="font-size:11px;color:#777;line-height:1.6;margin-bottom:8px;padding:8px;background:#fafafa;border-radius:6px;white-space:pre-wrap;word-break:break-word;max-height:260px;overflow-y:auto">${esc(reviewText)}</div>`:''}
       ${!matchedClient ? `<div style="margin-bottom:8px">
