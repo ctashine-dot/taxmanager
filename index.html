@@ -720,6 +720,10 @@ function periodHasClientData(period, c) {
 // - 폐업: 폐업연도가 해당 신고의 귀속연도 이상이면 그 해 영업분 신고 대상이므로 포함
 //   예) 26년 성실신고는 25년 귀속 → 26년 폐업이어도 25년 영업분은 신고 대상
 function clientInFilingPeriod(c, period) {
+  // 신고리스트에 수동 편입(enrolled)한 업체는 상태·데이터와 무관하게 표시(사용자가 직접 추가한 것)
+  if (period && Array.isArray(period.enrolled) && period.enrolled.includes(c.id)) {
+    return !(Array.isArray(period.excluded) && period.excluded.includes(c.id));
+  }
   // 거래처목록에서 제외(삭제)된 업체: 데이터가 있는 기간에만 보존 표시
   if (c.listRemoved) return periodHasClientData(period, c);
   // 수임일 이후 신고분만 포함 — 수임일이 해당 신고기간의 신고시점(마감월)보다 뒤면 소급 제외
