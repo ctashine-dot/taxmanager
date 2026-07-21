@@ -5914,17 +5914,23 @@ function renderJulgae() {
     : (getManagers(c)[0] || '담당자 미지정');
   let _sepPrev = null;
 
-  const niInput = (cid, field, val, extraStyle='') => {
+  const niInput = (cid, field, val, extraStyle='', defaultVal=0) => {
     const _num = Number(val) || 0;
-    const disp = _num !== 0 ? _num.toLocaleString() : (_julgaeReviewed(pKey2, cid) ? '0' : '');
+    // 값이 0이고 아직 '검토 반영(_reviewed)' 전인데 직전 수수료(defaultVal)가 있으면 그 금액을 기본값으로 미리 채움
+    // (금액만 수기입력된 행도 수수료는 직전값을 기본으로. 검토반영으로 0이 확정된 경우는 제외)
+    const _explicitReviewed = (G.julgae[pKey2] && G.julgae[pKey2][cid] && G.julgae[pKey2][cid]._reviewed === true);
+    const _useDef = (_num === 0 && Number(defaultVal) > 0 && !_explicitReviewed);
+    const _eff = _useDef ? Number(defaultVal) : _num;
+    const disp = _eff !== 0 ? _eff.toLocaleString() : (_julgaeReviewed(pKey2, cid) ? '0' : '');
     const w = disp ? Math.max(58, Math.ceil(disp.length * 6.5) + 10) : 58;
-    return `<input type="text" inputmode="numeric" class="julgae-num-input" data-jni="${pKey2}_${cid}_${field}" value="${disp}" placeholder=""
+    const _defStyle = _useDef ? 'color:#9575cd;' : ''; // 직전값 기본표시(연보라)
+    return `<input type="text" inputmode="numeric" class="julgae-num-input" data-jni="${pKey2}_${cid}_${field}" value="${disp}" placeholder=""${_useDef?' data-prefill="1"':''}
       onfocus="this.value=this.value.replace(/,/g,'');this.select();this._selAll=true;"
       onmouseup="if(this._selAll){event.preventDefault();this._selAll=false;}"
-      onblur="this._selAll=false;const raw=this.value.replace(/,/g,'');const n=Number(raw);if(raw!==''&&!isNaN(n)){const d=n?n.toLocaleString():'';this.value=d;}else{this.value='';}"
+      onblur="this._selAll=false;const raw=this.value.replace(/,/g,'');const n=Number(raw);if(raw!==''&&!isNaN(n)){const d=n?n.toLocaleString():'';this.value=d;}else{this.value='';}if(this.dataset.prefill&&raw!==''){this.style.color='';this.removeAttribute('data-prefill');updateJulgaeNum('${pKey2}',${cid},'${field}',raw);}"
       onkeydown="if(event.key==='Enter'){event.preventDefault();const all=[...document.querySelectorAll('.julgae-num-input')];const i=all.indexOf(this);if(i>=0&&i<all.length-1){const nx=all[i+1];this.blur();nx.focus();nx.select();nx._selAll=true;}}"
-      onchange="updateJulgaeNum('${pKey2}',${cid},'${field}',this.value.replace(/,/g,''))"
-      style="width:${w}px;text-align:right;border:1px solid #e0e0e0;border-radius:5px;padding:2px 4px;font-size:10px;font-family:inherit;box-sizing:border-box;${extraStyle}">`;
+      onchange="this.removeAttribute('data-prefill');updateJulgaeNum('${pKey2}',${cid},'${field}',this.value.replace(/,/g,''))"
+      style="width:${w}px;text-align:right;border:1px solid #e0e0e0;border-radius:5px;padding:2px 4px;font-size:10px;font-family:inherit;box-sizing:border-box;${extraStyle}${_defStyle}">`;
   };
 
   const _jnfBtn = (field) => {
@@ -6502,9 +6508,18 @@ function renderJulgae() {
       const prevVatFeeTxt = _pvf ? `<div style="font-size:10px;color:#888" title="직전 부가세 신고(${esc(_pvf.label)})의 신고수수료">직전:${_pvf.fee.toLocaleString()}</div>` : '';
       const autoFee  = v.fee       || 0;
       const autoFee2 = v.feeSeongsi || 0;
-      // 직전(또는 전년) 신고수수료가 있는데 이번 수수료가 0이면 입력칸을 강조(누락 점검용)
-      const _hasPrevFee = (_pvf && _pvf.fee > 0) || (prev1 && prev1.fee > 0);
-      const _feeZeroWarn = (_hasPrevFee && autoFee === 0) ? 'background:#fff3e0;border-color:#ffb74d;color:#e65100;' : '';
+      // 직전 신고수수료(부가세=직전 신고, 그 외=전년 동일유형) — 입력칸 기본값·표시용
+      const _prevFeeVal = isVatType ? (_pvf?.fee || 0) : (prev1?.fee || 0);
+      const _hasPrevFee = _prevFeeVal > 0;
+      // 직전 수수료가 있는데 '검토 반영'되어 0으로 확정 입력된 경우만 강조(누락 점검용)
+      const _feeZeroWarn = (_hasPrevFee && autoFee === 0 && _julgaeReviewed(pKey2, c.id)) ? 'background:#fff3e0;border-color:#ffb74d;color:#e65100;' : '';
+      // 부가세: 기장·고문·성실 거래처는 신고수수료가 없음 → 추천 0으로 표시(그 외는 보수표 추천)
+      const _dealNoVatFee = isVatType && getDealTypes(c).some(d => ['기장','고문','성실'].includes(d));
+      const _vatRecBadge = isVatType ? (() => {
+        if (_dealNoVatFee) return `<div onclick="applyBosuFee('${pKey2}',${c.id},'fee',0)" style="${'font-size:9px;color:#7b1fa2;background:#f3e5f5;border-radius:4px;padding:1px 4px;cursor:pointer;margin-top:2px;text-align:right'}" title="기장·고문·성실 거래처는 부가세 신고수수료 없음(추천 0)">💡추천:0</div>`;
+        const f = getBosuFeeRec(v.salesAmount || 0, 'vat')?.fee || 0;
+        return f > 0 ? `<div onclick="applyBosuFee('${pKey2}',${c.id},'fee',${f})" style="font-size:9px;color:#7b1fa2;background:#f3e5f5;border-radius:4px;padding:1px 4px;cursor:pointer;margin-top:2px;text-align:right" title="클릭하여 자동입력: ${f.toLocaleString()}원">💡${f.toLocaleString()}</div>` : '';
+      })() : '';
       // 행 배경: 공동=teal / 동일인=보라 / 관계사=인디고
       const _rowTintH = item.joint ? '#e0f2f1' : (item.groupType==='same') ? '#f3e5f5' : '#e8eaf6';
       const _rowTintC = item.joint ? '#f3faf9' : (item.groupType==='same') ? '#fdf8fe' : '#f5f6fc';
@@ -6603,7 +6618,7 @@ function renderJulgae() {
         `}
         ${isSeongsiType?`
           <td style="text-align:right;padding:4px 8px;${hc['j_fee']?'display:none':''}">
-            ${isMemberRow?'':`${niInput(c.id,'fee',autoFee,autoFee?'font-weight:700;color:#7b1fa2':_feeZeroWarn)}
+            ${isMemberRow?'':`${niInput(c.id,'fee',autoFee,autoFee?'font-weight:700;color:#7b1fa2':_feeZeroWarn,_prevFeeVal)}
             ${prevFeeTxt}
             ${bosuBadge}`}
           </td>
@@ -6613,8 +6628,8 @@ function renderJulgae() {
           </td>
         `:`
           <td style="text-align:right;padding:4px 8px;${hc['j_fee']?'display:none':''}">
-            ${isMemberRow?'':`${niInput(c.id,'fee',autoFee,autoFee?'font-weight:700;color:#7b1fa2':_feeZeroWarn)}
-            ${isIncomeType?bosuBadge:(prevVatFeeTxt+prevFeeTxt)}`}
+            ${isMemberRow?'':`${niInput(c.id,'fee',autoFee,autoFee?'font-weight:700;color:#7b1fa2':_feeZeroWarn,_prevFeeVal)}
+            ${prevVatFeeTxt}${prevFeeTxt}${isIncomeType?bosuBadge:_vatRecBadge}`}
           </td>
         `}
         ${isIncomeType?`
@@ -11363,6 +11378,7 @@ function openNewClientFromBatch(bIdx) {
     <div><div style="color:#888;margin-bottom:2px">수임유형</div><select id="ncb-deal-${bIdx}" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:6px;padding:5px 7px;font-family:inherit">${deals.map(v=>`<option${v==='신고대리'?' selected':''}>${esc(v)}</option>`).join('')}</select></div>
     <div><div style="color:#888;margin-bottom:2px">담당자</div><select id="ncb-mgr-${bIdx}" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:6px;padding:5px 7px;font-family:inherit"><option value="">(미지정)</option>${mgrs.map(v=>`<option${v===defMgr?' selected':''}>${esc(v)}</option>`).join('')}</select></div>
     <div><div style="color:#888;margin-bottom:2px">기장료(월,원)</div><input id="ncb-fee-${bIdx}" type="number" inputmode="numeric" value="0" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:6px;padding:5px 7px;font-family:inherit"></div>
+    <div><div style="color:#888;margin-bottom:2px">수임일</div><input id="ncb-contract-${bIdx}" type="date" value="${new Date().toISOString().slice(0,10)}" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:6px;padding:5px 7px;font-family:inherit"></div>
     <div><div style="color:#888;margin-bottom:2px">업종코드</div><input id="ncb-bizcode-${bIdx}" value="${esc(d.bizCode||'')}" inputmode="numeric" placeholder="예: 743002" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:6px;padding:5px 7px;font-family:inherit"></div>
     <div><div style="color:#888;margin-bottom:2px">관할세무서</div><input id="ncb-office-${bIdx}" value="${esc(_normalizeTaxOffice(d.taxOffice))}" list="taxoffice-list" placeholder="예: 역삼세무서" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:6px;padding:5px 7px;font-family:inherit"></div>
     <div style="grid-column:span 2"><div style="color:#888;margin-bottom:2px">수임경로</div><select id="ncb-route-${bIdx}" style="width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:6px;padding:5px 7px;font-family:inherit">${['세무사','직원','거래처','컨설팅업체'].map(v=>`<option>${v}</option>`).join('')}</select></div>
@@ -11389,7 +11405,7 @@ function _submitNewClientFromBatch(bIdx) {
     dealType: deal, dealTypes:[deal], contracts: (typeof getDefaultContracts==='function'?getDefaultContracts(deal, taxType, '일반'):[deal]),
     route, routeDetail: route==='세무사' ? ((G.settings&&G.settings.rep)||'대표 세무사') : '',
     status:'정상', dataReceived:false, bookkeeping:false, approved:false, memo:'',
-    contractDate:new Date().toISOString().slice(0,10), terminationDate:'', terminationReason:'',
+    contractDate:(g('ncb-contract')?.value||new Date().toISOString().slice(0,10)), terminationDate:'', terminationReason:'',
     closureYear:'', closureTaxFiled:false, closureTaxApproved:false, jointBiz:false, openDate:'', closeDate:''
   };
   G.clients.push(newClient);
