@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <!-- 보안: 데이터 외부 유출 차단(connect-src 허용목록) + object/base 제한. default-src 미지정으로 스크립트·스타일·워커는 영향 없음 -->
-<meta http-equiv="Content-Security-Policy" content="connect-src 'self' https://api.anthropic.com https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://apis.google.com https://accounts.google.com https://*.firebaseapp.com https://www.gstatic.com https://cdnjs.cloudflare.com https://api.allorigins.win https://corsproxy.io; object-src 'none'; base-uri 'self'">
+<meta http-equiv="Content-Security-Policy" content="connect-src 'self' https://api.anthropic.com https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://apis.google.com https://accounts.google.com https://*.firebaseapp.com https://www.gstatic.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com https://api.allorigins.win https://corsproxy.io; object-src 'none'; base-uri 'self'">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -17,6 +17,23 @@
 <meta name="apple-mobile-web-app-title" content="TaxManager">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+// pdf.js 라이브러리 로드 폴백: cdnjs가 죽으면 jsdelivr→unpkg 순으로 재시도(어제는 되고 오늘은 안 되는 CDN 불안정 대응)
+(function(){
+  if (typeof pdfjsLib !== 'undefined') return;
+  var alts = [
+    'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js',
+    'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js'
+  ];
+  (function tryNext(i){
+    if (typeof pdfjsLib !== 'undefined' || i >= alts.length) return;
+    var s = document.createElement('script');
+    s.src = alts[i]; s.async = false;
+    s.onerror = function(){ tryNext(i+1); };
+    document.head.appendChild(s);
+  })(0);
+})();
+</script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
@@ -10938,28 +10955,58 @@ async function tcSearchPrec() {
 // ══════════════════════════════════════════════════════
 // 신고서 PDF 검토 (통합 - 부가세/법인세/종소세)
 // ══════════════════════════════════════════════════════
+// 한글 CID 폰트 디코딩용 cMap 소스: cdnjs가 불안정하면(어제는 되고 오늘은 안 되는 현상) jsdelivr→unpkg로 폴백
+const PDF_CMAP_SOURCES = [
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+  'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
+  'https://unpkg.com/pdfjs-dist@3.11.174/cmaps/'
+];
+const PDF_WORKER_SOURCES = [
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
+  'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js',
+  'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js'
+];
+// 텍스트가 한글로 정상 디코딩됐는지 판정 — cMap 로드 실패 시 한글이 거의 사라지고 깨진 글자만 남음
+function _pdfTextHealthy(t) {
+  if (!t) return false;
+  const hangul = (t.match(/[가-힣]/g) || []).length;
+  return hangul >= 20; // 정상 신고서는 한글이 수백 개 이상
+}
 async function parsePDFToText(file) {
   if (typeof pdfjsLib === 'undefined') throw new Error('PDF.js 라이브러리가 로드되지 않았습니다');
-  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_WORKER_SOURCES[0];
   const arrayBuffer = await file.arrayBuffer();
   // cMapUrl/cMapPacked: 한글(CID-keyed, Adobe-Korea1) 폰트를 쓰는 홈택스·세무사랑 신고서의 텍스트 디코딩에 필수
-  const pdf = await pdfjsLib.getDocument({
-    data: arrayBuffer,
-    cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
-    cMapPacked: true
-  }).promise;
-  let text = '';
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    // 한글 CID 폰트는 글리프가 개별 항목으로 나옴 → 공백으로 join하면 숫자가 "2 3 6"처럼 쪼개짐.
-    // 항목 str을 그대로 이어붙이고(실제 공백은 str에 포함됨), 줄끝(hasEOL)에서만 개행하여 숫자·표 구조 보존.
-    let line = ''; const parts = [];
-    for (const it of content.items) { line += it.str; if (it.hasEOL) { parts.push(line); line = ''; } }
-    if (line) parts.push(line);
-    text += `\n[${i}페이지]\n` + parts.join('\n');
+  const extractWith = async (cMapUrl) => {
+    const data = arrayBuffer.slice(0); // getDocument가 버퍼를 detach할 수 있어 시도마다 복사본 사용
+    const pdf = await pdfjsLib.getDocument({ data, cMapUrl, cMapPacked: true }).promise;
+    let text = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      // 한글 CID 폰트는 글리프가 개별 항목으로 나옴 → 공백으로 join하면 숫자가 "2 3 6"처럼 쪼개짐.
+      // 항목 str을 그대로 이어붙이고(실제 공백은 str에 포함됨), 줄끝(hasEOL)에서만 개행하여 숫자·표 구조 보존.
+      let line = ''; const parts = [];
+      for (const it of content.items) { line += it.str; if (it.hasEOL) { parts.push(line); line = ''; } }
+      if (line) parts.push(line);
+      text += `\n[${i}페이지]\n` + parts.join('\n');
+    }
+    return text.trim();
+  };
+  // cMap 소스를 순서대로 시도: 한글이 정상 디코딩되면 즉시 반환, 깨졌거나 오류면 다음 CDN으로 폴백
+  let lastText = '';
+  for (const src of PDF_CMAP_SOURCES) {
+    try {
+      const t = await extractWith(src);
+      lastText = t;
+      if (_pdfTextHealthy(t)) return t;
+    } catch (e) { /* 다음 소스로 폴백 */ }
   }
-  return text.trim();
+  // 모든 cMap 소스 실패 — 부분 텍스트라도 반환하되, 호출부가 감지할 수 있게 경고 로그
+  if (lastText && !_pdfTextHealthy(lastText)) {
+    console.warn('[parsePDFToText] 한글 cMap 디코딩 실패 — 모든 CDN(cdnjs/jsdelivr/unpkg) 폴백 소진. 네트워크 확인 필요.');
+  }
+  return lastText;
 }
 
 // PDF 각 페이지를 이미지(JPEG base64)로 렌더링 — 텍스트 레이어 없는 홈택스 PDF 대응(비전 분석용)
@@ -11249,7 +11296,7 @@ async function handleTRRFiles(fileList, type) {
     try {
       const text = await parsePDFToText(file);
       texts.push(text);
-      fileResults.push({ name: file.name, chars: text.length, ok: true });
+      fileResults.push({ name: file.name, chars: text.length, ok: true, healthy: _pdfTextHealthy(text) });
     } catch(e) {
       fileResults.push({ name: file.name, ok: false, err: e.message });
     }
@@ -11260,9 +11307,10 @@ async function handleTRRFiles(fileList, type) {
   if (ta) ta.value = combined;
   if (uploadArea) {
     const okCount = fileResults.filter(r=>r.ok).length;
-    uploadArea.innerHTML = `<div style="font-size:20px;margin-bottom:6px">${okCount===files.length?'✅':'⚠️'}</div>` +
-      fileResults.map(r => `<div style="font-size:12px;${r.ok?'color:#2e7d32':'color:#c62828'};margin:2px 0">${r.ok?'✓':'✕'} ${esc(r.name)}${r.ok?' ('+r.chars.toLocaleString()+'자)':' — '+esc(r.err)}</div>`).join('') +
-      `<div style="font-size:11px;color:#888;margin-top:4px">총 ${combined.length.toLocaleString()}자 추출 완료</div>`;
+    const unhealthy = fileResults.some(r=>r.ok && !r.healthy);
+    uploadArea.innerHTML = `<div style="font-size:20px;margin-bottom:6px">${okCount===files.length&&!unhealthy?'✅':'⚠️'}</div>` +
+      fileResults.map(r => `<div style="font-size:12px;${!r.ok?'color:#c62828':(r.healthy?'color:#2e7d32':'color:#e65100')};margin:2px 0">${!r.ok?'✕':(r.healthy?'✓':'⚠')} ${esc(r.name)}${r.ok?' ('+r.chars.toLocaleString()+'자'+(r.healthy?'':', 한글 디코딩 실패')+')':' — '+esc(r.err)}</div>`).join('') +
+      (unhealthy ? `<div style="font-size:11px;color:#e65100;margin-top:4px">⚠️ 일부 파일의 한글 폰트 디코딩 실패 — 네트워크(CDN) 문제일 수 있습니다. 잠시 후 새로고침 재시도.</div>` : `<div style="font-size:11px;color:#888;margin-top:4px">총 ${combined.length.toLocaleString()}자 추출 완료</div>`);
   }
   if (statusEl) statusEl.textContent = `${files.length}개 파일 추출 완료 — AI 검토 시작 버튼을 누르세요`;
   if (texts.length > 0) autoMatchTRRClient(combined);
@@ -11280,8 +11328,11 @@ async function handleTRRFile(file, type) {
     window._trrFiles = [file];
     const ta = document.getElementById('trr-text-input');
     if (ta) ta.value = text;
-    if (uploadArea) uploadArea.innerHTML = `<div style="font-size:24px;margin-bottom:8px">✅</div><div style="font-size:13px;color:#2e7d32;font-weight:700">${esc(file.name)}</div><div style="font-size:12px;color:#2e7d32;margin-top:4px">${text.length.toLocaleString()}자 추출 완료</div>`;
-    if (statusEl) statusEl.textContent = `텍스트 추출 완료 — AI 검토 시작 버튼을 누르세요`;
+    const healthy = _pdfTextHealthy(text);
+    if (uploadArea) uploadArea.innerHTML = healthy
+      ? `<div style="font-size:24px;margin-bottom:8px">✅</div><div style="font-size:13px;color:#2e7d32;font-weight:700">${esc(file.name)}</div><div style="font-size:12px;color:#2e7d32;margin-top:4px">${text.length.toLocaleString()}자 추출 완료</div>`
+      : `<div style="font-size:24px;margin-bottom:8px">⚠️</div><div style="font-size:13px;color:#e65100;font-weight:700">${esc(file.name)}</div><div style="font-size:12px;color:#e65100;margin-top:4px">한글 폰트 디코딩 실패 — 네트워크(CDN) 문제일 수 있습니다.<br>잠시 후 다시 시도하거나 새로고침 후 재업로드하세요.</div>`;
+    if (statusEl) statusEl.textContent = healthy ? `텍스트 추출 완료 — AI 검토 시작 버튼을 누르세요` : `⚠️ 한글 디코딩 실패 — 네트워크 확인 후 재시도`;
     // 거래처 자동 감지
     autoMatchTRRClient(text);
   } catch(e) {
