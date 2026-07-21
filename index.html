@@ -720,19 +720,19 @@ function periodHasClientData(period, c) {
 // - 폐업: 폐업연도가 해당 신고의 귀속연도 이상이면 그 해 영업분 신고 대상이므로 포함
 //   예) 26년 성실신고는 25년 귀속 → 26년 폐업이어도 25년 영업분은 신고 대상
 function clientInFilingPeriod(c, period) {
-  // 신고리스트에 수동 편입(enrolled)한 업체는 상태·데이터와 무관하게 표시(사용자가 직접 추가한 것)
-  if (period && Array.isArray(period.enrolled) && period.enrolled.includes(c.id)) {
-    return !(Array.isArray(period.excluded) && period.excluded.includes(c.id));
-  }
-  // 거래처목록에서 제외(삭제)된 업체: 데이터가 있는 기간에만 보존 표시
-  if (c.listRemoved) return periodHasClientData(period, c);
+  // 명시적으로 제외(리스트에서 제거)한 업체는 항상 숨김
+  if (period && Array.isArray(period.excluded) && period.excluded.includes(c.id)) return false;
   // 수임일 이후 신고분만 포함 — 수임일이 해당 신고기간의 신고시점(마감월)보다 뒤면 소급 제외
-  // (단, 이미 입력된 데이터가 있으면 작업내역 보존을 위해 유지)
+  // (단, 이미 입력된 데이터가 있으면 작업내역 보존을 위해 유지). enrolled(수동편입)보다 우선 적용.
   if (c.contractDate) {
     const fym = periodFilingYM(period);
     const cym = String(c.contractDate).slice(0,7);
     if (fym && cym && cym > fym && !periodHasClientData(period, c)) return false;
   }
+  // 위 수임일 조건 통과 후, 수동 편입(enrolled)한 업체는 상태·목록제외와 무관하게 표시(사용자가 직접 추가)
+  if (period && Array.isArray(period.enrolled) && period.enrolled.includes(c.id)) return true;
+  // 거래처목록에서 제외(삭제)된 업체: 데이터가 있는 기간에만 보존 표시
+  if (c.listRemoved) return periodHasClientData(period, c);
   if (c.status !== '해지' && c.status !== '폐업') return true;
   if (c.status === '해지') return periodHasClientData(period, c); // 해지: 데이터 있을 때만 보존
   // 폐업
@@ -5067,6 +5067,7 @@ window.saveForm = function(id) {
   // If user explicitly set a group, clear solo flag
   if (d.relatedGroup && d.relatedGroup.trim()) d.soloGroup = false;
 
+  let _addPeriodUsed = false;
   if (id === null) {
     const newId = Date.now();
     G.clients.push({...d, id: newId});
@@ -5076,6 +5077,7 @@ window.saveForm = function(id) {
         addPeriod.enrolled.push(newId);
       }
       window._julgaeAddToPeriod = null;
+      _addPeriodUsed = true;
     }
   } else {
     const idx = G.clients.findIndex(c=>c.id===id);
@@ -5133,6 +5135,7 @@ window.saveForm = function(id) {
   saveToLS();
   window._formDataSnapshot = undefined;
   const _trrNewId = (id === null) ? G.clients[G.clients.length-1]?.id : null;
+  const _wasTrrFlow = !!window._trrPendingAfterSave;
   navBack();
   if (window._trrPendingAfterSave && _trrNewId && window._trrPendingPKey) {
     const _pk = window._trrPendingPKey;
@@ -5145,6 +5148,8 @@ window.saveForm = function(id) {
   else if (G.currentTab==='dashboard') renderDashboard();
   else if (G.currentTab==='closure') renderClosure();
   else if (G.currentTab==='julgae') renderJulgae();
+  // 신규 거래처: 포함할 기존 신고리스트를 선택하도록 안내(특정 리스트 추가·검토 자동기록 흐름 제외)
+  if (_trrNewId && !_wasTrrFlow && !_addPeriodUsed) setTimeout(()=>_offerAddToFilingLists(_trrNewId), 60);
 };
 
 // ══════════════════════════════════════════════════════
@@ -14279,6 +14284,66 @@ function addExistingToJulgae(pKey, clientId) {
   closeModal();
   renderJulgae();
   toast(`"${c.name}" 신고리스트에 추가됨`, 'success', 2000);
+}
+
+// 신규 거래처 등록 후: 포함할 기존 신고리스트를 선택하도록 안내
+function _offerAddToFilingLists(clientId) {
+  const c = G.clients.find(x=>x.id===clientId); if (!c) return;
+  // 이 거래처가 유형상 대상이 될 수 있는 신고리스트(마감 안 됨)
+  const cands = G.periods.filter(p => {
+    if (p.locked || !p.reportType) return false;
+    const f = REPORT_TYPE_FILTERS[p.reportType];
+    return f ? f(c) : true;
+  }).slice(-24).reverse();
+  if (!cands.length) return;
+  const rows = cands.map(p => {
+    const fym = periodFilingYM(p), cym = (c.contractDate||'').slice(0,7);
+    const late = !!(fym && cym && cym > fym);          // 수임일이 신고기한보다 뒤 → 대상 아님
+    const autoMode = !(p.enrolled && p.enrolled.length);
+    const already = clientInFilingPeriod(c, p) && (autoMode ? true : p.enrolled.includes(clientId));
+    return { p, late, already };
+  });
+  // 추가가 의미있는 항목(이미 포함/수임일 초과 제외)만 기본 체크
+  const body = rows.map(r => {
+    const disabled = r.late;
+    const note = r.late ? '⚠ 수임일이 이 신고 기한 이후 — 대상 아님'
+               : r.already ? '이미 대상(자동 포함)'
+               : '추가 필요';
+    return `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid ${r.late?'#ffcdd2':'#eee'};border-radius:8px;margin-bottom:6px;cursor:${disabled?'not-allowed':'pointer'};background:${r.late?'#fff5f5':r.already?'#f7f7f7':'#fff'};opacity:${disabled?0.7:1}">
+      <input type="checkbox" class="oaf-chk" data-pid="${esc(String(r.p.id))}" ${(!r.late && !r.already)?'checked':''} ${disabled?'disabled':''} style="width:16px;height:16px">
+      <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:13px">${esc(r.p.label)}</div>
+      <div style="font-size:11px;color:${r.late?'#c62828':'#888'}">${note}</div></div>
+    </label>`;
+  }).join('');
+  showModal(`<div style="max-width:440px;width:92vw;max-height:calc(100vh - 60px);display:flex;flex-direction:column">
+    <div class="modal-header"><h3>📋 신고리스트에 추가 — ${esc(c.name)}</h3><button class="close-btn" onclick="navBack()">✕</button></div>
+    <div class="modal-body" style="overflow-y:auto;flex:1">
+      <div style="font-size:12px;color:#888;margin-bottom:10px">이 거래처를 포함할 <b>기존 신고리스트</b>를 선택하세요. (수임일이 신고 기한 이후인 리스트는 대상이 아니므로 선택 불가)</div>
+      ${body}
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button onclick="_applyOfferAddToFilingLists(${clientId})" class="btn-primary" style="flex:1;padding:10px">선택한 리스트에 추가</button>
+        <button onclick="navBack()" style="padding:10px 16px;border-radius:8px;border:1px solid #e0e0e0;background:#fff;cursor:pointer;font-family:inherit">나중에</button>
+      </div>
+    </div>
+  </div>`);
+}
+function _applyOfferAddToFilingLists(clientId) {
+  if (!requireWrite()) return;
+  const chks = [...document.querySelectorAll('.oaf-chk:checked')];
+  let n = 0;
+  chks.forEach(chk => {
+    const p = G.periods.find(x => x.id === chk.dataset.pid); if (!p) return;
+    if (!p.enrolled || !p.enrolled.length) {
+      p.enrolled = applyReportFilter(G.clients.filter(cc=>clientInFilingPeriod(cc,p)),p).map(cc=>cc.id);
+    }
+    if (!p.enrolled.includes(clientId)) p.enrolled.push(clientId);
+    if (p.excluded) p.excluded = p.excluded.filter(x=>x!==clientId);
+    n++;
+  });
+  saveToLS();
+  closeModal();
+  if (G.currentTab==='julgae') renderJulgae();
+  toast(n ? `${n}개 신고리스트에 추가했습니다` : '선택한 리스트가 없습니다', n?'success':'info', 2200);
 }
 
 function saveJulgaeAdhocEntry(pKey) {
