@@ -5759,6 +5759,14 @@ function renderJulgae() {
   if (rq) clients = clients.filter(c => (c.rep||'').toLowerCase().replace(/\s+/g,'').includes(rq.replace(/\s+/g,'')));
 
   const pKey2 = pKey || '';
+  // 청구 수수료(신고수수료+성실료)가 0으로 확정(_reviewed)된 검토행은 수금 자동 체크로 정합화
+  if (pKey2 && G.julgae[pKey2]) {
+    let _chgS = false;
+    Object.values(G.julgae[pKey2]).forEach(v => {
+      if (v && typeof v === 'object' && v._reviewed === true && !v.s && ((v.fee||0)+(v.feeSeongsi||0)) === 0) { v.s = true; _chgS = true; }
+    });
+    if (_chgS && !period?.locked) saveToLS();
+  }
   const ff = G.julgaeFeeFilter;
   if (ff === '수금') clients = clients.filter(c => julgaeVal(pKey2, c.id).s);
   else if (ff === '미수금') clients = clients.filter(c => { const v=julgaeVal(pKey2,c.id); return v.fee>0 && !v.s; });
@@ -7350,6 +7358,11 @@ function updateJulgaeNum(pKey, clientId, field, rawVal) {
     if (sumEl) sumEl.textContent = ts ? ts.toLocaleString() : '-';
   }
   G.julgae[pKey][clientId] = cur;
+  // 청구 수수료(신고수수료+성실료)가 0으로 확정 입력되면 수금 자동 체크(수금할 금액 없음)
+  let _sAutoChk = false;
+  if ((field === 'fee' || field === 'feeSeongsi') && ((cur.fee||0)+(cur.feeSeongsi||0)) === 0 && !cur.s) {
+    cur.s = true; _sAutoChk = true;
+  }
   if (field === 'fee' || field === 'feeSeongsi') {
     const period = G.periods.find(p => p.id === pKey);
     const client = G.clients.find(c => c.id === clientId);
@@ -7368,7 +7381,8 @@ function updateJulgaeNum(pKey, clientId, field, rawVal) {
     }
   }
   saveToLS();
-  if (G.currentTab === 'fees') renderFees();
+  if (_sAutoChk && G.currentTab === 'julgae') renderJulgae(); // 수금 자동체크 반영
+  else if (G.currentTab === 'fees') renderFees();
   else if (G.currentTab === 'dashboard') renderDashboard();
   else if (G.currentTab === 'clients') renderClients();
 }
@@ -12452,6 +12466,7 @@ function doRecordTRRWith(clientId, pKey) {
   // 신고서를 검토·반영했으므로 진행상태(자료수령·기장·상담·결재) 자동 완료 처리
   updated.d = true; updated.b = true; updated.c = true; updated.a = true;
   updated._reviewed = true; // 금액 0도 '0'으로 표시(미검토 구분)
+  if (((updated.fee||0)+(updated.feeSeongsi||0)) === 0) updated.s = true; // 청구 수수료 0이면 수금 자동 체크
   G.julgae[pKey][clientId] = updated;
   syncJulgaeFeeToClient(clientId, G.periods.find(p=>p.id===pKey), updated.fee, updated.feeSeongsi); // 거래처목록 조정료·성실료 동기화
   // enrolled가 이미 명시적으로 사용 중인 경우에만 추가 (빈 배열이면 "전체 자동" 상태이므로 건드리지 않음)
@@ -14171,6 +14186,8 @@ function applyBosuFee(pKey, clientId, field, fee) {
   if (!G.julgae[pKey]) G.julgae[pKey] = {};
   const cur = julgaeVal(pKey, clientId);
   cur[field] = fee;
+  // 청구 수수료가 0으로 확정되면 수금 자동 체크
+  if ((field==='fee'||field==='feeSeongsi') && ((cur.fee||0)+(cur.feeSeongsi||0))===0) cur.s = true;
   G.julgae[pKey][clientId] = cur;
   const period = G.periods.find(p=>p.id===pKey);
   const client = G.clients.find(c=>c.id===clientId);
