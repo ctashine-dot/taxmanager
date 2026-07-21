@@ -6928,31 +6928,81 @@ function _setJulgae(pKey, cid, patch) {
 
 // 수금 입력 모달: 체크박스(전액수금)가 기본, 금액 입력 시 '일부입금(차액 미수금)' vs '청구액 변경' 구분
 // 신고수수료 거래처별 수금 모달 — 어느 신고의 수수료를 수금할지 선택(각 기간별 수금/일부입금/청구변경은 openCollectModal 재사용)
+function _filingFeeCatLabel(rt) {
+  if (['corp','income'].includes(rt)) return '조정료';
+  if (rt === 'seongsi') return '성실(조정+성실료)';
+  return '부가세 신고수수료';
+}
 function openFilingCollectModal(cid) {
   const c = G.clients.find(x=>x.id===cid);
-  // 이 거래처의 미수금 있는 신고기간 수집
+  // 이 거래처의 청구액이 있는 신고기간 수집(완납 포함 — 실수금액 확인·수정 가능)
   const rows = [];
   for (const pKey of Object.keys(G.julgae)) {
     const period = G.periods.find(p=>p.id===pKey); if(!period) continue;
     const v = G.julgae[pKey]?.[cid]; if(!v) continue;
     const billed = julgaeBilled(period, v); if(!billed) continue;
-    const unpaid = julgaeUnpaid(period, v); if(unpaid<=0) continue;
-    rows.push({pKey, label:period.label, billed, paid:julgaeCollectedAmt(period,v), unpaid});
+    const unpaid = julgaeUnpaid(period, v);
+    rows.push({pKey, period, v, label:period.label, rt:period.reportType||'', billed, paid:julgaeCollectedAmt(period,v), unpaid, ss:period.reportType==='seongsi'});
   }
-  rows.sort((a,b)=>a.label.localeCompare(b.label));
-  const body = rows.length ? rows.map(r=>`
-    <div style="border:1px solid #eee;border-radius:10px;padding:10px 12px;margin-bottom:8px">
-      <div style="font-weight:700;font-size:13px;margin-bottom:4px">${esc(r.label)}</div>
-      <div style="font-size:12px;color:#555;margin-bottom:8px">청구 ${r.billed.toLocaleString()} · 입금 <b style="color:#2e7d32">${r.paid.toLocaleString()}</b> · 미수 <b style="color:#e53935">${r.unpaid.toLocaleString()}</b></div>
-      <button onclick="openCollectModal('${r.pKey}',${cid})" class="btn-primary" style="width:100%;padding:9px">💵 수금 입력 (전액·일부·청구변경)</button>
-    </div>`).join('') : '<div style="color:#2e7d32;text-align:center;padding:20px">미수금이 없습니다 ✓</div>';
-  showModal(`<div style="max-width:440px;width:92vw;max-height:calc(100vh - 60px);display:flex;flex-direction:column">
+  // 미수금 우선 정렬, 그 다음 라벨순
+  rows.sort((a,b)=> (b.unpaid>0)-(a.unpaid>0) || a.label.localeCompare(b.label));
+  const body = rows.length ? rows.map(r=>{
+    const done = r.unpaid <= 0;
+    const catBadge = `<span style="font-size:10px;font-weight:700;color:#6a3ab2;background:#f3e8fd;border:1px solid #cdb4ef;border-radius:8px;padding:1px 7px;margin-left:6px">${esc(_filingFeeCatLabel(r.rt))}</span>`;
+    const status = done
+      ? `<span style="font-size:11px;color:#2e7d32;font-weight:700">✓ 수금완료</span>`
+      : `<span style="font-size:11px;color:#e53935;font-weight:700">미수 ${r.unpaid.toLocaleString()}</span>`;
+    const inputStyle = 'width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid #a5d6a7;border-radius:6px;font-size:13px;text-align:right;font-family:inherit';
+    const amtInputs = r.ss
+      ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">
+           <div><div style="font-size:10px;color:#888;margin-bottom:2px">조정료 실수금 (청구 ${(r.v.fee||0).toLocaleString()})</div><input id="fc-amt-${r.pKey}" type="number" inputmode="numeric" value="${r.v.paid||r.v.fee||0}" style="${inputStyle}"></div>
+           <div><div style="font-size:10px;color:#888;margin-bottom:2px">성실료 실수금 (청구 ${(r.v.feeSeongsi||0).toLocaleString()})</div><input id="fc-amt-ss-${r.pKey}" type="number" inputmode="numeric" value="${r.v.paidSeongsi||r.v.feeSeongsi||0}" style="${inputStyle}"></div>
+         </div>`
+      : `<div style="margin-top:6px"><div style="font-size:10px;color:#888;margin-bottom:2px">실수금액 (청구 ${r.billed.toLocaleString()})</div><input id="fc-amt-${r.pKey}" type="number" inputmode="numeric" value="${done? r.paid : r.billed}" style="${inputStyle}"></div>`;
+    return `<div style="border:1px solid ${done?'#c8e6c9':'#ffe0b2'};border-radius:10px;padding:10px 12px;margin-bottom:8px;background:${done?'#f6fff6':'#fffdf7'}">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
+        <div style="font-weight:700;font-size:13px">${esc(r.label)}${catBadge}</div>${status}
+      </div>
+      <div style="font-size:11px;color:#777;margin-top:3px">청구 ${r.billed.toLocaleString()} · 기입금 <b style="color:#2e7d32">${r.paid.toLocaleString()}</b></div>
+      ${amtInputs}
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <button onclick="applyFilingCollect('${r.pKey}',${cid})" class="btn-primary" style="flex:1;padding:8px">💵 실수금 반영</button>
+        ${(r.paid||r.v.s)?`<button onclick="applyFilingCollect('${r.pKey}',${cid},true)" style="padding:8px 12px;border:1px solid #e0e0e0;background:#fafafa;color:#999;border-radius:8px;cursor:pointer;font-family:inherit;font-size:12px">초기화</button>`:''}
+      </div>
+    </div>`;
+  }).join('') : '<div style="color:#2e7d32;text-align:center;padding:20px">청구된 신고수수료가 없습니다 ✓</div>';
+  showModal(`<div style="max-width:460px;width:92vw;max-height:calc(100vh - 60px);display:flex;flex-direction:column">
     <div class="modal-header"><h3>💰 신고수수료 수금 — ${esc(c?.name||'')}</h3><button class="close-btn" onclick="navBack()">✕</button></div>
     <div class="modal-body" style="overflow-y:auto;flex:1">
-      <div style="font-size:12px;color:#888;margin-bottom:10px">수금할 신고를 선택하세요. 입금액이 청구액과 다르면 '청구액 변경' 또는 '일부 입금'을 선택할 수 있고, 신고리스트 금액과 자동 연동됩니다.</div>
+      <div style="font-size:12px;color:#888;margin-bottom:10px">각 신고수수료별로 <b>실제 수금한 금액</b>을 입력하고 '실수금 반영'을 누르세요. 청구액과 같으면 수금완료, 적으면 차액이 미수금으로 남고, 해당 <b>신고리스트에 자동 반영</b>됩니다.</div>
       ${body}
     </div>
   </div>`);
+}
+// 신고수수료 실수금액 반영 — 해당 신고리스트(G.julgae)에 입금액·수금여부 기록
+function applyFilingCollect(pKey, cid, doClear) {
+  const period = G.periods.find(p=>p.id===pKey); if(!period){toast('기간 오류','warning');return;}
+  const ss = period.reportType==='seongsi';
+  const v = julgaeVal(pKey, cid);
+  let ok;
+  if (doClear) {
+    ok = _setJulgae(pKey, cid, {paid:0, paidSeongsi:0, s:false});
+  } else {
+    const amt = Math.max(0, Math.round(Number(document.getElementById('fc-amt-'+pKey)?.value)||0));
+    if (ss) {
+      const amtSs = Math.max(0, Math.round(Number(document.getElementById('fc-amt-ss-'+pKey)?.value)||0));
+      const full = (amt >= (v.fee||0)) && (amtSs >= (v.feeSeongsi||0));
+      ok = _setJulgae(pKey, cid, {paid:amt, paidSeongsi:amtSs, s:full});
+    } else {
+      const billed = julgaeBilled(period, v);
+      ok = _setJulgae(pKey, cid, {paid:amt, s: amt>=billed && billed>0});
+    }
+  }
+  if (!ok) return;
+  const _ct = G.currentTab;
+  if (_ct==='fees') renderFees(); else if (_ct==='dashboard') renderDashboard(); else renderJulgae();
+  toast(doClear?'수금 기록을 초기화했습니다':'실수금액이 신고리스트에 반영되었습니다','success',1800);
+  openFilingCollectModal(cid); // 모달 새로고침(입금·미수 갱신)
 }
 
 function openCollectModal(pKey, cid) {
