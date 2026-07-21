@@ -11024,11 +11024,14 @@ function parseAIJson(result) {
   if (!raw) return null;
   raw = raw.trim().replace(/```\s*$/, '').trim();
   try { return JSON.parse(raw); } catch(e) {}
-  // 잘린 JSON 복구 시도
+  // 잘린 JSON 복구 시도 (여기 도달 = 파싱 실패 = 대체로 응답이 잘림)
   try {
     let s = raw;
     if (((s.match(/"/g) || []).length) % 2 !== 0) s = s.slice(0, s.lastIndexOf('"')); // 열린 따옴표 정리
     s = s.replace(/,\s*$/, '').replace(/:\s*$/, '').replace(/,\s*"[^"]*$/, '');        // 매달린 키/콤마 제거
+    // 끝이 '키: 숫자'로 잘린 경우 → 숫자가 잘려 잘못된 값이 될 수 있으므로 해당 필드를 통째로 제거
+    s = s.replace(/,?\s*"[^"]*"\s*:\s*-?\d+(?:\.\d+)?\s*$/, '');
+    s = s.replace(/,\s*$/, '');
     const stack = [];
     for (const ch of s) { if (ch === '{') stack.push('}'); else if (ch === '[') stack.push(']'); else if (ch === '}' || ch === ']') stack.pop(); }
     while (stack.length) s += stack.pop();
@@ -11426,7 +11429,7 @@ ${text.slice(0, 12000)}
     let reviewText = '';
     try {
       const _bp = extractOnly ? extractPrompt + `\n\n【빠른 추출 모드】 위 2단계 검토 의견은 작성하지 말고, 1단계 JSON 데이터만 정확히 출력하십시오.` : extractPrompt;
-      const result = await aiCallStream(null, buildReviewContent(_bp, pdfImages), extractOnly?1400:3000, null, 'claude-opus-4-8');
+      const result = await aiCallStream(null, buildReviewContent(_bp, pdfImages), extractOnly?3000:3500, null, 'claude-opus-4-8');
       if (result) {
         reviewData = parseAIJson(result);
         reviewText = extractOnly ? '' : result.replace(/```json[\s\S]*?```/g,'').replace(/```json[\s\S]*$/,'').trim();
@@ -11903,6 +11906,16 @@ function _recordScrape() {
 async function runTaxReturnReview(type, extractOnly) {
   const text = (document.getElementById('trr-text-input')||{}).value?.trim();
   if (!text) { toast('신고서 내용을 입력하거나 PDF를 업로드해주세요', 'warning'); return; }
+  // 내용만 불러오기: 텍스트 레이어가 충분하면 AI 비전(오독 가능) 대신 결정적 텍스트 스크랩 사용
+  if (extractOnly && ['vat','income','seongsi'].includes(type)) {
+    try {
+      const _d = (type==='vat') ? _scrapeVatReturn(text) : _scrapeIncomeReturn(text);
+      const _good = (type==='vat')
+        ? ((_d.salesAmount>0 || _d.purchaseAmount>0 || _d.vatAmount>0) && !!_d.bizNo)
+        : ((_d.income>0) || (_d.businessSites && _d.businessSites.length>0) || (!!_d.representative && (_d.totalTax>0||_d.revenue>0)));
+      if (_good) { runVatScrapeNoKey(type); return; } // 정확한 텍스트 스크랩으로 기록(무키)
+    } catch(_) {}
+  }
   const resultDiv = document.getElementById('trr-result');
   const btn = document.getElementById('trr-run-btn');
   if (btn) btn.disabled = true;
@@ -12048,7 +12061,7 @@ ${text.slice(0, 14000)}
 
   try {
     let charCount = 0;
-    const result = await aiCallStream(null, buildReviewContent(_prompt, _trrImages), extractOnly?1600:5000, (chunk, full) => {
+    const result = await aiCallStream(null, buildReviewContent(_prompt, _trrImages), extractOnly?3500:5000, (chunk, full) => {
       charCount += chunk.length;
       const prog = document.getElementById('trr-progress');
       if (prog) prog.textContent = `(${charCount.toLocaleString()}자 분석 중...)`;
