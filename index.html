@@ -729,8 +729,9 @@ function clientInFilingPeriod(c, period) {
     const cym = String(c.contractDate).slice(0,7);
     if (fym && cym && cym > fym && !periodHasClientData(period, c)) return false;
   }
-  // 위 수임일 조건 통과 후, 수동 편입(enrolled)한 업체는 상태·목록제외와 무관하게 표시(사용자가 직접 추가)
-  if (period && Array.isArray(period.enrolled) && period.enrolled.includes(c.id)) return true;
+  // 사용자가 '직접 추가(manualAdd)'한 업체만 상태·목록제외와 무관하게 표시(예: 폐업이지만 수동 편입)
+  // — 일괄/자동 편입(enrolled)만으로는 폐업·해지 업체가 카운트에 남지 않도록 함
+  if (period && Array.isArray(period.manualAdd) && period.manualAdd.includes(c.id)) return true;
   // 거래처목록에서 제외(삭제)된 업체: 데이터가 있는 기간에만 보존 표시
   if (c.listRemoved) return periodHasClientData(period, c);
   if (c.status !== '해지' && c.status !== '폐업') return true;
@@ -6859,6 +6860,7 @@ function removeFromJulgaeGroup(pKey2, clientId) {
     period.enrolled = applyReportFilter(base, period).map(c => c.id);
   }
   period.enrolled = period.enrolled.filter(id => id !== clientId);
+  if (period.manualAdd) period.manualAdd = period.manualAdd.filter(id => id !== clientId);
   // 제거를 영구 반영 — 이후 자동등록으로 되살아나지 않도록 excluded에 기록
   period.excluded = period.excluded || [];
   if (!period.excluded.includes(clientId)) period.excluded.push(clientId);
@@ -6891,6 +6893,7 @@ function removeClientFromJulgaeList(id) {
       period.enrolled = applyReportFilter(G.clients.filter(cc=>clientInFilingPeriod(cc, period)), period).map(cc=>cc.id);
     }
     period.enrolled = period.enrolled.filter(x=>x!==id);
+    if (period.manualAdd) period.manualAdd = period.manualAdd.filter(x=>x!==id);
     period.excluded = period.excluded || [];
     if (!period.excluded.includes(id)) period.excluded.push(id); // 제거 영구 반영(자동등록 방지)
   }
@@ -6944,6 +6947,9 @@ function addJulgaeListMember(leadId, targetId) {
     }
     if(!period.enrolled.includes(targetId)) period.enrolled.push(targetId);
     if(!period.enrolled.includes(leadId)) period.enrolled.push(leadId);
+    period.manualAdd = period.manualAdd || [];
+    [targetId, leadId].forEach(x=>{ if(!period.manualAdd.includes(x)) period.manualAdd.push(x); });
+    if(period.excluded) period.excluded = period.excluded.filter(x=>x!==targetId && x!==leadId);
   }
   closeModal();
   linkIncomeGroup(leadId, targetId); // 그룹 연결 + saveToLS + renderJulgae + toast
@@ -12077,6 +12083,11 @@ ${text.slice(0, 14000)}
         if (cand.length===1) matchedClient = cand[0];
       }
     }
+    // 부가세 검토: 매칭 거래처의 수임유형이 기장·고문·성실이면 신고수수료 추천 0원(월정에 포함)
+    if (type==='vat' && matchedClient && getDealTypes(matchedClient).some(d=>['기장','고문','성실'].includes(d))) {
+      reviewData.feeRecommendation = 0;
+      reviewData.feeReason = '기장·고문·성실 거래처 — 부가세 신고수수료는 월정에 포함(추천 0원)';
+    }
 
     let dataCard = '';
     if (reviewData) {
@@ -12095,8 +12106,8 @@ ${text.slice(0, 14000)}
           ${reviewData.payTax?`<div><span style="color:#888">납부세액:</span> <b style="color:#c62828">${fmtN(reviewData.payTax)}</b></div>`:''}
           ${reviewData.incomeRatio!=null?`<div><span style="color:#888">소득률:</span> <b style="color:${reviewData.incomeRatio<3||reviewData.incomeRatio>60?'#e65100':'#2e7d32'}">${reviewData.incomeRatio}%</b></div>`:''}
         </div>
-        ${reviewData.feeRecommendation?`<div style="margin-top:10px;padding:8px 12px;background:#e8f5e9;border-radius:8px;font-size:13px">
-          <span style="color:#2e7d32;font-weight:700">💰 추천 수수료: ${fmtN(reviewData.feeRecommendation)}</span>
+        ${(reviewData.feeRecommendation || reviewData.feeReason)?`<div style="margin-top:10px;padding:8px 12px;background:#e8f5e9;border-radius:8px;font-size:13px">
+          <span style="color:#2e7d32;font-weight:700">💰 추천 수수료: ${fmtN(reviewData.feeRecommendation||0)}</span>
           <span style="color:#555;margin-left:6px;font-size:12px">${esc(reviewData.feeReason||'')}</span>
         </div>`:''}
         ${reviewData.taxCreditIssues?.length?`<div style="margin-top:8px;padding:8px 12px;background:#fff8e1;border-radius:8px;border:1px solid #ffe082">
@@ -14309,6 +14320,8 @@ function addExistingToJulgae(pKey, clientId) {
     period.enrolled = applyReportFilter(G.clients.filter(cc=>clientInFilingPeriod(cc,period)),period).map(cc=>cc.id);
   }
   if (!period.enrolled.includes(clientId)) period.enrolled.push(clientId);
+  period.manualAdd = period.manualAdd || [];
+  if (!period.manualAdd.includes(clientId)) period.manualAdd.push(clientId); // 직접 추가 표시(상태 무관 표시)
   if (period.excluded) period.excluded = period.excluded.filter(x=>x!==clientId); // 명시적 제외였다면 해제
   saveToLS();
   closeModal();
@@ -14367,6 +14380,8 @@ function _applyOfferAddToFilingLists(clientId) {
       p.enrolled = applyReportFilter(G.clients.filter(cc=>clientInFilingPeriod(cc,p)),p).map(cc=>cc.id);
     }
     if (!p.enrolled.includes(clientId)) p.enrolled.push(clientId);
+    p.manualAdd = p.manualAdd || [];
+    if (!p.manualAdd.includes(clientId)) p.manualAdd.push(clientId);
     if (p.excluded) p.excluded = p.excluded.filter(x=>x!==clientId);
     n++;
   });
