@@ -6249,14 +6249,44 @@ function renderJulgae() {
     </div>` : ''}
   </div>
   ${(()=>{
-    // 담당자별 업체수 (리스트 전체 기준)
-    const mc = {};
-    summaryClients.forEach(c => { const ms = getManagers(c); if (!ms.length) { mc['(미지정)'] = (mc['(미지정)']||0)+1; } else ms.forEach(m => mc[m] = (mc[m]||0)+1); });
-    const entries = Object.entries(mc).sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0],'ko'));
-    if (!entries.length) return '';
-    return `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:12px;padding:8px 10px;background:#f5f7ff;border:1px solid #e3e8f7;border-radius:10px">
-      <span style="font-size:11px;font-weight:800;color:#3949ab;margin-right:2px">👤 담당자별 업체수</span>
-      ${entries.map(([m,n])=>`<span style="font-size:11px;background:#fff;border:1px solid #dfe4f5;border-radius:12px;padding:2px 10px;color:#3949ab"><b>${esc(m)}</b> ${n}</span>`).join('')}
+    // 담당자별 현황 (리스트 전체 기준): 업체수 · 결재/미결재 · 수수료 청구 · 수금 · 미수금(건/액)
+    const ms2 = {};
+    summaryClients.forEach(c => {
+      const v = julgaeVal(pKey2, c.id);
+      const billed = julgaeBilled(period, v);
+      const collected = julgaeCollectedAmt(period, v);
+      const unpaid = Math.max(0, billed - collected);
+      const keys = getManagers(c).length ? getManagers(c) : ['(미지정)'];
+      keys.forEach(m => {
+        const s = ms2[m] || (ms2[m] = {cnt:0, done:0, billed:0, collected:0, unpaid:0, unpaidCnt:0});
+        s.cnt++; if (v.a) s.done++; s.billed += billed; s.collected += collected; s.unpaid += unpaid; if (unpaid > 0) s.unpaidCnt++;
+      });
+    });
+    const rows = Object.entries(ms2).sort((a,b)=> b[1].cnt-a[1].cnt || a[0].localeCompare(b[0],'ko'));
+    if (!rows.length) return '';
+    const tot = rows.reduce((t,[,s])=>{ t.cnt+=s.cnt; t.done+=s.done; t.billed+=s.billed; t.collected+=s.collected; t.unpaid+=s.unpaid; t.unpaidCnt+=s.unpaidCnt; return t; }, {cnt:0,done:0,billed:0,collected:0,unpaid:0,unpaidCnt:0});
+    const won = n => (n||0).toLocaleString();
+    const rowHtml = (label, s, isTot) => `<tr style="${isTot?'background:#eef1fb;font-weight:800':''};border-top:1px solid #eceff7">
+      <td style="padding:5px 8px;font-weight:700;white-space:nowrap">${esc(label)}</td>
+      <td style="padding:5px 8px;text-align:right">${s.cnt}</td>
+      <td style="padding:5px 8px;text-align:center;white-space:nowrap"><b style="color:#2e7d32">${s.done}</b><span style="color:#bbb">/</span><b style="color:${s.cnt-s.done>0?'#e53935':'#bbb'}">${s.cnt-s.done}</b></td>
+      <td style="padding:5px 8px;text-align:right;color:#7b1fa2;font-weight:700">${won(s.billed)}</td>
+      <td style="padding:5px 8px;text-align:right;color:#2e7d32">${won(s.collected)}</td>
+      <td style="padding:5px 8px;text-align:right"><span style="color:${s.unpaid>0?'#e53935':'#bbb'};font-weight:700">${won(s.unpaid)}</span>${s.unpaidCnt?`<span style="font-size:9px;color:#e57373"> (${s.unpaidCnt})</span>`:''}</td>
+    </tr>`;
+    return `<div style="margin-bottom:12px;border:1px solid #e3e8f7;border-radius:10px;overflow:hidden">
+      <div style="background:#f5f7ff;padding:6px 10px;font-size:12px;font-weight:800;color:#3949ab">👤 담당자별 현황 (리스트 전체)</div>
+      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:520px">
+        <thead><tr style="background:#fafbff;color:#888;font-size:10px">
+          <th style="padding:4px 8px;text-align:left">담당자</th>
+          <th style="padding:4px 8px;text-align:right">업체수</th>
+          <th style="padding:4px 8px;text-align:center">결재/미결재</th>
+          <th style="padding:4px 8px;text-align:right">수수료 청구</th>
+          <th style="padding:4px 8px;text-align:right">수금</th>
+          <th style="padding:4px 8px;text-align:right">미수금(건)</th>
+        </tr></thead>
+        <tbody>${rows.map(([m,s])=>rowHtml(m,s,false)).join('')}${rows.length>1?rowHtml('합계',tot,true):''}</tbody>
+      </table></div>
     </div>`;
   })()}
   ${(()=>{
