@@ -14170,8 +14170,15 @@ function openJulgaeAddClientModal(pKey) {
           📋 거래처목록에 등록 후 추가
         </button>
       </div>
+      <div style="border:1.5px solid #e8f5e9;border-radius:12px;padding:14px">
+        <div style="font-size:13px;font-weight:800;color:#2e7d32;margin-bottom:6px">② 기존 거래처 검색 후 추가</div>
+        <div style="font-size:12px;color:#888;margin-bottom:10px">이미 거래처목록에 있는 업체를 검색해 이 신고리스트에 추가합니다(유형 필터와 무관하게 표시).</div>
+        <input id="jexist-q" type="text" placeholder="상호·대표자·사업자번호 검색..." oninput="window._jexistRender&&window._jexistRender(this.value)"
+          style="width:100%;padding:9px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:8px">
+        <div id="jexist-results" style="max-height:240px;overflow-y:auto"></div>
+      </div>
       <div style="border:1.5px solid #fff3e0;border-radius:12px;padding:14px">
-        <div style="font-size:13px;font-weight:800;color:#e65100;margin-bottom:6px">② 신고리스트에만 추가 (미등록)</div>
+        <div style="font-size:13px;font-weight:800;color:#e65100;margin-bottom:6px">③ 신고리스트에만 추가 (미등록)</div>
         <div style="font-size:12px;color:#888;margin-bottom:10px">거래처목록에는 추가되지 않습니다. 신고리스트에서만 표시됩니다.</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
           <div>
@@ -14201,6 +14208,46 @@ function openJulgaeAddClientModal(pKey) {
       </div>
     </div>
   </div>`);
+  // 기존 거래처 검색 결과 렌더러
+  window._jexistRender = (q) => {
+    const el = document.getElementById('jexist-results'); if (!el) return;
+    const period = G.periods.find(p => p.id === pKey);
+    const nq = String(q||'').replace(/\s+/g,'').toLowerCase();
+    const digits = String(q||'').replace(/\D/g,'');
+    if (!nq) { el.innerHTML = '<div style="color:#bbb;text-align:center;padding:10px;font-size:12px">검색어를 입력하세요</div>'; return; }
+    const inList = new Set((period && period.enrolled && period.enrolled.length)
+      ? period.enrolled
+      : (period ? applyReportFilter(G.clients.filter(cc=>clientInFilingPeriod(cc,period)),period).map(cc=>cc.id) : []));
+    const results = G.clients.filter(c => {
+      const nm=(c.name||'').replace(/\s+/g,'').toLowerCase(), rp=(c.rep||'').replace(/\s+/g,'').toLowerCase();
+      const bn=(c.bizNo||'').replace(/\D/g,'');
+      return nm.includes(nq) || rp.includes(nq) || (digits.length>=3 && bn.includes(digits));
+    }).slice(0,20);
+    el.innerHTML = results.length ? results.map(tc=>{
+      const already = inList.has(tc.id);
+      const st = (tc.status && tc.status!=='정상' && tc.status!=='주의') ? ` · <span style="color:#c62828">${esc(tc.status)}</span>` : '';
+      return `<div ${already?'':`onclick="addExistingToJulgae('${pKey}',${tc.id})"`} style="padding:9px 12px;border-radius:8px;border:1px solid #f0f0f0;margin-bottom:4px;background:${already?'#f5f5f5':'#fafbff'};cursor:${already?'default':'pointer'}">
+        <div style="font-weight:700;font-size:13px">${esc(tc.name)}${already?'<span style="font-size:10px;color:#999;margin-left:6px">이미 리스트에 있음</span>':''}</div>
+        <div style="font-size:11px;color:#888">${esc(tc.rep||'-')} · ${esc(getManagers(tc).join(', ')||'-')}${tc.bizNo?' · '+esc(tc.bizNo):''}${st}</div>
+      </div>`;
+    }).join('') : '<div style="color:#aaa;text-align:center;padding:12px;font-size:12px">검색 결과 없음</div>';
+  };
+}
+// 기존 거래처를 현재 신고리스트(enrolled)에 추가
+function addExistingToJulgae(pKey, clientId) {
+  if (!requireWrite()) return;
+  const period = G.periods.find(p => p.id === pKey);
+  const c = G.clients.find(x => x.id === clientId);
+  if (!period || !c) return;
+  if (!period.enrolled || !period.enrolled.length) {
+    period.enrolled = applyReportFilter(G.clients.filter(cc=>clientInFilingPeriod(cc,period)),period).map(cc=>cc.id);
+  }
+  if (!period.enrolled.includes(clientId)) period.enrolled.push(clientId);
+  if (period.excluded) period.excluded = period.excluded.filter(x=>x!==clientId); // 명시적 제외였다면 해제
+  saveToLS();
+  closeModal();
+  renderJulgae();
+  toast(`"${c.name}" 신고리스트에 추가됨`, 'success', 2000);
 }
 
 function saveJulgaeAdhocEntry(pKey) {
