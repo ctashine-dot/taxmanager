@@ -2654,8 +2654,8 @@ function renderClients() {
   <table>
     <thead>
     <tr>
-      <th style="padding:4px 6px">${(()=>{const a=G.searchText;return`<button onclick="openClientNameSearch(this)" style="width:100%;padding:4px 7px;border-radius:7px;font-size:11px;cursor:pointer;font-family:inherit;border:1.5px solid ${a?'#4f8ef7':'#ddd'};background:${a?'#e8f0fe':'#fff'};color:${a?'#1565c0':'#555'};display:flex;justify-content:space-between;align-items:center;gap:4px"><span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a?esc(a):'거래처명'}</span><span style="font-size:9px;opacity:.5">🔍</span></button>`;})()}</th>
-      <th style="width:72px;padding:3px 4px;${_hcStyle('c_rep')}"><div style="display:flex;align-items:center">${(()=>{const a=G.clientRepSearch;return`<button onclick="openClientRepSearch(this)" style="width:100%;padding:4px 6px;border-radius:7px;font-size:11px;cursor:pointer;font-family:inherit;border:1.5px solid ${a?'#4f8ef7':'#ddd'};background:${a?'#e8f0fe':'#fff'};color:${a?'#1565c0':'#555'};display:flex;justify-content:space-between;align-items:center;gap:3px"><span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a?esc(a):'대표자'}</span><span style="font-size:9px;opacity:.5">🔍</span></button>`;})()}${_hcBtn('c_rep')}</div></th>
+      <th style="padding:4px 6px">${_inlineSearchInput({gField:'searchText',value:G.searchText,placeholder:'거래처명',renderName:'renderClients',inputId:'cns-inline',pageField:'clientPage'})}</th>
+      <th style="width:72px;padding:3px 4px;${_hcStyle('c_rep')}"><div style="display:flex;align-items:center">${_inlineSearchInput({gField:'clientRepSearch',value:G.clientRepSearch,placeholder:'대표자',renderName:'renderClients',inputId:'crs-inline',pageField:'clientPage'})}${_hcBtn('c_rep')}</div></th>
       <th style="padding:4px 6px;${_hcStyle('c_dealType')}"><div style="display:flex;align-items:center">${filterPopupBtn('filterDealTypes','수임유형')}${_hcBtn('c_dealType')}</div></th>
       <th style="padding:4px 6px;${_hcStyle('c_taxType')}"><div style="display:flex;align-items:center">${filterPopupBtn('filterTaxTypes','인격')}${_hcBtn('c_taxType')}</div></th>
       <th style="padding:4px 6px;${_hcStyle('c_vatType')}"><div style="display:flex;align-items:center">${filterPopupBtn('filterVatTypes','과세유형')}${_hcBtn('c_vatType')}</div></th>
@@ -3041,6 +3041,31 @@ function _openClientSearch(field, title, inputId, btnEl) {
 }
 function openClientNameSearch(btnEl) { _openClientSearch('searchText','거래처명 검색','cns-inp',btnEl); }
 function openClientRepSearch(btnEl)  { _openClientSearch('clientRepSearch','대표자명 검색','crs-inp',btnEl); }
+// ── 인라인 헤더 검색(팝업 없이 헤더 칸에 바로 입력) — 재렌더 후 포커스·커서 복원 ──
+let _inlineSearchTimer = null;
+function _inlineHeaderSearch(gField, value, renderName, inputId, pageField) {
+  G[gField] = value;
+  if (pageField) G[pageField] = 0;
+  window._refocusSearchId = inputId;
+  clearTimeout(_inlineSearchTimer);
+  _inlineSearchTimer = setTimeout(() => {
+    const fn = window[renderName]; if (typeof fn === 'function') fn();
+    _restoreSearchFocus();
+  }, 200);
+}
+function _restoreSearchFocus() {
+  const id = window._refocusSearchId; if (!id) return;
+  window._refocusSearchId = null;
+  const el = document.getElementById(id);
+  if (el && document.activeElement !== el) { el.focus(); const l = el.value.length; try { el.setSelectionRange(l, l); } catch(e){} }
+}
+// 인라인 검색 input HTML 생성기
+function _inlineSearchInput({ gField, value, placeholder, renderName, inputId, pageField }) {
+  const active = !!value;
+  return `<input id="${inputId}" type="text" value="${esc(value||'')}" placeholder="🔍 ${esc(placeholder)}" autocomplete="off"
+    oninput="_inlineHeaderSearch('${gField}',this.value,'${renderName}','${inputId}',${pageField?`'${pageField}'`:'null'})"
+    style="width:100%;padding:4px 7px;border-radius:7px;font-size:11px;font-family:inherit;box-sizing:border-box;border:1.5px solid ${active?'#4f8ef7':'#ddd'};background:${active?'#e8f0fe':'#fff'};color:${active?'#1565c0':'#333'}">`;
+}
 function toggleCMS(id) {
   const c = G.clients.find(x=>x.id===id); if(!c) return;
   c.cms = !c.cms;
@@ -6501,8 +6526,8 @@ function renderJulgae() {
     <thead><tr>
       ${G.julgaeBulkMode?'<th style="width:32px"><input type="checkbox" onclick="if(this.checked){G.julgaeBulkSelected=(window._julgaeVisible||[]).map(c=>c.id)}else{G.julgaeBulkSelected=[]};renderJulgae()"></th>':''}
       <th style="width:28px;position:sticky;left:${_numLeft}px;z-index:3;background:#f8f9ff">번</th>
-      <th class="j-sname" style="padding:4px 6px;width:130px;left:${_nameLeft}px;background:#f8f9ff">${(()=>{const a=G.julgaeSearch;return`<button onclick="openJulgaeNameSearch(this)" style="width:100%;padding:4px 7px;border-radius:7px;font-size:11px;cursor:pointer;font-family:inherit;border:1.5px solid ${a?'#4f8ef7':'#ddd'};background:${a?'#e8f0fe':'#fff'};color:${a?'#1565c0':'#555'};display:flex;justify-content:space-between;align-items:center;gap:4px;"><span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a?esc(a):'거래처명'}</span><span style="font-size:9px;opacity:.5;flex-shrink:0">🔍</span></button>`;})()}</th>
-      <th style="width:80px;padding:3px 4px;${_hcStyle('j_rep')}">${(()=>{const a=G.julgaeRepSearch;return`<div style="display:flex;align-items:center"><button onclick="openJulgaeRepSearch(this)" style="flex:1;padding:4px 6px;border-radius:7px;font-size:11px;cursor:pointer;font-family:inherit;border:1.5px solid ${a?'#4f8ef7':'#ddd'};background:${a?'#e8f0fe':'#fff'};color:${a?'#1565c0':'#555'};display:flex;justify-content:space-between;align-items:center;gap:3px;"><span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a?esc(a):'대표자'}</span><span style="font-size:9px;opacity:.5;flex-shrink:0">🔍</span></button>${_hcBtn('j_rep')}</div>`;})()}</th>
+      <th class="j-sname" style="padding:4px 6px;width:130px;left:${_nameLeft}px;background:#f8f9ff">${_inlineSearchInput({gField:'julgaeSearch',value:G.julgaeSearch,placeholder:'거래처명',renderName:'renderJulgae',inputId:'jns-inline',pageField:'julgaePage'})}</th>
+      <th style="width:80px;padding:3px 4px;${_hcStyle('j_rep')}"><div style="display:flex;align-items:center">${_inlineSearchInput({gField:'julgaeRepSearch',value:G.julgaeRepSearch,placeholder:'대표자',renderName:'renderJulgae',inputId:'jrs-inline',pageField:'julgaePage'})}${_hcBtn('j_rep')}</div></th>
       <th style="width:75px;padding:4px 6px;${_hcStyle('j_manager')}"><div style="display:flex;align-items:center">${filterPopupBtn('julgaeManagers','담당자')}${_hcBtn('j_manager')}</div></th>
       <th style="width:62px;text-align:center;padding:3px;${_hcStyle('j_book')}"><div style="display:flex;flex-direction:column;align-items:center;gap:2px">${julgaeCycleBtn('julgaeBookFilter','기장')}<button onclick="checkAllJulgaeField('b')" style="font-size:9px;padding:1px 5px;border-radius:4px;border:1px solid #f57c00;background:#fff3e0;color:#e65100;cursor:pointer;white-space:nowrap" title="기장 전체 체크/해제">전체</button>${_hcBtn('j_book')}</div></th>
       <th style="width:62px;text-align:center;padding:3px;${_hcStyle('j_consul')}"><div style="display:flex;flex-direction:column;align-items:center;gap:2px">${julgaeCycleBtn('julgaeConsulFilter','상담')}<button onclick="checkAllJulgaeField('c')" style="font-size:9px;padding:1px 5px;border-radius:4px;border:1px solid #1565c0;background:#e3f2fd;color:#1565c0;cursor:pointer;white-space:nowrap" title="상담 전체 체크/해제">전체</button>${_hcBtn('j_consul')}</div></th>
