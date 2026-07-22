@@ -11867,8 +11867,21 @@ function batchRecord(bIdx) {
     card.style.borderColor = '#a5d6a7';
     card.style.background = '#f9fff9';
     const btnArea = document.getElementById(`bc-btn-area-${bIdx}`);
-    if (btnArea) btnArea.innerHTML = `<div style="text-align:center;padding:6px;font-size:12px;color:#2e7d32;font-weight:700">✅ 기록 완료</div><button onclick="document.getElementById('batch-card-${bIdx}').remove()" style="width:100%;margin-top:4px;padding:5px;background:#fff;color:#e53935;border:1.5px solid #ffcdd2;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit">🗑 카드 삭제</button>`;
+    if (btnArea) {
+      window._bcBtnHTML = window._bcBtnHTML || {};
+      window._bcBtnHTML[bIdx] = btnArea.innerHTML; // 재기록 시 복원용 원본 보관
+      btnArea.innerHTML = `<button onclick="_bcRerecord(${bIdx})" title="다시 기록하려면 클릭" style="width:100%;padding:6px;background:#e8f5e9;color:#2e7d32;border:1.5px solid #a5d6a7;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">✅ 기록 완료 (다시 기록하려면 클릭)</button><button onclick="document.getElementById('batch-card-${bIdx}').remove()" style="width:100%;margin-top:4px;padding:5px;background:#fff;color:#e53935;border:1.5px solid #ffcdd2;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit">🗑 카드 삭제</button>`;
+    }
   }
+}
+// 일괄검토 카드: '기록 완료' 클릭 시 기록 상태를 풀고 원래 입력·기록 버튼을 복원(다시 기록 가능)
+function _bcRerecord(bIdx) {
+  const item = _batchResults[bIdx];
+  if (item) item.recorded = false;
+  const card = document.getElementById(`batch-card-${bIdx}`);
+  if (card) { card.style.borderColor = '#e0e0e0'; card.style.background = ''; }
+  const btnArea = document.getElementById(`bc-btn-area-${bIdx}`);
+  if (btnArea && window._bcBtnHTML && window._bcBtnHTML[bIdx] != null) btnArea.innerHTML = window._bcBtnHTML[bIdx];
 }
 
 // 신고서 텍스트에서 사업자번호 추출 — 구분자 없음/공백/전각숫자 모두 대응, 주민번호(13자리)는 제외
@@ -12095,11 +12108,24 @@ function runVatScrapeNoKey(type) {
     toast('소득세 신고서 스크랩 완료 — 값 확인 후 기록하세요','success',2500);
     return;
   }
-  const _gm = (a,ex)=> won(a)+'원'+(ex>0?` (과+면 · 면세 ${won(ex)})`:'');
-  const rows = [['신고기간',d.period||'-'],['상호',d.companyName||'-'],['대표자',d.representative||'-'],['사업자번호',d.bizNo||'-'],['전화번호',d.phone||'-'],['매출액(과세표준)',_gm(d.salesAmount,d.salesExempt)],['매입액(차감계)',_gm(d.purchaseAmount,d.purchaseExempt)],['납부할세액',won(d.vatAmount)+'원'+(d.vatAmount<0?' (환급)':'')],['업종코드',d.bizCode||'-'],['관할세무서',d.taxOffice||'-']];
+  // 상단: 읽기전용 식별정보 / 하단: 금액은 직접 수정 가능한 입력칸(잘못 추출 시 바로 고쳐 기록)
+  const roRows = [['신고기간',d.period||'-'],['상호',d.companyName||'-'],['대표자',d.representative||'-'],['사업자번호',d.bizNo||'-'],['전화번호',d.phone||'-'],['업종코드',d.bizCode||'-'],['관할세무서',d.taxOffice||'-']];
+  const amtInput = (id,val)=>`<input id="${id}" type="text" inputmode="numeric" value="${val?won(val):''}" placeholder="0" style="width:100%;box-sizing:border-box;border:1px solid #a9c9f5;border-radius:5px;padding:5px 8px;text-align:right;font-size:12px;font-family:inherit" onblur="const s=this.value.replace(/,/g,'').trim();this.value=(s==''?'':(Number(s)||0).toLocaleString())">`;
+  const _tax = (d.salesAmount||0)-(d.salesExempt||0), _pTax = (d.purchaseAmount||0)-(d.purchaseExempt||0);
   el.innerHTML = `<div style="background:#eef4ff;border:1.5px solid #a9c9f5;border-radius:12px;padding:14px">
-    <div style="font-size:13px;font-weight:700;color:#1565c0;margin-bottom:8px">🔑 키 없이 스크랩 결과 (부가세)</div>
-    <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:12px">${rows.map(([k,v])=>`<div style="color:#888">${esc(k)}</div><div style="font-weight:600;text-align:right">${esc(String(v))}</div>`).join('')}</div>
+    <div style="font-size:13px;font-weight:700;color:#1565c0;margin-bottom:8px">🔑 키 없이 스크랩 결과 (부가세)${d.vatType==='간이'?' <span style="font-size:10px;background:#fff3e0;color:#e65100;border-radius:8px;padding:1px 6px">간이</span>':''}</div>
+    <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:12px">${roRows.map(([k,v])=>`<div style="color:#888">${esc(k)}</div><div style="font-weight:600;text-align:right">${esc(String(v))}</div>`).join('')}</div>
+    <div style="margin-top:8px;border-top:1px dashed #c5d6f5;padding-top:8px">
+      <div style="font-size:11px;color:#1565c0;font-weight:700;margin-bottom:6px">✏️ 금액 확인·수정 (잘못 추출 시 직접 입력)</div>
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 10px;font-size:12px;align-items:center">
+        <div style="color:#888">과세 매출</div>${amtInput('scrape-sales',_tax)}
+        <div style="color:#888">면세 매출</div>${amtInput('scrape-exempt',d.salesExempt)}
+        <div style="color:#888">과세 매입</div>${amtInput('scrape-purchase',_pTax)}
+        <div style="color:#888">면세 매입</div>${amtInput('scrape-purchase-exempt',d.purchaseExempt)}
+        <div style="color:#888">납부세액</div>${amtInput('scrape-vat',d.vatAmount)}
+      </div>
+      <div style="font-size:10px;color:#aaa;margin-top:4px">※ 면세가 있으면 매출·매입에 합산되어 (과+면)으로 기록됩니다. 환급은 납부세액에 음수(-)로 입력.</div>
+    </div>
     ${feeInput}${recordBtn}
   </div>`;
   toast('부가세 신고서 스크랩 완료 — 값 확인 후 기록하세요','success',2500);
@@ -12111,7 +12137,14 @@ function _recordScrape() {
   if (!pk) { toast('신고기간을 선택해주세요 (상단 신고기간 연결)','warning'); return; }
   const fee = Number(String(document.getElementById('scrape-fee')?.value||'0').replace(/[,\s]/g,''))||0;
   _promptManagerChange(cid, document.getElementById('trr-manager-sel')?.value || '');
-  window._trrReviewData = { ...(window._trrReviewData||{}), feeRecommendation: fee };
+  const rd = { ...(window._trrReviewData||{}), feeRecommendation: fee };
+  // 부가세: 직접 수정한 금액칸이 있으면 그 값으로 덮어씀(과세+면세 합산, (과+면) 반영)
+  const _numEl = id => { const e=document.getElementById(id); if(!e) return null; const s=(e.value||'').replace(/,/g,'').trim(); return s===''?0:(Number(s)||0); };
+  const sTax=_numEl('scrape-sales'), sEx=_numEl('scrape-exempt'), pTax=_numEl('scrape-purchase'), pEx=_numEl('scrape-purchase-exempt'), vat=_numEl('scrape-vat');
+  if (sTax!==null){ rd.salesExempt=sEx||0; rd.taxExemptSales=sEx||0; rd.salesAmount=(sTax||0)+(sEx||0); rd.revenue=rd.salesAmount; }
+  if (pTax!==null){ rd.purchaseExempt=pEx||0; rd.purchaseAmount=(pTax||0)+(pEx||0); }
+  if (vat!==null){ rd.vatAmount=vat; rd.payTax=vat; }
+  window._trrReviewData = rd;
   if (doRecordTRRWith(cid, pk) !== false) { if (typeof _trrAfterRecord==='function') _trrAfterRecord(cid, pk); }
 }
 
@@ -12570,16 +12603,32 @@ function recordTRRToJulgae() {
   }
 }
 
+// 단일 검토 카드: '기록 완료' 클릭 시 기록 버튼을 원래 상태로 복원(다시 기록 가능)
+function _trrRerecord() {
+  const btn = document.getElementById('trr-record-btn');
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = '📋 신고리스트에 기록';
+    btn.style.background = '#4f8ef7';
+    btn.style.cursor = 'pointer';
+    btn.onclick = recordTRRToJulgae;
+  }
+  const result = document.getElementById('trr-result');
+  if (result) result.querySelectorAll('.trr-done-banner').forEach(b => b.remove());
+  const cb = document.getElementById('trr-clear-btn'); if (cb) cb.remove();
+  toast('다시 기록할 수 있습니다 — 값·수수료 확인 후 기록하세요', 'info', 2500);
+}
 function _trrAfterRecord(clientId, pKey) {
   const c = G.clients.find(x=>x.id===clientId);
   const p = G.periods.find(x=>x.id===pKey);
   const btn = document.getElementById('trr-record-btn');
   if (btn) {
-    btn.disabled = true;
-    btn.textContent = '✅ 기록 완료';
+    btn.disabled = false;               // 재기록 가능하도록 비활성화하지 않음
+    btn.textContent = '✅ 기록 완료 (다시 기록하려면 클릭)';
     btn.style.background = '#2e7d32';
-    btn.style.cursor = 'default';
+    btn.style.cursor = 'pointer';
     btn.style.opacity = '1';
+    btn.onclick = _trrRerecord;         // 클릭하면 기록 버튼 복원
     const row = btn.parentElement;
     if (row && !document.getElementById('trr-clear-btn')) {
       const cb = document.createElement('button');
@@ -12597,6 +12646,7 @@ function _trrAfterRecord(clientId, pKey) {
     }
   }
   const banner = document.createElement('div');
+  banner.className = 'trr-done-banner';
   banner.style.cssText = 'background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;padding:10px 12px;margin-top:10px;font-size:13px;color:#2e7d32;font-weight:600';
   banner.textContent = `✅ ${c?.name||clientId} / ${p?.label||pKey} 신고리스트에 기록 완료`;
   const result = document.getElementById('trr-result');
