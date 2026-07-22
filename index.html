@@ -11213,9 +11213,12 @@ function openTaxReturnReviewer(type) {
     <div style="display:flex;gap:8px;margin-top:10px">
       <div style="flex:1">
         <label class="flabel">거래처 연결 (선택)</label>
+        <input type="text" id="trr-client-search" placeholder="🔍 거래처 검색 (이름/대표자)..." autocomplete="off"
+          oninput="filterTRRClientOptions(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();_pickFirstTRRClient();}"
+          style="width:100%;border:1px solid #e0e0e0;border-radius:8px;padding:7px 9px;font-size:13px;box-sizing:border-box;font-family:inherit;margin-bottom:4px">
         <select id="trr-client-sel" class="fsel">
           <option value="">-- 거래처 선택 (PDF에서 자동 감지) --</option>
-          ${G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업').map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}
+          ${G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업').map(c=>`<option value="${c.id}" data-rep="${esc(c.rep||'')}">${esc(c.name)}${c.rep?` (${esc(c.rep)})`:''}</option>`).join('')}
         </select>
       </div>
       <div style="flex:1">
@@ -11887,6 +11890,31 @@ function autoMatchTRRClient(text) {
     const sel = document.getElementById('trr-client-sel');
     if (sel) { sel.value = matched.id; toast(`거래처 자동 감지: ${matched.name}`, 'success', 2500); }
   }
+}
+
+// 거래처 연결 드롭다운 검색 — 자동감지 실패 시 이름/대표자로 옵션을 필터(긴 목록에서 빠르게 찾기)
+function filterTRRClientOptions(q) {
+  const sel = document.getElementById('trr-client-sel');
+  if (!sel) return;
+  const t = (q || '').replace(/\s+/g, '').toLowerCase();
+  let firstMatch = null, matchCount = 0;
+  for (const opt of sel.options) {
+    if (!opt.value) { opt.hidden = false; continue; } // 안내 옵션은 항상 표시
+    const hay = ((opt.textContent || '') + (opt.dataset.rep || '')).replace(/\s+/g, '').toLowerCase();
+    const show = !t || hay.includes(t);
+    opt.hidden = !show;
+    if (show) { matchCount++; if (!firstMatch) firstMatch = opt; }
+  }
+  // 검색 결과가 정확히 1건이면 자동 선택(바로 연결). 여러 건이면 사용자가 드롭다운에서 고름.
+  if (t && matchCount === 1 && firstMatch) sel.value = firstMatch.value;
+  else if (!t) { /* 검색어 지우면 선택 유지 */ }
+}
+// 엔터 시 필터된 첫 거래처를 선택
+function _pickFirstTRRClient() {
+  const sel = document.getElementById('trr-client-sel');
+  if (!sel) return;
+  const first = Array.from(sel.options).find(o => o.value && !o.hidden);
+  if (first) { sel.value = first.value; toast(`거래처 연결: ${first.textContent}`, 'success', 2000); }
 }
 
 // ── API 키 없이 부가세 신고서 텍스트에서 항목 스크랩 (텍스트 레이어 PDF 전용) ──
