@@ -718,6 +718,27 @@ function periodFilingYM(period) {
   if (tpl && tpl.deadline) { const dm = tpl.deadline.match(/(\d+)월/); if (dm) mo = Number(dm[1]); }
   return yr + '-' + String(mo).padStart(2,'0');
 }
+// 특정 거래처의 '직전 신고리스트 신고수수료' — 부가세는 바로 앞 부가세 신고(기·유형 무관),
+// 그 외는 같은 서식의 바로 앞 신고 중 신고수수료(fee>0)가 있는 가장 최근 값. 없으면 0.
+// 신고서 검토·일괄검토에서 입력칸 기본값으로 사용(추천수수료와 별개).
+function _prevFilingFee(clientId, curPeriod) {
+  if (!clientId || !curPeriod) return 0;
+  const VAT = ['vat','vat_hak_1','vat_hak_2','vat_yej'];
+  const rt = curPeriod.reportType || '';
+  const isVat = VAT.includes(rt);
+  const curYM = periodFilingYM(curPeriod);
+  if (!curYM) return 0;
+  const priors = G.periods
+    .filter(p => p.id !== curPeriod.id
+      && (isVat ? VAT.includes(p.reportType||'') : (p.reportType||'') === rt)
+      && periodFilingYM(p) && periodFilingYM(p) < curYM)
+    .sort((a,b) => periodFilingYM(b).localeCompare(periodFilingYM(a)));
+  for (const pp of priors) {
+    const fee = (G.julgae[pp.id]?.[clientId]?.fee) || 0;
+    if (fee > 0) return fee;
+  }
+  return 0;
+}
 function clientCloseYear(c) {
   if (c.closureYear) return Number(c.closureYear) || 0;
   const d = c.closeDate || c.terminationDate || '';
@@ -11561,6 +11582,8 @@ ${text.slice(0, 12000)}
     card.style.cssText='border:1.5px solid #e0e0e0;border-radius:12px;padding:14px;margin-bottom:10px;transition:border-color .2s,background .2s';
     const clientParts = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업').sort((a,b)=>a.name.localeCompare(b.name,'ko'));
     const _fl = _feeLabelConfig(pKey);
+    // 수수료 입력 기본값: 추천액이 아니라 '직전 신고리스트 금액'(없으면 0=빈칸). 추천액은 '추천:' 배지로 별도 표시.
+    const _bcPrevFee = _prevFilingFee(matchedClient?.id, G.periods.find(p=>String(p.id)===String(pKey)));
     card.innerHTML = `
       <div style="font-size:13px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;flex-wrap:wrap;gap:6px">
         <span>${reviewData?.companyName ? esc(reviewData.companyName) : esc(f.name)}</span>
@@ -11596,7 +11619,7 @@ ${text.slice(0, 12000)}
           <div>
             <label style="font-size:10px;color:#555;display:block;margin-bottom:2px">${_fl.feeLabel} (원)</label>
             <input id="bc-fee-${bIdx}" type="text" inputmode="numeric"
-              value="${reviewData.feeRecommendation ? reviewData.feeRecommendation.toLocaleString() : ''}"
+              value="${_bcPrevFee ? _bcPrevFee.toLocaleString() : ''}"
               placeholder="0"
               style="width:100%;border:1px solid #ffcc80;border-radius:5px;padding:5px 7px;font-size:12px;box-sizing:border-box;text-align:right;font-family:inherit"
               onfocus="this.value=this.value.replace(/,/g,'')"
@@ -11827,10 +11850,9 @@ function batchRecord(bIdx) {
   if (!item.pKey) { toast('신고기간이 선택되지 않았습니다', 'warning'); return; }
   if (!item.matchedClient?.id) { toast('거래처를 먼저 선택해주세요 (위 검색창에서)', 'warning'); return; }
   const _fl = _feeLabelConfig(item.pKey);
+  // 수수료 입력칸이 빈칸이면 0으로 처리(0을 굳이 입력하지 않아도 됨)
   const _feeRaw = (document.getElementById(`bc-fee-${bIdx}`)?.value||'').replace(/,/g,'').trim();
-  const feeVal = _feeRaw === '' ? null : Number(_feeRaw);
-  if (feeVal === null) { toast(`${_fl.feeLabel}을(를) 입력해주세요 (0도 가능)`, 'warning'); return; }
-  const feeNum = feeVal || 0;
+  const feeNum = _feeRaw === '' ? 0 : (Number(_feeRaw) || 0);
   const seongsiVal = Number((document.getElementById(`bc-seongsi-${bIdx}`)?.value||'').replace(/,/g,'')) || 0;
   // 담당자별 일괄검토: 선택한 담당자와 다르면 거래처 담당자 변경 여부 확인
   _promptManagerChange(item.matchedClient.id, document.getElementById('trr-batch-manager')?.value || '');
@@ -12335,7 +12357,10 @@ ${text.slice(0, 14000)}
 
     window._trrReviewPlainText = reviewText;
     window._trrReviewFileName = `신고서검토_${(reviewData?.companyName||'').replace(/[\\/:*?"<>|]/g,'')||'결과'}_${(reviewData?.period||'').replace(/[\\/:*?"<>|\s]/g,'')}`.replace(/_+$/,'')||'신고서검토';
-    const initFee = reviewData?.feeRecommendation || 0;
+    // 입력칸 기본값: 추천수수료가 아니라 '직전 신고리스트 금액'을 우선 불러옴(없으면 0=빈칸).
+    // 추천 수수료는 위 💰 배지로 따로 보여주고, 입력칸은 직전 실제 청구액을 기본으로 둔다.
+    const _prevFee = _prevFilingFee(matchedClient?.id, G.periods.find(p=>String(p.id)===String(pKey)));
+    const initFee = _prevFee || 0;
     const _fl = _feeLabelConfig(pKey, type);
     const errCount = sortedF.filter(f=>f.level==='error').length;
     const warnCount = sortedF.filter(f=>f.level==='warn').length;
