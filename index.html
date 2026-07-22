@@ -11930,7 +11930,8 @@ function _scrapeVatReturn(text) {
   const pm = T.match(/신고기간\s*(\d{4})\s*년\s*제?\s*(\d)\s*기/);
   if (pm) { const conf = /확\s*정/.test(T) ? '확정' : (/예\s*정/.test(T)?'예정':''); d.period = `${pm[1].slice(2)}년 ${pm[2]}기${conf?' '+conf:''}`; }
   // 상호·대표자: 같은 줄에 뒤 라벨이 이어질 수 있으므로(성명/대표자명/사업자등록번호 등) 그 앞까지만 캡처
-  d.companyName = strAfter(/\(법인명\)\s*([^\n]+?)(?=\s*성\s*명|\s*\(대표|\s*사업자등록|\s{2,}|\n|$)/);
+  d.companyName = strAfter(/\(법인명\)\s*([^\n]+?)(?=\s*성\s*명|\s*\(대표|\s*사업자등록|\s{2,}|\n|$)/)
+    || strAfter(/상\s*호\s*([^\n]+?)(?=\s*성\s*명|\s*\(대표|\s*사업자등록|\s{2,}|\n|$)/); // 간이과세 서식은 '(법인명)' 없이 '상 호'만
   d.representative = strAfter(/\(대표자명\)\s*([^\n]+?)(?=\s*사업자등록|\s*생\s*년|\s*전화|\s{2,}|\n|$)/);
   const bnm = T.match(/사업자등록번호\s*([\d\s\-]{10,})/);
   if (bnm) { const dd = dig(bnm[1]).slice(0,10); if (dd.length===10) d.bizNo = dd.slice(0,3)+'-'+dd.slice(3,5)+'-'+dd.slice(5); }
@@ -11939,6 +11940,34 @@ function _scrapeVatReturn(text) {
   if (ph) d.phone = ph[0].replace(/\s/g,'');
   // 부호 보존 숫자(환급=음수): 앞의 -,△,▲ 또는 '환급' 문구면 음수
   const numAfterS = re => { const m=T.match(re); if(!m) return 0; const n=Number(dig(m[1]))||0; const neg=/^\s*[-△▲]/.test(m[1])||/환\s*급/.test(m[0]); return neg?-n:n; };
+  // ── 간이과세자 부가가치세 신고서(별지 제44호) — 서식이 일반과세자와 완전히 달라 별도 처리 ──
+  //   과세매출 = 과세표준명세 (33)합계, 면세매출 = 면세수입금액 (37)합계,
+  //   매입액 = 공제세액 란 (14)+(15)+(16)+(17)+(18) 금액 합, 납부세액 = 차감납부할세액 (29)
+  const isGanui = /간\s*이\s*과\s*세\s*자[\s\S]{0,30}부\s*가\s*가\s*치\s*세/.test(text) || /부\s*가\s*가\s*치\s*율/.test(T);
+  if (isGanui) {
+    d.vatType = '간이';
+    // 신고기간: 간이 서식은 '제N기'가 없음 → 월 범위로 판단(…~6월=1기 전환신고, …~12월=2기 확정)
+    const gm = T.match(/신고기간\s*(\d{4})\s*년[^\d]*?(\d{1,2})\s*월[^\d]*?(\d{1,2})\s*일[^\d]*?~[^\d]*?(\d{1,2})\s*월/);
+    if (gm) { const gi = Number(gm[4]) <= 6 ? 1 : 2; const conf = /예\s*정\s*신\s*고\s*서\s*\[\s*[v√✓ㅣ|]/.test(T) ? '예정' : '확정'; d.period = `${gm[1].slice(2)}년 ${gi}기 ${conf}`; }
+    // (33) 과세표준명세 합계 = 과세매출 (합계 라벨 바로 뒤 숫자만 — 페이지 하단 목록번호 오추출 방지)
+    const taxable = numAfter(/\(33\)\s*합\s*계\s*([\d,]{2,})/);
+    // (37) 면세수입금액 합계 = 면세매출(있을 때만). 공란이면 뒤 라벨이라 매칭 안 됨 → 0
+    const exempt = numAfter(/\(37\)\s*합\s*계\s*([\d,]{2,})/);
+    d.salesAmount = taxable || 0;
+    if (exempt > 0) { d.salesExempt = exempt; d.taxExemptSales = exempt; d.salesAmount = (taxable||0) + exempt; }
+    // 매입액 = (14)+(15)+(16)+(17)+(18) 각 행 첫 금액(공급대가) 합. 빈 행은 마커 뒤에 숫자가 없어 0.
+    const amtRow = n => { const m = T.match(new RegExp('\\('+n+'\\)\\s*([\\d,]{3,})')); return m ? (Number(dig(m[1]))||0) : 0; };
+    d.purchaseAmount = [14,15,16,17,18].reduce((s,n)=>s+amtRow(n), 0);
+    // 납부세액 = (29) 차감납부할세액(환급받을세액). 공란이면 0.
+    d.vatAmount = numAfterS(/\(29\)\s*(-?[\d,]+)/);
+    d.revenue = d.salesAmount; d.payTax = d.vatAmount;
+    const gbc = T.match(/업\s*종\s*코\s*드[\s\S]{0,60}?(\d{6})/);
+    if (gbc) d.bizCode = gbc[1];
+    const gto = T.match(/([가-힣]{2,10})\s*세무서장?\s*귀하/) || T.match(/([가-힣]{2,10})\s*세무서장/);
+    if (gto) d.taxOffice = _normalizeTaxOffice(gto[1]+'세무서');
+    d.taxType = '개인';
+    return d;
+  }
   // 매출액 = 과세표준및매출세액 '합계'(9). (9)가 공란이면 0(과세 매출 없음) — 느슨한 fallback은 계산서합계표를 잘못 잡으므로 제거
   d.salesAmount = numAfter(/합\s*계\s*\n?\s*\(9\)\s*([\d,]+)/) || numAfter(/\(9\)\s*([\d,]+)/) || 0;
   // 매입액 = 매입세액 '차감계'(18)
