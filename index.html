@@ -6156,11 +6156,12 @@ function renderJulgae() {
 
   const jColPairs = [
     ['j_rep','대표자'],['j_manager','담당자'],['j_book','기장'],['j_consul','상담'],['j_done','결재'],['j_monthly_fee','기장료'],
-    ['j_col_revenue', isVatType?'매출액':'매출액'],
+    ['j_col_revenue', isVatType?'매출액':'수입금액'],
     ['j_col_income','소득금액'],['j_col_margin','소득율'],['j_col_taxbase','과세표준'],
     ['j_col_taxamt','총부담세액'],['j_col_paytax','납부세액'],['j_col_resident','주민세'],
     ['j_col_totalsum','합계'],['j_col_prevrevenue','직전매출'],
     ['j_col_purchase', isVatType?'매입액':'필요경비'],['j_col_vat','부가세'],
+    ['j_col_exempt_sales','면세매출'],['j_col_exempt_purchase','면세매입'],
     ['j_feess','성실신고료'],
     ['j_fee', isIncomeType?'조정료':'신고수수료'],['j_col_unpaid','미수'],
     ['j_col_fee25','25년'],['j_col_fee24','24년'],['j_col_fee23','23년'],
@@ -6582,7 +6583,7 @@ function renderJulgae() {
   ${(G.periodNotes||{})[pKey]?`<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:8px;padding:8px 14px;margin-bottom:10px;font-size:13px;color:#5d4037;display:flex;align-items:flex-start;gap:8px"><span style="font-size:15px;flex-shrink:0">📝</span><span style="flex:1">${esc((G.periodNotes||{})[pKey])}</span><button onclick="openPeriodNote('${pKey}')" style="font-size:11px;padding:2px 8px;border-radius:6px;border:1px solid #ffe082;background:#fff;color:#e65100;cursor:pointer;font-family:inherit;flex-shrink:0">수정</button></div>`:''}
   ${prevPeriods.length>0?`<div style="font-size:12px;color:#888;background:#fffde7;padding:6px 12px;border-radius:8px;margin-bottom:10px">💡 과거 동기(${prevPeriods.map(p=>esc(p.label)).join(', ')}) 수입금액·수수료청구액이 참고로 표시됩니다. (전년·전전년)</div>`:''}
 
-  ${(G.julgaeToolsOpen&&G.julgaeColsOpen)?_julgaeColPanelHTML(jColPairs):''}
+  ${(G.julgaeToolsOpen&&G.julgaeColsOpen)?(()=>{const _appl=new Set([...jHideable,...jTypeHideable,...jSeongsiExtra]);return _julgaeColPanelHTML(jColPairs.filter(([k])=>_appl.has(k)));})():''}
 
   ${G.julgaeKanban && period ? `
   <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:14px">
