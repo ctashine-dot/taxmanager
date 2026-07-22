@@ -6515,25 +6515,29 @@ function renderJulgae() {
 
   <div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap">
     <button class="btn-sm" onclick="G.julgaeToolsOpen=!G.julgaeToolsOpen;renderJulgae()" style="background:#e8f0fe;color:#1565c0;border:1.5px solid #90caf9;font-weight:700">${G.julgaeToolsOpen?'▾ 도구':'▸ 도구'}</button>
-    <button class="btn-sm" onclick="G.julgaeColsOpen=!G.julgaeColsOpen;renderJulgae()" style="background:${jHiddenCount?'#fff3e0':'#f0f2f7'};color:${jHiddenCount?'#e65100':'#555'};border:1px solid ${jHiddenCount?'#ffb74d':'#d8dbe0'};font-weight:600">${G.julgaeColsOpen?'▾ 컬럼추가/숨김 접기':'▸ 컬럼추가/숨김'}${jHiddenCount?` (${jHiddenCount} 숨김)`:''}</button>
+    ${jHiddenCount?`<button class="btn-sm" onclick="G.julgaeColsOpen=!G.julgaeColsOpen;renderJulgae()" style="background:#fff3e0;color:#e65100;border:1px solid #ffb74d;font-weight:600">${G.julgaeColsOpen?'▾ 숨긴 컬럼 접기':'▸ 숨긴 컬럼 보이기'} (${jHiddenCount} 숨김)</button>`:''}
   </div>
   ${G.julgaeToolsOpen?`<div class="filter-bar">
+    <button class="btn-sm" style="background:${G.julgaeFilterOpen?'#dbeafe':'#eef4ff'};color:#1565c0;border:1.5px solid #7fb0f5;font-weight:700" onclick="G.julgaeFilterOpen=!G.julgaeFilterOpen;renderJulgae()" title="기장료·매출·매입·소득·납부세액 등 금액으로 필터(0원/≠0/범위)">${G.julgaeFilterOpen?'▾ 필터':'🔢 필터'}${Object.keys(G.julgaeNumFilters||{}).length?` (${Object.keys(G.julgaeNumFilters||{}).length})`:''}</button>
+    <button class="btn-sm" style="background:${G.julgaeSortOpen?'#e6dafa':'#f4eefe'};color:#6a3ab2;border:1.5px solid #cdb4ef;font-weight:700" onclick="G.julgaeSortOpen=!G.julgaeSortOpen;renderJulgae()">${G.julgaeSortOpen?'▾ 정렬':'↕ 정렬'}</button>
+    <button class="btn-sm" style="background:#e8f5e9;color:#1b6b2b;border:1.5px solid #a5d6a7;font-weight:600" onclick="openBulkCheckModal()" title="기장·상담·결재·수금을 현재 목록(필터 적용) 업체에 전체 체크/해제">☑ 일괄체크</button>
+    <button class="btn-sm" style="background:${(G.periodNotes||{})[pKey]?'#ffe6c9':'#fff2e0'};color:#d9640a;border:1.5px solid ${(G.periodNotes||{})[pKey]?'#f7a24a':'#ffc98f'};font-weight:600" onclick="openPeriodNote('${pKey}')">📝 특이사항${(G.periodNotes||{})[pKey]?' ✓':''}</button>
+    <button class="btn-sm" style="background:#eafafc;color:#00838f;border:1.5px solid #7fd6e0;font-weight:600" onclick="openPeriodComparison()">📊 기간 비교</button>
+    <button class="btn-sm" style="background:${G.julgaeBulkMode?'#dcf2df':'#f0faf1'};color:${G.julgaeBulkMode?'#1b6b2b':'#5a9b65'};border:1.5px solid ${G.julgaeBulkMode?'#5cb85c':'#bfe3c4'};font-weight:${G.julgaeBulkMode?'700':'600'}" onclick="G.julgaeBulkMode=!G.julgaeBulkMode;G.julgaeBulkSelected=[];renderJulgae()">☑ 일괄처리${G.julgaeBulkMode?' ON':''}</button>
+    <button class="btn-sm" style="background:${G.julgaeListMgmtOpen?'#e0f2f1':'#eff7f6'};color:#00695c;border:1.5px solid #80cbc4;font-weight:700" onclick="G.julgaeListMgmtOpen=!G.julgaeListMgmtOpen;renderJulgae()" title="리스트 추가·업체 추가/선택·중복검색·복사·내보내기·인쇄">${G.julgaeListMgmtOpen?'▾ 리스트관리':'📁 리스트관리'}</button>
+    <button class="btn-sm" style="background:${G.julgaeKeepFilters?'#fff8e1':'#f5f5f5'};color:${G.julgaeKeepFilters?'#e65100':'#888'};border:1.5px solid ${G.julgaeKeepFilters?'#ffcc80':'#e0e0e0'};font-weight:600" onclick="G.julgaeKeepFilters=!G.julgaeKeepFilters;renderJulgae()" title="기간 전환 시 현재 필터를 유지합니다">🔒 필터 유지${G.julgaeKeepFilters?' ON':''}</button>
+    ${(G.income26Unmatched||[]).length>0?`<button class="btn-sm" style="background:#fde5ee;color:#c62828;border:1.5px solid #f0a0a0;font-weight:600" onclick="showIncome26Unmatched()">⚠ 미매칭 ${(G.income26Unmatched||[]).length}개</button>`:''}
+  </div>`:''}
+  ${(G.julgaeToolsOpen&&G.julgaeListMgmtOpen)?`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;background:#eefaf8;border:1px solid #b2dfdb;border-radius:10px;padding:8px 12px;margin-bottom:8px">
+    <span style="font-size:12px;color:#00695c;font-weight:700;margin-right:2px">📁 리스트관리</span>
     <button class="btn-primary btn-sm" onclick="openAddPeriod()">+ 신고리스트 추가</button>
     <button class="btn-sm" style="background:#fff2e5;color:#c0500f;border:1.5px solid #ffc79a;font-weight:600" onclick="openJulgaeAddClientModal('${pKey}')">+ 업체 추가</button>
     <button class="btn-sm" style="background:#eef4ff;color:#1565c0;border:1.5px solid #a9c9f5;font-weight:600" onclick="openEnrollModal('${pKey}')">☑ 업체 선택${hasEnroll?` (${period.enrolled.length})`:' (자동)'}</button>
     <button class="btn-sm" style="background:#fde5ee;color:#ad1457;border:1.5px solid #f3a3c3;font-weight:600" onclick="showNameRepDuplicates()">🔎 중복검색</button>
-    <button class="btn-sm" style="background:${G.julgaeSortOpen?'#e6dafa':'#f4eefe'};color:#6a3ab2;border:1.5px solid #cdb4ef;font-weight:700" onclick="G.julgaeSortOpen=!G.julgaeSortOpen;renderJulgae()">${G.julgaeSortOpen?'▾ 정렬':'↕ 정렬'}</button>
-    <button class="btn-sm" style="background:${G.julgaeFilterOpen?'#dbeafe':'#eef4ff'};color:#1565c0;border:1.5px solid #7fb0f5;font-weight:700" onclick="G.julgaeFilterOpen=!G.julgaeFilterOpen;renderJulgae()" title="기장료·매출·매입·소득·납부세액 등 금액으로 필터(0원/≠0/범위)">${G.julgaeFilterOpen?'▾ 필터':'🔢 필터'}${Object.keys(G.julgaeNumFilters||{}).length?` (${Object.keys(G.julgaeNumFilters||{}).length})`:''}</button>
-    <button class="btn-sm" style="background:${(G.periodNotes||{})[pKey]?'#ffe6c9':'#fff2e0'};color:#d9640a;border:1.5px solid ${(G.periodNotes||{})[pKey]?'#f7a24a':'#ffc98f'};font-weight:600" onclick="openPeriodNote('${pKey}')">📝 특이사항${(G.periodNotes||{})[pKey]?' ✓':''}</button>
-    <button class="btn-sm" style="background:#eafafc;color:#00838f;border:1.5px solid #7fd6e0;font-weight:600" onclick="openPeriodComparison()">📊 기간 비교</button>
-    <button class="btn-sm" style="background:${G.julgaeBulkMode?'#dcf2df':'#f0faf1'};color:${G.julgaeBulkMode?'#1b6b2b':'#5a9b65'};border:1.5px solid ${G.julgaeBulkMode?'#5cb85c':'#bfe3c4'};font-weight:${G.julgaeBulkMode?'700':'600'}" onclick="G.julgaeBulkMode=!G.julgaeBulkMode;G.julgaeBulkSelected=[];renderJulgae()">☑ 일괄처리${G.julgaeBulkMode?' ON':''}</button>
     <button class="btn-sm" style="background:#e0f2f1;color:#00695c;border:1.5px solid #80cbc4;font-weight:600" onclick="copyPeriod('${pKey}')">📋 복사</button>
     <button class="btn-sm" style="background:#e8f5e9;color:#1b5e20;border:1.5px solid #a5d6a7;font-weight:600" onclick="exportJulgaeToExcel()">📊 Excel 내보내기</button>
     <button class="btn-sm" style="background:#fff8e1;color:#c07600;border:1.5px solid #ffe08a;font-weight:600" onclick="openPeriodSummaryPDF()">🖨 결과 요약 PDF</button>
     <button class="btn-sm" style="background:#f2e2fb;color:#7b1fa2;border:1.5px solid #d9b3ec;font-weight:600" onclick="printJulgaeList()">🖨 인쇄</button>
-    <button class="btn-sm" style="background:#eef2fb;color:#3f51b5;border:1.5px solid #c7d0f0;font-weight:600" onclick="openWithholdingModal()">📋 원천세</button>
-    <button class="btn-sm" style="background:${G.julgaeKeepFilters?'#fff8e1':'#f5f5f5'};color:${G.julgaeKeepFilters?'#e65100':'#888'};border:1.5px solid ${G.julgaeKeepFilters?'#ffcc80':'#e0e0e0'};font-weight:600" onclick="G.julgaeKeepFilters=!G.julgaeKeepFilters;renderJulgae()" title="기간 전환 시 현재 필터를 유지합니다">🔒 필터 유지${G.julgaeKeepFilters?' ON':''}</button>
-    ${(G.income26Unmatched||[]).length>0?`<button class="btn-sm" style="background:#fde5ee;color:#c62828;border:1.5px solid #f0a0a0;font-weight:600" onclick="showIncome26Unmatched()">⚠ 미매칭 ${(G.income26Unmatched||[]).length}개</button>`:''}
   </div>`:''}
   ${(G.julgaeToolsOpen&&G.julgaeSortOpen)?`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#f7f3fe;border:1px solid #e6dcf7;border-radius:10px;padding:8px 12px;margin-bottom:8px">
     <span style="font-size:12px;color:#6a3ab2;font-weight:700">정렬</span>
@@ -6603,9 +6607,9 @@ function renderJulgae() {
       <th class="j-sname" style="padding:4px 6px;width:130px;left:${_nameLeft}px;background:#f8f9ff">${_inlineSearchInput({gField:'julgaeSearch',value:G.julgaeSearch,placeholder:'거래처명',renderName:'renderJulgae',inputId:'jns-inline',pageField:'julgaePage'})}</th>
       <th style="width:80px;padding:3px 4px;${_hcStyle('j_rep')}"><div style="display:flex;align-items:center">${_inlineSearchInput({gField:'julgaeRepSearch',value:G.julgaeRepSearch,placeholder:'대표자',renderName:'renderJulgae',inputId:'jrs-inline',pageField:'julgaePage'})}${_hcBtn('j_rep')}</div></th>
       <th style="width:75px;padding:4px 6px;${_hcStyle('j_manager')}"><div style="display:flex;align-items:center">${filterPopupBtn('julgaeManagers','담당자')}${_hcBtn('j_manager')}</div></th>
-      <th style="width:62px;text-align:center;padding:3px;${_hcStyle('j_book')}"><div style="display:flex;flex-direction:column;align-items:center;gap:2px">${julgaeCycleBtn('julgaeBookFilter','기장')}<button onclick="checkAllJulgaeField('b')" style="font-size:9px;padding:1px 5px;border-radius:4px;border:1px solid #f57c00;background:#fff3e0;color:#e65100;cursor:pointer;white-space:nowrap" title="기장 전체 체크/해제">전체</button>${_hcBtn('j_book')}</div></th>
-      <th style="width:62px;text-align:center;padding:3px;${_hcStyle('j_consul')}"><div style="display:flex;flex-direction:column;align-items:center;gap:2px">${julgaeCycleBtn('julgaeConsulFilter','상담')}<button onclick="checkAllJulgaeField('c')" style="font-size:9px;padding:1px 5px;border-radius:4px;border:1px solid #1565c0;background:#e3f2fd;color:#1565c0;cursor:pointer;white-space:nowrap" title="상담 전체 체크/해제">전체</button>${_hcBtn('j_consul')}</div></th>
-      <th style="width:62px;text-align:center;padding:3px;${_hcStyle('j_done')}"><div style="display:flex;flex-direction:column;align-items:center;gap:2px">${julgaeCycleBtn('julgaeDoneFilter','결재')}<button onclick="checkAllJulgaeField('a')" style="font-size:9px;padding:1px 5px;border-radius:4px;border:1px solid #2e7d32;background:#e8f5e9;color:#2e7d32;cursor:pointer;white-space:nowrap" title="결재 전체 체크/해제">전체</button>${_hcBtn('j_done')}</div></th>
+      <th style="width:62px;text-align:center;padding:3px;${_hcStyle('j_book')}"><div style="display:flex;flex-direction:column;align-items:center;gap:2px">${julgaeCycleBtn('julgaeBookFilter','기장')}${_hcBtn('j_book')}</div></th>
+      <th style="width:62px;text-align:center;padding:3px;${_hcStyle('j_consul')}"><div style="display:flex;flex-direction:column;align-items:center;gap:2px">${julgaeCycleBtn('julgaeConsulFilter','상담')}${_hcBtn('j_consul')}</div></th>
+      <th style="width:62px;text-align:center;padding:3px;${_hcStyle('j_done')}"><div style="display:flex;flex-direction:column;align-items:center;gap:2px">${julgaeCycleBtn('julgaeDoneFilter','결재')}${_hcBtn('j_done')}</div></th>
       <th style="text-align:right;min-width:64px;${_hcStyle('j_monthly_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">기장료${_hcBtn('j_monthly_fee')}</div></th>
       ${isIncomeType?`
         <th style="text-align:right;${_hcStyle('j_col_revenue')}"><div style="display:flex;align-items:center;justify-content:flex-end">매출액${_hcBtn('j_col_revenue')}</div></th>
@@ -6631,13 +6635,13 @@ function renderJulgae() {
       `}
       ${isSeongsiType?`<th style="text-align:right;${_hcStyle('j_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">조정료${_hcBtn('j_fee')}</div></th><th style="text-align:right;${_hcStyle('j_feess')}"><div style="display:flex;align-items:center;justify-content:flex-end">성실신고료${_hcBtn('j_feess')}</div></th>`:isIncomeType?`<th style="text-align:right;${_hcStyle('j_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">조정료${_hcBtn('j_fee')}</div></th>`:`<th style="text-align:right;${_hcStyle('j_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">신고수수료${_hcBtn('j_fee')}</div></th>`}
       ${isIncomeType?`
-        <th style="width:84px;text-align:center;padding:3px;${_hcStyle('j_collect')}"><div style="display:flex;flex-direction:column;align-items:center;gap:2px">${julgaeCycleBtn('julgaeFeeFilter','수금',['전체','수금','미수금','청구0'])}<button onclick="checkAllJulgaeField('s')" style="font-size:9px;padding:1px 5px;border-radius:4px;border:1px solid #00897b;background:#e0f2f1;color:#00796b;cursor:pointer;white-space:nowrap" title="현재 목록 수금 전체 체크/해제(청구0 필터와 함께 사용)">전체</button>${_hcBtn('j_collect')}</div></th>
+        <th style="width:84px;text-align:center;padding:3px;${_hcStyle('j_collect')}"><div style="display:flex;flex-direction:column;align-items:center;gap:2px">${julgaeCycleBtn('julgaeFeeFilter','수금',['전체','수금','미수금','청구0'])}${_hcBtn('j_collect')}</div></th>
         <th style="text-align:right;${_hcStyle('j_col_unpaid')}"><div style="display:flex;align-items:center;justify-content:flex-end">미수${_hcBtn('j_col_unpaid')}</div></th>
         <th style="text-align:right;${_hcStyle('j_col_fee25')}"><div style="display:flex;align-items:center;justify-content:flex-end">25년${_hcBtn('j_col_fee25')}</div></th>
         <th style="text-align:right;${_hcStyle('j_col_fee24')}"><div style="display:flex;align-items:center;justify-content:flex-end">24년${_hcBtn('j_col_fee24')}</div></th>
         <th style="text-align:right;${_hcStyle('j_col_fee23')}"><div style="display:flex;align-items:center;justify-content:flex-end">23년${_hcBtn('j_col_fee23')}</div></th>
       `:''}
-      ${!isIncomeType?`<th style="width:70px;text-align:center;padding:3px;${_hcStyle('j_collect')}"><div style="display:flex;flex-direction:column;align-items:center;gap:2px">${julgaeCycleBtn('julgaeFeeFilter','수금',['전체','수금','미수금','청구0'])}<button onclick="checkAllJulgaeField('s')" style="font-size:9px;padding:1px 5px;border-radius:4px;border:1px solid #00897b;background:#e0f2f1;color:#00796b;cursor:pointer;white-space:nowrap" title="현재 목록 수금 전체 체크/해제(청구0 필터와 함께 사용)">전체</button>${_hcBtn('j_collect')}</div></th>`:''}
+      ${!isIncomeType?`<th style="width:70px;text-align:center;padding:3px;${_hcStyle('j_collect')}"><div style="display:flex;flex-direction:column;align-items:center;gap:2px">${julgaeCycleBtn('julgaeFeeFilter','수금',['전체','수금','미수금','청구0'])}${_hcBtn('j_collect')}</div></th>`:''}
       <th style="width:44px;text-align:center;padding:3px;${_hcStyle('j_link')}"><div style="display:flex;align-items:center"><span style="font-size:11px">자료링크</span>${_hcBtn('j_link')}</div></th>
     </tr></thead>
     <tbody>
@@ -15507,6 +15511,44 @@ function toggleJulgaeSelect(clientId) {
   if (idx2>=0) G.julgaeBulkSelected.splice(idx2,1);
   else G.julgaeBulkSelected.push(clientId);
   renderJulgae();
+}
+// 일괄체크 모달 — 기장·상담·결재·수금 중 선택한 항목을 현재 목록(필터/검색 반영)에 전체 체크/해제
+function openBulkCheckModal() {
+  const items = [['b','기장'],['c','상담'],['a','결재'],['s','수금']];
+  const n = (window._julgaeVisible||[]).filter(c=>!c._julgaeAdhoc).length;
+  showModal(`<div style="max-width:380px;width:100%">
+    <div class="modal-header"><h3>☑ 일괄 체크</h3><button class="close-btn" onclick="navBack()">✕</button></div>
+    <div class="modal-body">
+      <div style="font-size:12px;color:#666;margin-bottom:10px;line-height:1.5">적용할 항목을 선택한 뒤 <b>전체 체크</b> 또는 <b>전체 해제</b>를 누르세요.<br>현재 화면에 보이는(필터·검색 적용된) <b>${n}개</b> 업체에만 적용됩니다.</div>
+      ${items.map(([k,l])=>`<label style="display:flex;align-items:center;gap:9px;padding:8px 10px;border:1px solid #e8eaf6;border-radius:8px;margin-bottom:6px;cursor:pointer"><input type="checkbox" class="_bc-chk" data-k="${k}" style="width:16px;height:16px"><span style="font-size:14px;font-weight:600">${l}</span></label>`).join('')}
+      <div style="display:flex;gap:6px;margin-top:6px;margin-bottom:12px">
+        <button onclick="document.querySelectorAll('._bc-chk').forEach(c=>c.checked=true)" style="font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid #c5cae9;background:#eef2ff;color:#3949ab;cursor:pointer;font-family:inherit">항목 전체선택</button>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn-secondary" onclick="navBack()" style="flex:1">취소</button>
+        <button onclick="_applyBulkCheck(false)" style="flex:1.3;padding:9px;border-radius:8px;border:1.5px solid #ef9a9a;background:#fdecea;color:#c62828;font-weight:700;cursor:pointer;font-family:inherit">전체 해제</button>
+        <button onclick="_applyBulkCheck(true)" style="flex:1.3;padding:9px;border-radius:8px;border:none;background:#2e7d32;color:#fff;font-weight:700;cursor:pointer;font-family:inherit">전체 체크</button>
+      </div>
+    </div>
+  </div>`);
+}
+function _applyBulkCheck(value) {
+  if (!requireWrite()) return;
+  const fields = [...document.querySelectorAll('._bc-chk')].filter(c=>c.checked).map(c=>c.dataset.k);
+  if (!fields.length) { toast('적용할 항목을 선택하세요 (기장/상담/결재/수금)', 'warning'); return; }
+  const period = G.periods[Math.min(G.julgaePeriodIdx, Math.max(0, G.periods.length-1))];
+  if (!period) return;
+  const pKey = period.id;
+  const ids = (window._julgaeVisible || []).filter(c => !c._julgaeAdhoc).map(c => c.id);
+  if (!ids.length) { toast('대상 거래처가 없습니다', 'info'); return; }
+  const labels = { b:'기장', c:'상담', a:'결재', s:'수금' };
+  if (!confirm(`현재 목록 ${ids.length}개 거래처의 [${fields.map(f=>labels[f]).join(', ')}] 항목을 전체 ${value?'체크':'해제'}하시겠습니까?`)) return;
+  if (!G.julgae[pKey]) G.julgae[pKey] = {};
+  ids.forEach(id => { if (!G.julgae[pKey][id]) G.julgae[pKey][id] = {}; fields.forEach(f => { G.julgae[pKey][id][f] = value; }); });
+  saveToLS();
+  navBack();
+  renderJulgae();
+  toast(`${ids.length}개 거래처 ${fields.map(f=>labels[f]).join('·')} ${value?'체크':'해제'} 완료`, 'success', 2600);
 }
 function checkAllJulgaeField(field) {
   if (!requireWrite()) return;
