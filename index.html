@@ -6520,10 +6520,9 @@ function renderJulgae() {
   ${G.julgaeToolsOpen?`<div class="filter-bar">
     <button class="btn-sm" style="background:${G.julgaeFilterOpen?'#dbeafe':'#eef4ff'};color:#1565c0;border:1.5px solid #7fb0f5;font-weight:700" onclick="G.julgaeFilterOpen=!G.julgaeFilterOpen;renderJulgae()" title="기장료·매출·매입·소득·납부세액 등 금액으로 필터(0원/≠0/범위)">${G.julgaeFilterOpen?'▾ 필터':'🔢 필터'}${Object.keys(G.julgaeNumFilters||{}).length?` (${Object.keys(G.julgaeNumFilters||{}).length})`:''}</button>
     <button class="btn-sm" style="background:${G.julgaeSortOpen?'#e6dafa':'#f4eefe'};color:#6a3ab2;border:1.5px solid #cdb4ef;font-weight:700" onclick="G.julgaeSortOpen=!G.julgaeSortOpen;renderJulgae()">${G.julgaeSortOpen?'▾ 정렬':'↕ 정렬'}</button>
-    <button class="btn-sm" style="background:#e8f5e9;color:#1b6b2b;border:1.5px solid #a5d6a7;font-weight:600" onclick="openBulkCheckModal()" title="기장·상담·결재·수금을 현재 목록(필터 적용) 업체에 전체 체크/해제">☑ 일괄체크</button>
+    <button class="btn-sm" style="background:${G.julgaeBulkMode?'#dcf2df':'#f0faf1'};color:${G.julgaeBulkMode?'#1b6b2b':'#5a9b65'};border:1.5px solid ${G.julgaeBulkMode?'#5cb85c':'#bfe3c4'};font-weight:${G.julgaeBulkMode?'700':'600'}" onclick="G.julgaeBulkMode=!G.julgaeBulkMode;G.julgaeBulkSelected=[];renderJulgae()" title="업체를 선택해 기장·상담·결재·수금을 일괄 ON/OFF">☑ 일괄체크${G.julgaeBulkMode?' ON':''}</button>
     <button class="btn-sm" style="background:${(G.periodNotes||{})[pKey]?'#ffe6c9':'#fff2e0'};color:#d9640a;border:1.5px solid ${(G.periodNotes||{})[pKey]?'#f7a24a':'#ffc98f'};font-weight:600" onclick="openPeriodNote('${pKey}')">📝 특이사항${(G.periodNotes||{})[pKey]?' ✓':''}</button>
     <button class="btn-sm" style="background:#eafafc;color:#00838f;border:1.5px solid #7fd6e0;font-weight:600" onclick="openPeriodComparison()">📊 기간 비교</button>
-    <button class="btn-sm" style="background:${G.julgaeBulkMode?'#dcf2df':'#f0faf1'};color:${G.julgaeBulkMode?'#1b6b2b':'#5a9b65'};border:1.5px solid ${G.julgaeBulkMode?'#5cb85c':'#bfe3c4'};font-weight:${G.julgaeBulkMode?'700':'600'}" onclick="G.julgaeBulkMode=!G.julgaeBulkMode;G.julgaeBulkSelected=[];renderJulgae()">☑ 일괄처리${G.julgaeBulkMode?' ON':''}</button>
     <button class="btn-sm" style="background:${G.julgaeListMgmtOpen?'#e0f2f1':'#eff7f6'};color:#00695c;border:1.5px solid #80cbc4;font-weight:700" onclick="G.julgaeListMgmtOpen=!G.julgaeListMgmtOpen;renderJulgae()" title="리스트 추가·업체 추가/선택·중복검색·복사·내보내기·인쇄">${G.julgaeListMgmtOpen?'▾ 리스트관리':'📁 리스트관리'}</button>
     <button class="btn-sm" style="background:${G.julgaeKeepFilters?'#fff8e1':'#f5f5f5'};color:${G.julgaeKeepFilters?'#e65100':'#888'};border:1.5px solid ${G.julgaeKeepFilters?'#ffcc80':'#e0e0e0'};font-weight:600" onclick="G.julgaeKeepFilters=!G.julgaeKeepFilters;renderJulgae()" title="기간 전환 시 현재 필터를 유지합니다">🔒 필터 유지${G.julgaeKeepFilters?' ON':''}</button>
     ${(G.income26Unmatched||[]).length>0?`<button class="btn-sm" style="background:#fde5ee;color:#c62828;border:1.5px solid #f0a0a0;font-weight:600" onclick="showIncome26Unmatched()">⚠ 미매칭 ${(G.income26Unmatched||[]).length}개</button>`:''}
@@ -6913,12 +6912,12 @@ function renderJulgae() {
   <div style="position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#1a1a2e;color:#fff;border-radius:16px;padding:10px 16px;display:flex;gap:6px;align-items:center;box-shadow:0 4px 24px rgba(0,0,0,.35);z-index:150;flex-wrap:wrap;max-width:96vw">
     <span style="font-size:12px;font-weight:700;color:#aaa;white-space:nowrap">${(G.julgaeBulkSelected||[]).length}개 선택</span>
     <span style="width:1px;height:24px;background:rgba(255,255,255,.15);margin:0 2px"></span>
-    ${[['b','기장','#f57c00','#5a2e00'],['c','상담','#1565c0','#0d3060'],['a','결재','#2e7d32','#1b4d20']].map(([f,label,col,dark])=>`
+    ${[['b','기장','#f57c00','ON','OFF'],['c','상담','#1565c0','ON','OFF'],['a','결재','#2e7d32','ON','OFF'],['s','수금','#00897b','수금','미수']].map(([f,label,col,onL,offL])=>`
     <div style="display:flex;flex-direction:column;gap:2px;align-items:center">
       <span style="font-size:9px;color:#aaa">${label}</span>
       <div style="display:flex;gap:2px">
-        <button onclick="bulkSetJulgae('${f}',true)" style="padding:5px 9px;background:${col};color:#fff;border:none;border-radius:6px;cursor:pointer;font-family:inherit;font-weight:700;font-size:11px;min-width:32px">ON</button>
-        <button onclick="bulkSetJulgae('${f}',false)" style="padding:5px 9px;background:rgba(255,255,255,.12);color:#ccc;border:1px solid rgba(255,255,255,.2);border-radius:6px;cursor:pointer;font-family:inherit;font-size:11px;min-width:32px">OFF</button>
+        <button onclick="bulkSetJulgae('${f}',true)" style="padding:5px 9px;background:${col};color:#fff;border:none;border-radius:6px;cursor:pointer;font-family:inherit;font-weight:700;font-size:11px;min-width:32px">${onL}</button>
+        <button onclick="bulkSetJulgae('${f}',false)" style="padding:5px 9px;background:rgba(255,255,255,.12);color:#ccc;border:1px solid rgba(255,255,255,.2);border-radius:6px;cursor:pointer;font-family:inherit;font-size:11px;min-width:32px">${offL}</button>
       </div>
     </div>`).join('')}
     <span style="width:1px;height:24px;background:rgba(255,255,255,.15);margin:0 2px"></span>
@@ -15577,7 +15576,7 @@ function checkAllJulgaeField(field) {
   renderJulgae();
 }
 function bulkSetJulgaeAll(value) {
-  ['b','c','a'].forEach(f => bulkSetJulgae(f, value, true));
+  ['b','c','a','s'].forEach(f => bulkSetJulgae(f, value, true));
   saveToLS(); renderJulgae();
 }
 function bulkSetJulgae(field, value, skipSave) {
