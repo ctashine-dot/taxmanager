@@ -1,4 +1,4 @@
-const CACHE_NAME = 'taxmanager-v4';
+const CACHE_NAME = 'taxmanager-v5';
 const STATIC_URLS = [
   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'
 ];

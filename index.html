@@ -10955,8 +10955,11 @@ async function tcSearchPrec() {
 // ══════════════════════════════════════════════════════
 // 신고서 PDF 검토 (통합 - 부가세/법인세/종소세)
 // ══════════════════════════════════════════════════════
-// 한글 CID 폰트 디코딩용 cMap 소스: cdnjs가 불안정하면(어제는 되고 오늘은 안 되는 현상) jsdelivr→unpkg로 폴백
+// 한글 CID 폰트 디코딩용 cMap 소스: ①앱과 같은 출처(저장소 동봉 cmaps/, CDN 장애·오프라인과 무관) 최우선.
+// "어제는 되고 오늘은 안 되던" 근본 원인이 cdnjs 한 곳에만 실시간 의존한 것 → 이제 동일 출처가 1순위, CDN은 예비.
+const _sameOriginCMap = (() => { try { return new URL('cmaps/', document.baseURI).href; } catch(e){ return 'cmaps/'; } })();
 const PDF_CMAP_SOURCES = [
+  _sameOriginCMap,
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
   'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
   'https://unpkg.com/pdfjs-dist@3.11.174/cmaps/'
@@ -10966,11 +10969,20 @@ const PDF_WORKER_SOURCES = [
   'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js',
   'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js'
 ];
-// 텍스트가 한글로 정상 디코딩됐는지 판정 — cMap 로드 실패 시 한글이 거의 사라지고 깨진 글자만 남음
+// 텍스트가 한글로 정상 디코딩됐는지 판정 — cMap 로드 실패 시 해당 CID 폰트 페이지가 통째로 빈칸이 됨.
+// 부가세 신고서는 본문(금액 표) 페이지가 CID 폰트라, cMap이 없으면 1~4페이지가 빈칸이 되고 뒷장만 남아
+// 한글 수백 개가 있어도 정작 금액은 0이 되는 '부분 실패'가 발생 → 페이지 공백 비율까지 함께 검사.
 function _pdfTextHealthy(t) {
   if (!t) return false;
   const hangul = (t.match(/[가-힣]/g) || []).length;
-  return hangul >= 20; // 정상 신고서는 한글이 수백 개 이상
+  if (hangul < 20) return false;
+  // [N페이지] 마커로 분할해 내용이 거의 없는(공백 페이지) 비율 확인
+  const pages = t.split(/\n?\[\d+페이지\]\n?/).slice(1);
+  if (pages.length >= 2) {
+    const empty = pages.filter(p => p.replace(/\s/g, '').length < 15).length;
+    if (empty / pages.length >= 0.35) return false; // 35% 이상 빈 페이지면 cMap 부분 실패로 판단
+  }
+  return true;
 }
 async function parsePDFToText(file) {
   if (typeof pdfjsLib === 'undefined') throw new Error('PDF.js 라이브러리가 로드되지 않았습니다');
