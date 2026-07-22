@@ -9344,10 +9344,17 @@ function payrollCalc(empId, ym) {
   const net = computedNet; // 공단 신고 기준 실지급(지급계-공제계)
   // 실제 지급액(별도 관리) — 공단 신고액과 다를 수 있어 따로 입력·관리. 미입력 시 0.
   // (직전 버전에서 netOverride로 입력한 값이 있으면 실제 지급액으로 승계)
-  const actualNet = rec.actualNet || rec.netOverride || 0;
+  // 실제 징수금액(직접 입력) — 4대보험·지방세는 자동계산값과 실제 징수액이 다를 수 있어 별도 입력. 미입력(0)이면 계산값 사용.
+  const npA = rec.npA||0, hiA = rec.hiA||0, ltcA = rec.ltcA||0, eiA = rec.eiA||0, localTaxA = rec.localTaxA||0;
+  const dedActual = (npA||np) + (hiA||hi) + (ltcA||ltc) + (eiA||ei) + incomeTax + (localTaxA||localTax) + other;
+  const anyDedActual = (npA + hiA + ltcA + eiA + localTaxA) > 0;
+  // 실제 지급액: ①직접 입력값이 있으면 우선, ②없으면 '지급계 − 실제 징수 합계'로 자동계산, ③둘 다 없으면 0
+  const actualNetManual = rec.actualNet || rec.netOverride || 0;
+  const actualAuto = !(actualNetManual > 0) && anyDedActual;
+  const actualNet = actualNetManual > 0 ? actualNetManual : (anyDedActual ? Math.max(0, gross - dedActual) : 0);
   const actualSet = actualNet > 0;
   const netDiff = actualSet ? (actualNet - computedNet) : 0; // 실제 - 신고
-  return { base, allowance, overtime, bonus, gross, np, hi, ltc, ei, incomeTax, localTax, other, deduction, net, computedNet, actualNet, actualSet, netDiff };
+  return { base, allowance, overtime, bonus, gross, np, hi, ltc, ei, incomeTax, localTax, other, deduction, net, computedNet, actualNet, actualSet, actualAuto, netDiff, npA, hiA, ltcA, eiA, localTaxA, dedActual };
 }
 
 // 민감정보 마스킹 (표시 보호 — 실제 암호화는 백엔드 권장)
@@ -9551,6 +9558,13 @@ function renderPayroll() {
     np:a.np+c.np, hi:a.hi+c.hi, ltc:a.ltc+c.ltc, ei:a.ei+c.ei }), {gross:0,ded:0,net:0,actual:0,inc:0,loc:0,tax:0,np:0,hi:0,ltc:0,ei:0});
   const won = n => (n||0).toLocaleString();
   const pin = (empId, field, val) => `<input type="text" inputmode="numeric" value="${val?won(val):''}" onfocus="this.value=this.value.replace(/,/g,'');this.select()" onblur="const n=Number(this.value.replace(/,/g,''))||0;this.value=n?n.toLocaleString():''" onchange="updatePayrollField(${empId},'${ym}','${field}',this.value)" style="width:84px;text-align:right;border:1px solid #e0e0e0;border-radius:5px;padding:3px 5px;font-size:12px;font-family:inherit;box-sizing:border-box">`;
+  // 공제 셀: 위=자동계산값, 아래=실제 징수액 직접입력(미입력이면 계산값 사용)
+  const dcell = (empId, comp, field, actual) => `<td style="text-align:right;padding:3px 6px">
+    <div style="font-size:11px;color:#888;line-height:1.3">${won(comp)}</div>
+    <input type="text" inputmode="numeric" value="${actual?won(actual):''}" placeholder="실징수" title="실제 징수액 직접 입력(비우면 계산값 사용)"
+      onfocus="this.value=this.value.replace(/,/g,'');this.select()" onblur="const n=Number(this.value.replace(/,/g,''))||0;this.value=n?n.toLocaleString():''"
+      onchange="updatePayrollField(${empId},'${ym}','${field}',this.value)"
+      style="width:72px;text-align:right;border:1px solid ${actual?'#c2185b':'#e6e6e6'};border-radius:4px;padding:2px 4px;font-size:11px;font-family:inherit;box-sizing:border-box;background:${actual?'#fdf0f5':'#fafafa'};color:${actual?'#ad1457':'#555'};margin-top:1px"></td>`;
   const td = (v, style='') => `<td style="text-align:right;padding:4px 8px;font-size:12px;${style}">${v}</td>`;
 
   const empOpen = !!G.payrollEmpOpen, logOpen = !!G.payrollLogOpen;
@@ -9650,17 +9664,17 @@ function renderPayroll() {
       <td style="text-align:right">${pin(e.id,'allowance',c.allowance)}</td>
       <td style="text-align:right">${pin(e.id,'bonus',c.bonus)}</td>
       ${td(`<b>${won(c.gross)}</b>`,'color:#2e7d32')}
-      ${td(won(c.np),'color:#888')}${td(won(c.hi),'color:#888')}${td(won(c.ltc),'color:#888')}${td(won(c.ei),'color:#888')}
+      ${dcell(e.id,c.np,'npA',c.npA)}${dcell(e.id,c.hi,'hiA',c.hiA)}${dcell(e.id,c.ltc,'ltcA',c.ltcA)}${dcell(e.id,c.ei,'eiA',c.eiA)}
       <td style="text-align:right">${pin(e.id,'incomeTax',c.incomeTax)}${(()=>{const est=estimateIncomeTax(c.gross,e.family);return (est && est!==c.incomeTax)?`<div onclick="updatePayrollField(${e.id},'${ym}','incomeTax',${est})" style="font-size:9px;color:#e65100;background:#fff3e0;border-radius:4px;padding:1px 4px;margin-top:2px;cursor:pointer;text-align:right" title="간이세액 추정(가족 ${e.family||1}명) 적용">⚡${won(est)}</div>`:'';})()}</td>
-      ${td(won(c.localTax),'color:#888')}
-      ${td(`<b>${won(c.deduction)}</b>`,'color:#e53935')}
+      ${dcell(e.id,c.localTax,'localTaxA',c.localTaxA)}
+      <td style="text-align:right"><div style="font-weight:800;color:#e53935">${won(c.deduction)}</div><div style="font-size:10px;color:#ad1457" title="실제 징수 합계(실징수 입력분 반영)">실 ${won(c.dedActual)}</div></td>
       ${td(`<b>${won(c.net)}</b>`,'color:#1a1a2e;font-size:13px')}
       <td style="text-align:right">
-        <input type="text" inputmode="numeric" value="${c.actualSet?won(c.actualNet):''}" placeholder="미입력" title="실제 지급한 금액을 직접 입력(공단 신고액과 별도)"
+        <input type="text" inputmode="numeric" value="${c.actualSet?won(c.actualNet):''}" placeholder="${c.dedActual?won(Math.max(0,c.gross-c.dedActual)):'미입력'}" title="실제 지급액. 비우면 '지급계 − 실제 징수 합계'로 자동계산됩니다"
           onfocus="this.value=this.value.replace(/,/g,'');this.select()" onblur="const n=Number(this.value.replace(/,/g,''))||0;this.value=n?n.toLocaleString():''"
           onchange="updatePayrollField(${e.id},'${ym}','actualNet',this.value)"
-          style="width:92px;text-align:right;border:1.5px solid ${c.actualSet?'#c2185b':'#e0e0e0'};border-radius:5px;padding:3px 5px;font-size:13px;font-weight:700;color:${c.actualSet?'#ad1457':'#1a1a2e'};font-family:inherit;box-sizing:border-box;background:${c.actualSet?'#fdf0f5':'#fff'}">
-        ${c.actualSet&&c.netDiff!==0?`<div style="font-size:9px;color:${c.netDiff>0?'#c62828':'#1565c0'};margin-top:2px;text-align:right" title="실제 − 신고">${c.netDiff>0?'+':''}${won(c.netDiff)}</div>`:''}
+          style="width:92px;text-align:right;border:1.5px solid ${c.actualSet?(c.actualAuto?'#2e7d32':'#c2185b'):'#e0e0e0'};border-radius:5px;padding:3px 5px;font-size:13px;font-weight:700;color:${c.actualAuto?'#2e7d32':(c.actualSet?'#ad1457':'#1a1a2e')};font-family:inherit;box-sizing:border-box;background:${c.actualAuto?'#f1f8f2':(c.actualSet?'#fdf0f5':'#fff')}">
+        ${c.actualAuto?`<div style="font-size:9px;color:#2e7d32;margin-top:1px;text-align:right" title="지급계 − 실제 징수 합계로 자동계산">🔢 자동</div>`:(c.actualSet&&c.netDiff!==0?`<div style="font-size:9px;color:${c.netDiff>0?'#c62828':'#1565c0'};margin-top:2px;text-align:right" title="실제 − 신고">${c.netDiff>0?'+':''}${won(c.netDiff)}</div>`:'')}
       </td>
     </tr>`).join('') : `<tr><td colspan="15" style="text-align:center;padding:30px;color:#aaa">재직 중인 직원이 없습니다. '직원 추가'로 등록하세요.</td></tr>`}
     ${active.length ? `<tr style="background:#f5f0fa;border-top:2px solid #ce93d8;font-weight:700">
@@ -9672,7 +9686,7 @@ function renderPayroll() {
     </tr>` : ''}
     </tbody>
   </table></div>
-  <div style="font-size:11px;color:#aaa;margin-top:8px">※ 4대보험 근로자부담 자동계산(국민연금 4.5% · 건강 3.545% · 장기요양 건강료의 12.95% · 고용 0.9%). 지방소득세는 소득세의 10% 자동 계산.<br>※ ⚡소득세는 <b>추정치(참고용)</b>입니다 — 공제대상가족수 기준 근사값이며 공식 간이세액표와 차이가 있을 수 있으니 정확한 값은 홈택스 '근로소득 간이세액표'로 확인 후 직접 입력하세요.</div>
+  <div style="font-size:11px;color:#aaa;margin-top:8px">※ 4대보험 근로자부담 자동계산(국민연금 4.5% · 건강 3.545% · 장기요양 건강료의 12.95% · 고용 0.9%). 지방소득세는 소득세의 10% 자동 계산.<br>※ 각 공제 칸 <b>아래 '실징수'</b>에 실제 징수액을 입력하면 그 값으로 반영됩니다(비우면 계산값 사용). <b>실지급(실제)</b>은 비워두면 <b>'지급계 − 실제 징수 합계'</b>로 자동계산되고(🔢 자동), 직접 입력하면 그 값이 우선됩니다.<br>※ ⚡소득세는 <b>추정치(참고용)</b>입니다 — 공제대상가족수 기준 근사값이며 공식 간이세액표와 차이가 있을 수 있으니 정확한 값은 홈택스 '근로소득 간이세액표'로 확인 후 직접 입력하세요.</div>
   `;
 }
 
@@ -9702,11 +9716,11 @@ function exportPayrollCSV() {
   const active = (G.employees||[]).filter(e => e.status==='재직' || e.status==='휴직');
   if (!active.length) { toast('내보낼 급여 데이터가 없습니다','warning'); return; }
   const BOM = '﻿';
-  const head = ['사번','성명','부서','직위','기본급','수당','상여','지급계','국민연금','건강보험','장기요양','고용보험','소득세','지방소득세','공제계','실지급(신고)','실지급(실제)'];
+  const head = ['사번','성명','부서','직위','기본급','수당','상여','지급계','국민연금','건강보험','장기요양','고용보험','소득세','지방소득세','공제계','실공제계','실지급(신고)','실지급(실제)'];
   const lines = [head.join(',')];
   active.forEach(e => {
     const c = payrollCalc(e.id, ym);
-    const row = [e.empNo||'', e.name||'', e.dept||'', e.position||'', c.base, c.allowance, c.bonus, c.gross, c.np, c.hi, c.ltc, c.ei, c.incomeTax, c.localTax, c.deduction, c.net, c.actualNet];
+    const row = [e.empNo||'', e.name||'', e.dept||'', e.position||'', c.base, c.allowance, c.bonus, c.gross, c.np, c.hi, c.ltc, c.ei, c.incomeTax, c.localTax, c.deduction, c.dedActual, c.net, c.actualNet];
     lines.push(row.map(v => '"'+String(v).replace(/"/g,'""')+'"').join(','));
   });
   const blob = new Blob([BOM + lines.join('\r\n')], {type:'text/csv;charset=utf-8'});
