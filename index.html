@@ -11895,8 +11895,12 @@ function batchRecord(bIdx) {
   // 담당자별 일괄검토: 선택한 담당자와 다르면 거래처 담당자 변경 여부 확인
   _promptManagerChange(item.matchedClient.id, document.getElementById('trr-batch-manager')?.value || '');
   window._trrReviewData = {...(item.data||{}), feeRecommendation: feeNum, feeSeongsi: seongsiVal};
-  if (doRecordTRRWith(item.matchedClient.id, item.pKey) === false) return; // 갱신 취소 — 카드 상태 유지
-  item.recorded = true;
+  // 갱신 확인은 doRecordTRRWith 내부에서 모달로 처리 → 실제 기록 완료(onDone) 시에만 카드 상태 갱신
+  doRecordTRRWith(item.matchedClient.id, item.pKey, () => _batchMarkRecorded(bIdx));
+}
+function _batchMarkRecorded(bIdx) {
+  const item = _batchResults[bIdx];
+  if (item) item.recorded = true;
   const card = document.getElementById(`batch-card-${bIdx}`);
   if (card) {
     card.style.borderColor = '#a5d6a7';
@@ -12180,7 +12184,7 @@ function _recordScrape() {
   if (pTax!==null){ rd.purchaseExempt=pEx||0; rd.purchaseAmount=(pTax||0)+(pEx||0); }
   if (vat!==null){ rd.vatAmount=vat; rd.payTax=vat; }
   window._trrReviewData = rd;
-  if (doRecordTRRWith(cid, pk) !== false) { if (typeof _trrAfterRecord==='function') _trrAfterRecord(cid, pk); }
+  doRecordTRRWith(cid, pk, () => { if (typeof _trrAfterRecord==='function') _trrAfterRecord(cid, pk); });
 }
 
 async function runTaxReturnReview(type, extractOnly) {
@@ -12631,7 +12635,7 @@ function recordTRRToJulgae() {
 
   if (clientId) {
     _promptManagerChange(clientId, document.getElementById('trr-manager-sel')?.value || '');
-    if (pKey) { if (doRecordTRRWith(clientId, pKey) !== false) _trrAfterRecord(clientId, pKey); return; }
+    if (pKey) { doRecordTRRWith(clientId, pKey, () => _trrAfterRecord(clientId, pKey)); return; }
     openTRRPeriodModal(clientId);
   } else {
     openTRRUnmatchedModal();
@@ -12713,7 +12717,7 @@ function openTRRPeriodModal(clientId) {
         <option value="">-- 선택 --</option>
         ${(G.periods||[]).filter(p=>!p.locked).slice(-20).reverse().map(p=>`<option value="${p.id}">${esc(p.label||p.id)}</option>`).join('')}
       </select>
-      <button class="btn-primary" style="width:100%" onclick="(()=>{const pk=document.getElementById('trr-period-only')?.value;if(!pk){toast('신고기간을 선택해주세요','warning');return;}closeModal();if(doRecordTRRWith(${clientId},pk)!==false)_trrAfterRecord(${clientId},pk)})()">기록하기</button>
+      <button class="btn-primary" style="width:100%" onclick="(()=>{const pk=document.getElementById('trr-period-only')?.value;if(!pk){toast('신고기간을 선택해주세요','warning');return;}closeModal();doRecordTRRWith(${clientId},pk,()=>_trrAfterRecord(${clientId},pk))})()">기록하기</button>
     </div>
   </div>`);
 }
@@ -12958,38 +12962,111 @@ function _julgaeHasData(v) {
   if (!v || typeof v !== 'object') return false;
   return !!(v.revenue||v.salesAmount||v.income||v.taxBase||v.totalTax||v.payTax||v.purchaseAmount||v.vatAmount||v.fee||v.feeSeongsi||v.d||v.a||v.s);
 }
-// 기존값 → 신규값 비교 확인 메시지
-function _buildOverwriteMsg(pKey, clientId, ex, data) {
-  const c = G.clients.find(x=>x.id===clientId);
+// 재사용 체크박스 선택 모달 — 항목별로 골라서 적용(전부/전무 대신 선택 반영)
+function _showChecklistModal({ title, subtitle, items, applyLabel='선택 적용', onApply }) {
+  const rows = items.map(it => `
+    <label style="display:flex;align-items:center;gap:9px;padding:8px 10px;border:1px solid #e8eaf6;border-radius:8px;margin-bottom:6px;cursor:pointer">
+      <input type="checkbox" class="_cl-chk" data-key="${esc(it.key)}" ${it.checked!==false?'checked':''} style="width:16px;height:16px;flex:none">
+      <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">${esc(it.label)}</div>${it.detail?`<div style="font-size:12px;color:#888">${it.detail}</div>`:''}</div>
+    </label>`).join('');
+  showModal(`<div style="max-width:440px;width:100%">
+    <div class="modal-header"><h3>${esc(title)}</h3><button class="close-btn" onclick="navBack()">✕</button></div>
+    <div class="modal-body">
+      ${subtitle?`<div style="font-size:12px;color:#666;margin-bottom:10px;line-height:1.5">${subtitle}</div>`:''}
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <button onclick="document.querySelectorAll('._cl-chk').forEach(c=>c.checked=true)" style="font-size:11px;padding:4px 10px;border:1px solid #c5cae9;border-radius:6px;background:#eef2ff;color:#3949ab;cursor:pointer;font-family:inherit">전체 선택</button>
+        <button onclick="document.querySelectorAll('._cl-chk').forEach(c=>c.checked=false)" style="font-size:11px;padding:4px 10px;border:1px solid #e0e0e0;border-radius:6px;background:#f5f5f5;color:#666;cursor:pointer;font-family:inherit">전체 해제</button>
+      </div>
+      ${rows}
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn-secondary" onclick="navBack()" style="flex:1">취소</button>
+        <button class="btn-primary" id="_cl-apply" style="flex:2">${esc(applyLabel)}</button>
+      </div>
+    </div>
+  </div>`);
+  const ab = document.getElementById('_cl-apply');
+  if (ab) ab.onclick = () => {
+    const keys = [...document.querySelectorAll('._cl-chk')].filter(c=>c.checked).map(c=>c.dataset.key);
+    navBack();
+    if (onApply) onApply(keys);
+  };
+}
+// 신고서 검토 기록의 갱신 대상 표시항목(서식별) — 부가세는 매출/매입/납부, 그 외는 수입/소득/세액
+function _trrFieldSpecs(pKey, data) {
   const p = G.periods.find(x=>x.id===pKey);
+  const isVat = ['vat','vat_hak_1','vat_hak_2','vat_yej'].includes(p?.reportType||'');
   const fl = _feeLabelConfig(pKey);
-  const won = n => (Number(n)||0).toLocaleString();
-  const num = x => { const n=Number(String(x==null?'':x).replace(/[,\s원]/g,'')); return isNaN(n)?0:n; };
-  const rows = [];
-  const cmp = (label, oldV, newV) => rows.push(`· ${label}: ${won(oldV)} → ${won(newV)}`);
-  cmp('수입금액', ex.revenue, num(data.revenue));
-  if (fl.feeLabel==='신고수수료') cmp('매출액', ex.salesAmount, num(data.salesAmount));
-  cmp('납부세액', ex.payTax, num(data.payTax));
-  cmp(fl.feeLabel, ex.fee, num(data.feeRecommendation));
-  if (fl.showSeongsi) cmp('성실확인비용', ex.feeSeongsi, num(data.feeSeongsi));
-  return `이미 '${c?.name||clientId}' / '${p?.label||pKey}'에 기록된 값이 있습니다.\n새 검토 결과로 갱신할까요?\n\n(기존 → 신규)\n${rows.join('\n')}\n\n[확인] 갱신   [취소] 유지`;
+  const s = [];
+  if (isVat) {
+    s.push({key:'salesAmount', label:'매출액'});
+    s.push({key:'purchaseAmount', label:'매입액'});
+    s.push({key:'vatAmount', label:'납부세액'});
+  } else {
+    s.push({key:'revenue', label:'수입금액'});
+    s.push({key:'income', label:'소득금액'});
+    s.push({key:'taxBase', label:'과세표준'});
+    s.push({key:'totalTax', label:'결정세액'});
+    s.push({key:'payTax', label:'납부세액'});
+  }
+  s.push({key:'fee', label:fl.feeLabel});
+  if (fl.showSeongsi) s.push({key:'feeSeongsi', label:'성실확인비용'});
+  return s;
+}
+const _TRR_FIELD_JKEYS = {
+  salesAmount:['salesAmount','salesExempt'], purchaseAmount:['purchaseAmount','purchaseExempt'],
+  vatAmount:['vatAmount','payTax'], revenue:['revenue'], income:['income'], taxBase:['taxBase'],
+  totalTax:['totalTax','residentTax'], payTax:['payTax'], fee:['fee'], feeSeongsi:['feeSeongsi']
+};
+function _trrNum(x){ const n=Number(String(x==null?'':x).replace(/[,\s원]/g,'')); return isNaN(n)?0:n; }
+// 기존값과 신규값이 다른 항목만 골라 반환 {key,label,oldV,newV}
+function _trrOverwriteDiffs(pKey, clientId, ex, data) {
+  const nv = { salesAmount:_trrNum(data.salesAmount), purchaseAmount:_trrNum(data.purchaseAmount), vatAmount:_trrNum(data.vatAmount),
+    revenue:_trrNum(data.revenue), income:_trrNum(data.income), taxBase:_trrNum(data.taxBase), totalTax:_trrNum(data.totalTax),
+    payTax:_trrNum(data.payTax), fee:_trrNum(data.feeRecommendation), feeSeongsi:_trrNum(data.feeSeongsi) };
+  const diffs = [];
+  _trrFieldSpecs(pKey, data).forEach(sp => {
+    const o = _trrNum(ex[sp.key]||0), n = nv[sp.key]||0;
+    if (o !== n) diffs.push({ key:sp.key, label:sp.label, oldV:o, newV:n });
+  });
+  return diffs;
 }
 
-function doRecordTRRWith(clientId, pKey) {
+function doRecordTRRWith(clientId, pKey, onDone) {
   const data = window._trrReviewData;
   if (!data) return false;
   // 신고서 유형/연도가 대상 신고리스트와 맞는지 확인
   const _pm = _periodMismatchMsg(pKey, data);
   if (_pm && !confirm(_pm)) return false;
-  // 기존 기록값이 있으면 비교 후 갱신 여부 확인
+  // 기존 기록값이 있으면: 바뀌는 항목만 체크박스로 골라 갱신(전부/전무 대신 선택 반영)
   const _existing = (G.julgae[pKey]||{})[clientId];
-  if (_existing && _julgaeHasData(_existing) && !confirm(_buildOverwriteMsg(pKey, clientId, _existing, data))) return false;
+  if (_existing && _julgaeHasData(_existing)) {
+    const diffs = _trrOverwriteDiffs(pKey, clientId, _existing, data);
+    if (diffs.length) {
+      const c = G.clients.find(x=>x.id===clientId);
+      const p = G.periods.find(x=>x.id===pKey);
+      const won = n => (Number(n)||0).toLocaleString();
+      _showChecklistModal({
+        title: '기존 기록 갱신',
+        subtitle: `'${esc(c?.name||clientId)}' / '${esc(p?.label||pKey)}'에 이미 기록된 값이 있습니다.<br>갱신할 항목만 선택하세요. (선택 안 한 항목은 기존값 유지)`,
+        applyLabel: '선택 갱신',
+        items: diffs.map(d => ({ key:d.key, label:d.label, detail:`${won(d.oldV)} → ${won(d.newV)}`, checked:true })),
+        onApply: (keys) => { _commitTRRRecord(clientId, pKey, data, keys); if (onDone) onDone(clientId, pKey); }
+      });
+      return true; // 모달로 진행 — 후처리(onDone)는 '선택 갱신' 시 호출됨(취소 시 미호출)
+    }
+    // 바뀌는 항목이 없으면 조용히 전체 커밋(동일값 재기록)
+  }
+  _commitTRRRecord(clientId, pKey, data, null);
+  if (onDone) onDone(clientId, pKey);
+  return true;
+}
+// 실제 신고리스트 기록 — selectedKeys가 배열이면 그 표시항목만 갱신하고 나머지는 기존값 유지
+function _commitTRRRecord(clientId, pKey, data, selectedKeys) {
   if (!G.julgae[pKey]) G.julgae[pKey] = {};
   const cur = julgaeVal(pKey, clientId);
   const num = x => { const n = Number(String(x==null?'':x).replace(/[,\s원]/g,'')); return isNaN(n)?0:n; };
   const updated = {...cur};
-  const setIf = (k, val) => { if (val) updated[k] = val; }; // 문맥값(직전매출 등)은 미추출 시 기존값 유지
-  // 신고서상 금액은 미추출·없음이면 0으로 명시 기록 (수입·매출·세액·수수료 등)
+  const setIf = (k, val) => { if (val) updated[k] = val; };
   updated.revenue        = num(data.revenue);
   updated.income         = num(data.income);
   updated.taxBase        = num(data.taxBase);
@@ -12998,23 +13075,27 @@ function doRecordTRRWith(clientId, pKey) {
   updated.salesAmount    = num(data.salesAmount);
   updated.purchaseAmount = num(data.purchaseAmount);
   updated.vatAmount      = num(data.vatAmount);
-  updated.salesExempt    = num(data.salesExempt);    // 계산서 발급(면세) 합산분 — (과+면) 표시용
-  updated.purchaseExempt = num(data.purchaseExempt); // 계산서 수취(면세) 합산분
-  // 주민세(지방소득세): 신고서 명시값 우선, 없으면 결정세액(totalTax)의 10% 자동, 그래도 없으면 0
+  updated.salesExempt    = num(data.salesExempt);
+  updated.purchaseExempt = num(data.purchaseExempt);
   updated.residentTax    = num(data.residentTax) || (num(data.totalTax) ? Math.round(num(data.totalTax)*0.1) : 0);
   updated.fee            = num(data.feeRecommendation);
   updated.feeSeongsi     = num(data.feeSeongsi);
-  setIf('prevRevenue', num(data.prevRevenue)); // 직전매출은 신고서에 없을 수 있어 미추출 시 기존값 유지
+  setIf('prevRevenue', num(data.prevRevenue));
+  // 선택 갱신: 체크 안 된 표시항목의 실제 필드는 기존값으로 되돌려 유지
+  if (Array.isArray(selectedKeys)) {
+    const sel = new Set(selectedKeys);
+    _trrFieldSpecs(pKey, data).forEach(sp => {
+      if (!sel.has(sp.key)) (_TRR_FIELD_JKEYS[sp.key]||[sp.key]).forEach(jk => { updated[jk] = cur[jk]; });
+    });
+  }
   // 신고서를 검토·반영했으므로 진행상태(자료수령·기장·상담·결재) 자동 완료 처리
   updated.d = true; updated.b = true; updated.c = true; updated.a = true;
-  updated._reviewed = true; // 금액 0도 '0'으로 표시(미검토 구분)
-  if (((updated.fee||0)+(updated.feeSeongsi||0)) === 0) updated.s = true; // 청구 수수료 0이면 수금 자동 체크
+  updated._reviewed = true;
+  if (((updated.fee||0)+(updated.feeSeongsi||0)) === 0) updated.s = true;
   G.julgae[pKey][clientId] = updated;
-  syncJulgaeFeeToClient(clientId, G.periods.find(p=>p.id===pKey), updated.fee, updated.feeSeongsi); // 거래처목록 조정료·성실료 동기화
-  // enrolled가 이미 명시적으로 사용 중이면: 없는 업체는 확인 후 추가, 제거(excluded)된 업체는 자동등록 안 함
+  syncJulgaeFeeToClient(clientId, G.periods.find(p=>p.id===pKey), updated.fee, updated.feeSeongsi);
   const period = G.periods.find(p=>p.id===pKey);
   _maybeAutoEnroll(period, clientId);
-  // AI 검토 메모 저장
   if (!G.julgaeNotes) G.julgaeNotes = {};
   const noteKey = `${pKey}_${clientId}`;
   const existingNote = G.julgaeNotes[noteKey] || '';
@@ -13024,8 +13105,9 @@ function doRecordTRRWith(clientId, pKey) {
   const c = G.clients.find(x=>x.id===clientId);
   const p = G.periods.find(x=>x.id===pKey);
   toast(`✅ ${c?.name||clientId} / ${p?.label||pKey} 신고리스트에 기록 완료`, 'success', 3500);
-  _promptFillMissingClientInfo(clientId, data); // 거래처목록 누락 정보 보완 제안
-  _applyBusinessSites(clientId, pKey, data.businessSites); // 사업소득명세서 사업장별 매출·소득 반영(그룹)
+  _promptFillMissingClientInfo(clientId, data);
+  _applyBusinessSites(clientId, pKey, data.businessSites);
+  if (typeof renderJulgae==='function' && G.currentTab==='julgae') renderJulgae();
   return true;
 }
 
@@ -13150,15 +13232,22 @@ function _promptFillMissingClientInfo(clientId, data) {
   add('taxOffice','관할세무서', c.taxOffice, data.taxOffice, v=>_normalizeTaxOffice(v), v=>_normalizeTaxOffice(v));
   if (!fills.length && !updates.length) return;
   setTimeout(()=>{
-    const lines = [];
-    if (fills.length) { lines.push('▼ 누락 → 채우기'); fills.forEach(f=>lines.push(`· ${f.label}: ${f.val}`)); }
-    if (updates.length) { lines.push('▼ 목록과 다름 → 수정'); updates.forEach(u=>lines.push(`· ${u.label}: ${u.cur} → ${u.val}`)); }
-    if (!confirm(`'${c.name||clientId}' 거래처 정보를 신고서 기준으로 반영할까요?\n\n${lines.join('\n')}\n\n[확인] 반영  [취소] 유지`)) return;
-    fills.forEach(f=>{ c[f.field] = f.val; });
-    updates.forEach(u=>{ c[u.field] = u.val; });
-    saveToLS();
-    if (typeof renderClients==='function') renderClients();
-    toast('거래처 정보를 반영했습니다', 'success', 3000);
+    // 항목별 체크박스로 골라서 반영(전부/전무 대신 선택)
+    const items = [
+      ...fills.map(f => ({ key:'f:'+f.field, label:`${f.label} 채우기`, detail:`(비어있음) → ${esc(f.val)}`, checked:true, _do:()=>{ c[f.field]=f.val; } })),
+      ...updates.map(u => ({ key:'u:'+u.field, label:`${u.label} 수정`, detail:`${esc(u.cur)} → ${esc(u.val)}`, checked:true, _do:()=>{ c[u.field]=u.val; } })),
+    ];
+    _showChecklistModal({
+      title: '거래처 정보 반영',
+      subtitle: `'${esc(c.name||clientId)}' — 신고서 기준으로 반영할 항목만 선택하세요.`,
+      applyLabel: '선택 반영',
+      items,
+      onApply: (keys) => {
+        const sel = new Set(keys); let n = 0;
+        items.forEach(it => { if (sel.has(it.key)) { it._do(); n++; } });
+        if (n) { saveToLS(); if (typeof renderClients==='function') renderClients(); toast(`거래처 정보 ${n}건 반영`, 'success', 3000); }
+      }
+    });
   }, 400);
 }
 
