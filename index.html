@@ -807,17 +807,14 @@ function _siblingSeongsiPeriod(incomePeriod) {
   const yy = m[1];
   return G.periods.find(p => p.reportType==='seongsi' && (p.label||'').startsWith(yy+'년')) || null;
 }
-// 특정 신고기간에 실제로 포함되는 거래처 목록 (renderJulgae 기본 포함 로직과 동일 · 카드/요약/목록 공용)
-// 명시적으로 편입(enrolled)한 리스트는 폐업·휴업 등 상태와 무관하게 유지(= '리스트에 올라갔으면 남아있어야').
-// 제외(excluded)된 거래처만 빠진다(= '리스트에서 제거되었으면 빠져야'). enrolled가 없으면 유형필터로 자동 판정.
+// 특정 신고기간에 실제로 포함되는 '신고 대상' 거래처 목록 (카드/요약/목록 공용).
+// clientInFilingPeriod로 신고대상 여부 판정(수임일이 신고기한 이후면 제외, 폐업·해지는 데이터/폐업연도로 판정),
+// enrolled(명시 편입) 교집합, excluded(제외) 차집합. → 신고 대상이 아닌 업체는 목록·카운트 모두에서 빠진다.
 function _periodClientList(period) {
   if (!period) return [];
-  let list;
-  if (period.enrolled && period.enrolled.length > 0) {
-    list = G.clients.filter(c => period.enrolled.includes(c.id));
-  } else {
-    list = applyReportFilter(G.clients.filter(c => clientInFilingPeriod(c, period)), period);
-  }
+  let list = G.clients.filter(c => clientInFilingPeriod(c, period));
+  if (period.enrolled && period.enrolled.length > 0) list = list.filter(c => period.enrolled.includes(c.id));
+  else list = applyReportFilter(list, period);
   if (period.excluded && period.excluded.length) list = list.filter(c => !period.excluded.includes(c.id));
   return list;
 }
@@ -5963,8 +5960,8 @@ function renderJulgae() {
   const mf = G.julgaeManagers || [];
   const pKey = period ? period.id : null;
 
-  // 목록·요약·진행카드 모두 동일한 멤버십(_periodClientList) 사용 — 카운트와 표시가 어긋나지 않도록.
-  // enrolled(명시 편입)는 폐업·휴업이어도 유지, excluded(제거)만 빠짐.
+  // 목록·요약·진행카드 모두 동일한 '신고 대상' 멤버십(_periodClientList) 사용 — 카운트와 표시가 어긋나지 않도록.
+  // (신고기한 이후 수임 등 신고대상이 아닌 업체는 목록·카운트 모두에서 빠짐)
   const hasEnroll = period && period.enrolled && period.enrolled.length > 0;
   let baseClients = _periodClientList(period);
 
