@@ -5867,17 +5867,11 @@ function renderJulgae() {
   if (rq) clients = clients.filter(c => (c.rep||'').toLowerCase().replace(/\s+/g,'').includes(rq.replace(/\s+/g,'')));
 
   const pKey2 = pKey || '';
-  // 청구 수수료(신고수수료+성실료)가 0으로 확정(_reviewed)된 검토행은 수금 자동 체크로 정합화
-  if (pKey2 && G.julgae[pKey2]) {
-    let _chgS = false;
-    Object.values(G.julgae[pKey2]).forEach(v => {
-      if (v && typeof v === 'object' && v._reviewed === true && !v.s && ((v.fee||0)+(v.feeSeongsi||0)) === 0) { v.s = true; _chgS = true; }
-    });
-    if (_chgS && !period?.locked) saveToLS();
-  }
+  // (청구 0원 자동 수금체크 정합화 로직 제거 — 0원 업체는 사용자가 필터링해 직접 수금 체크)
   const ff = G.julgaeFeeFilter;
   if (ff === '수금') clients = clients.filter(c => julgaeVal(pKey2, c.id).s);
   else if (ff === '미수금') clients = clients.filter(c => { const v=julgaeVal(pKey2,c.id); return v.fee>0 && !v.s; });
+  else if (ff === '청구0') clients = clients.filter(c => { const v=julgaeVal(pKey2,c.id); return ((v.fee||0)+(v.feeSeongsi||0)) === 0; });
   if (G.julgaeBookFilter==='완료') clients = clients.filter(c=>julgaeVal(pKey2,c.id).b);
   else if (G.julgaeBookFilter==='미완료') clients = clients.filter(c=>!julgaeVal(pKey2,c.id).b);
   if (G.julgaeDoneFilter==='완료') clients = clients.filter(c=>julgaeVal(pKey2,c.id).a);
@@ -6557,13 +6551,13 @@ function renderJulgae() {
       `}
       ${isSeongsiType?`<th style="text-align:right;${_hcStyle('j_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">조정료${_jnfBtn('fee')}${_hcBtn('j_fee')}</div></th><th style="text-align:right;${_hcStyle('j_feess')}"><div style="display:flex;align-items:center;justify-content:flex-end">성실신고료${_hcBtn('j_feess')}</div></th>`:isIncomeType?`<th style="text-align:right;${_hcStyle('j_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">조정료${_jnfBtn('fee')}${_hcBtn('j_fee')}</div></th>`:`<th style="text-align:right;${_hcStyle('j_fee')}"><div style="display:flex;align-items:center;justify-content:flex-end">신고수수료${_hcBtn('j_fee')}</div></th>`}
       ${isIncomeType?`
-        <th style="width:84px;text-align:center;padding:3px;${_hcStyle('j_collect')}"><div style="display:flex;align-items:center;justify-content:center">${julgaeCycleBtn('julgaeFeeFilter','수금',['전체','수금','미수금'])}${_hcBtn('j_collect')}</div></th>
+        <th style="width:84px;text-align:center;padding:3px;${_hcStyle('j_collect')}"><div style="display:flex;flex-direction:column;align-items:center;gap:2px">${julgaeCycleBtn('julgaeFeeFilter','수금',['전체','수금','미수금','청구0'])}<button onclick="checkAllJulgaeField('s')" style="font-size:9px;padding:1px 5px;border-radius:4px;border:1px solid #00897b;background:#e0f2f1;color:#00796b;cursor:pointer;white-space:nowrap" title="현재 목록 수금 전체 체크/해제(청구0 필터와 함께 사용)">전체</button>${_hcBtn('j_collect')}</div></th>
         <th style="text-align:right;${_hcStyle('j_col_unpaid')}"><div style="display:flex;align-items:center;justify-content:flex-end">미수${_jnfBtn('unpaid')}${_hcBtn('j_col_unpaid')}</div></th>
         <th style="text-align:right;${_hcStyle('j_col_fee25')}"><div style="display:flex;align-items:center;justify-content:flex-end">25년${_jnfBtn('fee25')}${_hcBtn('j_col_fee25')}</div></th>
         <th style="text-align:right;${_hcStyle('j_col_fee24')}"><div style="display:flex;align-items:center;justify-content:flex-end">24년${_jnfBtn('fee24')}${_hcBtn('j_col_fee24')}</div></th>
         <th style="text-align:right;${_hcStyle('j_col_fee23')}"><div style="display:flex;align-items:center;justify-content:flex-end">23년${_jnfBtn('fee23')}${_hcBtn('j_col_fee23')}</div></th>
       `:''}
-      ${!isIncomeType?`<th style="width:70px;text-align:center;padding:3px;${_hcStyle('j_collect')}"><div style="display:flex;align-items:center">${julgaeCycleBtn('julgaeFeeFilter','수금',['전체','수금','미수금'])}${_hcBtn('j_collect')}</div></th>`:''}
+      ${!isIncomeType?`<th style="width:70px;text-align:center;padding:3px;${_hcStyle('j_collect')}"><div style="display:flex;flex-direction:column;align-items:center;gap:2px">${julgaeCycleBtn('julgaeFeeFilter','수금',['전체','수금','미수금','청구0'])}<button onclick="checkAllJulgaeField('s')" style="font-size:9px;padding:1px 5px;border-radius:4px;border:1px solid #00897b;background:#e0f2f1;color:#00796b;cursor:pointer;white-space:nowrap" title="현재 목록 수금 전체 체크/해제(청구0 필터와 함께 사용)">전체</button>${_hcBtn('j_collect')}</div></th>`:''}
       <th style="width:44px;text-align:center;padding:3px;${_hcStyle('j_link')}"><div style="display:flex;align-items:center"><span style="font-size:11px">자료링크</span>${_hcBtn('j_link')}</div></th>
     </tr></thead>
     <tbody>
@@ -7580,11 +7574,8 @@ function updateJulgaeNum(pKey, clientId, field, rawVal) {
     if (sumEl) sumEl.textContent = ts ? ts.toLocaleString() : '-';
   }
   G.julgae[pKey][clientId] = cur;
-  // 청구 수수료(신고수수료+성실료)가 0으로 확정 입력되면 수금 자동 체크(수금할 금액 없음)
+  // (청구 0원 자동 수금체크 제거 — 0원 업체는 필터링해 직접 수금 체크)
   let _sAutoChk = false;
-  if ((field === 'fee' || field === 'feeSeongsi') && ((cur.fee||0)+(cur.feeSeongsi||0)) === 0 && !cur.s) {
-    cur.s = true; _sAutoChk = true;
-  }
   if (field === 'fee' || field === 'feeSeongsi') {
     const period = G.periods.find(p => p.id === pKey);
     const client = G.clients.find(c => c.id === clientId);
@@ -13116,7 +13107,7 @@ function _commitTRRRecord(clientId, pKey, data, selectedKeys) {
   // 신고서를 검토·반영했으므로 진행상태(자료수령·기장·상담·결재) 자동 완료 처리
   updated.d = true; updated.b = true; updated.c = true; updated.a = true;
   updated._reviewed = true;
-  if (((updated.fee||0)+(updated.feeSeongsi||0)) === 0) updated.s = true;
+  // (청구 0원 자동 수금체크 제거 — 0원 업체는 필터링해 직접 수금 체크)
   G.julgae[pKey][clientId] = updated;
   syncJulgaeFeeToClient(clientId, G.periods.find(p=>p.id===pKey), updated.fee, updated.feeSeongsi);
   const period = G.periods.find(p=>p.id===pKey);
@@ -14951,8 +14942,7 @@ function applyBosuFee(pKey, clientId, field, fee) {
   if (!G.julgae[pKey]) G.julgae[pKey] = {};
   const cur = julgaeVal(pKey, clientId);
   cur[field] = fee;
-  // 청구 수수료가 0으로 확정되면 수금 자동 체크
-  if ((field==='fee'||field==='feeSeongsi') && ((cur.fee||0)+(cur.feeSeongsi||0))===0) cur.s = true;
+  // (청구 0원 자동 수금체크 제거 — 0원 업체는 필터링해 직접 수금 체크)
   G.julgae[pKey][clientId] = cur;
   const period = G.periods.find(p=>p.id===pKey);
   const client = G.clients.find(c=>c.id===clientId);
@@ -15438,7 +15428,7 @@ function checkAllJulgaeField(field) {
   if (!ids.length) { toast('대상 거래처가 없습니다', 'info'); return; }
   const allOn = ids.every(id => !!(G.julgae[pKey]?.[id]?.[field]));
   const newVal = !allOn;
-  const _label = { b:'기장', c:'상담', a:'결재' }[field] || field;
+  const _label = { b:'기장', c:'상담', a:'결재', s:'수금' }[field] || field;
   if (!confirm(`${_label} 항목을 현재 목록 ${ids.length}개 거래처 전체 ${newVal?'선택':'해제'} 하시겠습니까?`)) return; // 실수 방지
   if (!G.julgae[pKey]) G.julgae[pKey] = {};
   ids.forEach(id => {
