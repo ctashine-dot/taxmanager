@@ -593,10 +593,11 @@ const PERIOD_TEMPLATES = [
 ];
 
 const REPORT_TYPE_FILTERS = {
-  vat:      c => ['일반','영세','겸영','간이','간세'].includes(c.vatType),
-  vat_hak_1:c => ['일반','영세','겸영'].includes(c.vatType), // 겸영·영세도 일반과세 확정신고 대상
-  vat_hak_2:c => ['일반','영세','겸영','간이','간세'].includes(c.vatType),
-  vat_yej:  c => c.taxType === '법인' && ['일반','영세','겸영'].includes(c.vatType),
+  // 부가세 유형은 '전환일' 기준 기간별 유효유형(effectiveVatType)으로 판정 → 과거 신고리스트는 옛 유형으로 계산되어 자동 보존
+  vat:      (c,p) => ['일반','영세','겸영','간이','간세'].includes(effectiveVatType(c,p)),
+  vat_hak_1:(c,p) => ['일반','영세','겸영'].includes(effectiveVatType(c,p)), // 겸영·영세도 일반과세 확정신고 대상
+  vat_hak_2:(c,p) => ['일반','영세','겸영','간이','간세'].includes(effectiveVatType(c,p)),
+  vat_yej:  (c,p) => c.taxType === '법인' && ['일반','영세','겸영'].includes(effectiveVatType(c,p)),
   corp:     c => c.taxType === '법인',
   income:   c => (c.taxType === '개인' && !getDealTypes(c).includes('성실')) || (c.taxType === '법인' && c.repIncomeTaxFiling),
   seongsi:  c => c.taxType === '개인' && getDealTypes(c).includes('성실'),
@@ -674,10 +675,26 @@ const REPORT_FEE_FIELD = {
   sajup:'feeSingo', corp:'feeJojung', income:'feeJojung', seongsi:'feeJojung'
 };
 
+// 신고기간의 '활동 시작일'(YYYY-MM-DD) — 부가세 유형 전환일 비교용. 2기=하반기(7/1), 그 외=상반기(1/1)
+function _periodActivityStart(period) {
+  const iy = periodIncomeYear(period);
+  if (!iy) return '';
+  return `${iy}-${(period && period.reportType === 'vat_hak_2') ? '07-01' : '01-01'}`;
+}
+// 특정 신고기간에 적용할 부가세 과세유형 — 전환일 이전 활동 기간이면 이전 유형, 이후면 현재(c.vatType)
+// 이렇게 하면 유형/전환일을 바꿔도 과거 신고리스트의 소속·데이터는 옛 유형 그대로 유지된다.
+function effectiveVatType(c, period) {
+  if (!c) return '';
+  const chg = c.vatTypeChange;
+  if (!chg || !chg.date || !chg.prevType || !period) return c.vatType;
+  const start = _periodActivityStart(period);
+  if (start && start < chg.date) return chg.prevType; // 이 기간은 전환 전 → 이전 유형
+  return c.vatType;
+}
 function applyReportFilter(clients, period) {
   if (!period) return clients;
   if (period.reportType && REPORT_TYPE_FILTERS[period.reportType]) {
-    return clients.filter(REPORT_TYPE_FILTERS[period.reportType]);
+    return clients.filter(c => REPORT_TYPE_FILTERS[period.reportType](c, period));
   }
   if (period.targetType === '법인') return clients.filter(c => c.taxType === '법인');
   if (period.targetType === '개인') return clients.filter(c => c.taxType === '개인');
@@ -4695,6 +4712,18 @@ function openForm(id) {
         ${VAT_TYPES.slice(1).map(v=>`<option value="${v}"${c.vatType===v?' selected':''}>${v}</option>`).join('')}
       </select>
     </div>
+    <div class="ff" style="grid-column:1/-1">
+      <label class="ffl">유형전환</label>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;flex:1">
+        <select class="fsel" id="f-vatchg-prev" style="max-width:120px;padding:3px 4px" onchange="_setVatChange()">
+          <option value="">이전 유형 —</option>
+          ${VAT_TYPES.slice(1).map(v=>`<option value="${v}"${c.vatTypeChange?.prevType===v?' selected':''}>${v}</option>`).join('')}
+        </select>
+        <input type="date" class="finput" id="f-vatchg-date" style="max-width:160px" value="${esc(c.vatTypeChange?.date||'')}" onchange="_setVatChange()">
+        <span style="font-size:11px;color:#888">부터 → 위 '부가세' 유형 적용</span>
+      </div>
+      <div style="font-size:10px;color:#aaa;flex-basis:100%;margin-top:2px">※ 예: 간이→일반 전환. 전환일 이후 신고부터 위 유형으로 신고되고, 전환일 이전 신고리스트는 이전 유형 그대로 유지(자동 변경 안 함).</div>
+    </div>
     <div class="ff">
       <label class="ffl">수금</label>
       <select class="fsel" style="padding:3px 4px" onchange="onFormSelect('feeStatus',this.value)">
@@ -4873,6 +4902,12 @@ function openForm(id) {
   </div>`);
 }
 
+// 부가세 유형 전환일 지정: 이전 유형 + 전환일이 모두 있으면 저장, 아니면 해제
+window._setVatChange = function() {
+  const prev = document.getElementById('f-vatchg-prev')?.value || '';
+  const date = document.getElementById('f-vatchg-date')?.value || '';
+  window._formData.vatTypeChange = (prev && date) ? { prevType: prev, date } : null;
+};
 window.onFormSelect = function(field, val) {
   window._formData[field] = val;
   if (field === 'taxType') {
@@ -14649,7 +14684,7 @@ function _offerAddToFilingLists(clientId) {
   const cands = G.periods.filter(p => {
     if (p.locked || !p.reportType) return false;
     const f = REPORT_TYPE_FILTERS[p.reportType];
-    return f ? f(c) : true;
+    return f ? f(c, p) : true;
   }).slice(-24).reverse();
   if (!cands.length) return;
   const rows = cands.map(p => {
