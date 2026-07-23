@@ -11762,13 +11762,13 @@ async function startBatchReview(type) {
     let pdfImages = [];
     try {
       text = await parsePDFToText(f);
-      try { const r = await parsePDFToImages(f, { scale: 1.9, quality: 0.78 }); pdfImages = r.images; } catch(_){ pdfImages = []; }
+      // 이미지 렌더링은 AI 비전용 — 내용만 불러오기(스크랩 전용)에서는 건너뜀
+      if (!extractOnly) { try { const r = await parsePDFToImages(f, { scale: 1.9, quality: 0.78 }); pdfImages = r.images; } catch(_){ pdfImages = []; } }
     } catch(e) {
       if(statusEl){ statusEl.textContent='PDF 오류'; statusEl.style.color='#c62828'; }
       _batchResults.push({file:f.name, error:'PDF 추출 실패: '+e.message, data:null});
       continue;
     }
-    if(statusEl){ statusEl.textContent='AI 분석 중...'; statusEl.style.color='#1565c0'; }
 
     // 거래처 자동 매칭 (우선 텍스트 사업자번호로)
     const bn = extractBizNo(text);
@@ -11858,35 +11858,49 @@ ${text.slice(0, 12000)}
 
     let reviewData = null;
     let reviewText = '';
-    try {
-      const _bp = extractOnly ? extractPrompt + `\n\n【빠른 추출 모드】 위 2단계 검토 의견은 작성하지 말고, 1단계 JSON 데이터만 정확히 출력하십시오.` : extractPrompt;
-      const result = await aiCallStream(null, buildReviewContent(_bp, pdfImages), extractOnly?3000:3500, null, 'claude-opus-4-8');
-      if (result) {
-        reviewData = parseAIJson(result);
-        reviewText = extractOnly ? '' : result.replace(/```json[\s\S]*?```/g,'').replace(/```json[\s\S]*$/,'').trim();
-        // AI 오독 방지: 텍스트 레이어가 있으면 결정적 스크랩 값으로 핵심 금액 보정
-        if (reviewData && ['vat','income','seongsi'].includes(type) && text && text.length > 300) {
-          try {
-            const _sd = (type==='vat') ? _scrapeVatReturn(text) : _scrapeIncomeReturn(text);
-            if (type==='vat' && ((_sd.salesAmount>0)||(_sd.purchaseAmount>0)||(_sd.vatAmount!==0)||_sd.bizNo)) {
-              reviewData.salesAmount=_sd.salesAmount||0; reviewData.revenue=_sd.salesAmount||0;
-              reviewData.purchaseAmount=_sd.purchaseAmount||0; reviewData.vatAmount=_sd.vatAmount||0;
-              reviewData.salesExempt=_sd.salesExempt||0; reviewData.purchaseExempt=_sd.purchaseExempt||0;
-              if(_sd.companyName) reviewData.companyName=_sd.companyName; if(_sd.bizNo) reviewData.bizNo=_sd.bizNo;
-              reviewData._scrapedAmounts=true;
-            } else if (type!=='vat' && ((_sd.income>0)||(_sd.revenue>0)||(_sd.businessSites&&_sd.businessSites.length))) {
-              if(_sd.revenue>0)reviewData.revenue=_sd.revenue; if(_sd.income>0)reviewData.income=_sd.income;
-              if(_sd.taxBase>0)reviewData.taxBase=_sd.taxBase; if(_sd.totalTax>0)reviewData.totalTax=_sd.totalTax; if(_sd.payTax>0)reviewData.payTax=_sd.payTax;
-              if(_sd.businessSites&&_sd.businessSites.length)reviewData.businessSites=_sd.businessSites;
-              reviewData._scrapedAmounts=true;
-            }
-          } catch(_){}
+    const _canScrape = ['vat','income','seongsi'].includes(type);
+    if (extractOnly && _canScrape) {
+      // 내용만 불러오기(일괄) = AI 없이 텍스트 스크랩만 (API키·토큰 미사용). 못 읽으면 해당 파일만 실패 표시.
+      try {
+        reviewData = (type==='vat') ? _scrapeVatReturn(text) : _scrapeIncomeReturn(text);
+        if (reviewData) reviewData._scrapedAmounts = true;
+      } catch(_) { reviewData = null; }
+      const _empty = !reviewData || (type==='vat'
+        ? (!reviewData.bizNo && !reviewData.companyName && !reviewData.salesAmount)
+        : (!reviewData.representative && !reviewData.income && !(reviewData.businessSites||[]).length));
+      if (_empty) { reviewData = null; if(statusEl){ statusEl.textContent='추출 실패(텍스트 없음)'; statusEl.style.color='#e65100'; } }
+    } else {
+      if(statusEl){ statusEl.textContent='AI 분석 중...'; statusEl.style.color='#1565c0'; }
+      try {
+        const _bp = extractOnly ? extractPrompt + `\n\n【빠른 추출 모드】 위 2단계 검토 의견은 작성하지 말고, 1단계 JSON 데이터만 정확히 출력하십시오.` : extractPrompt;
+        const result = await aiCallStream(null, buildReviewContent(_bp, pdfImages), extractOnly?3000:3500, null, 'claude-opus-4-8');
+        if (result) {
+          reviewData = parseAIJson(result);
+          reviewText = extractOnly ? '' : result.replace(/```json[\s\S]*?```/g,'').replace(/```json[\s\S]*$/,'').trim();
+          // AI 오독 방지: 텍스트 레이어가 있으면 결정적 스크랩 값으로 핵심 금액 보정
+          if (reviewData && _canScrape && text && text.length > 300) {
+            try {
+              const _sd = (type==='vat') ? _scrapeVatReturn(text) : _scrapeIncomeReturn(text);
+              if (type==='vat' && ((_sd.salesAmount>0)||(_sd.purchaseAmount>0)||(_sd.vatAmount!==0)||_sd.bizNo)) {
+                reviewData.salesAmount=_sd.salesAmount||0; reviewData.revenue=_sd.salesAmount||0;
+                reviewData.purchaseAmount=_sd.purchaseAmount||0; reviewData.vatAmount=_sd.vatAmount||0;
+                reviewData.salesExempt=_sd.salesExempt||0; reviewData.purchaseExempt=_sd.purchaseExempt||0;
+                if(_sd.companyName) reviewData.companyName=_sd.companyName; if(_sd.bizNo) reviewData.bizNo=_sd.bizNo;
+                reviewData._scrapedAmounts=true;
+              } else if (type!=='vat' && ((_sd.income>0)||(_sd.revenue>0)||(_sd.businessSites&&_sd.businessSites.length))) {
+                if(_sd.revenue>0)reviewData.revenue=_sd.revenue; if(_sd.income>0)reviewData.income=_sd.income;
+                if(_sd.taxBase>0)reviewData.taxBase=_sd.taxBase; if(_sd.totalTax>0)reviewData.totalTax=_sd.totalTax; if(_sd.payTax>0)reviewData.payTax=_sd.payTax;
+                if(_sd.businessSites&&_sd.businessSites.length)reviewData.businessSites=_sd.businessSites;
+                reviewData._scrapedAmounts=true;
+              }
+            } catch(_){}
+          }
         }
+      } catch(e) {
+        if(statusEl){ statusEl.textContent='AI 오류'; statusEl.style.color='#c62828'; }
+        _batchResults.push({file:f.name, error:'AI 오류: '+e.message, data:null});
+        continue;
       }
-    } catch(e) {
-      if(statusEl){ statusEl.textContent='AI 오류'; statusEl.style.color='#c62828'; }
-      _batchResults.push({file:f.name, error:'AI 오류: '+e.message, data:null});
-      continue;
     }
     if(statusEl){ statusEl.textContent='완료 ✓'; statusEl.style.color='#2e7d32'; }
     // 사업자번호 미매칭이면 AI가 읽은 상호·대표자·사업자번호로 재매칭
@@ -12203,10 +12217,12 @@ function _scrapeVatReturn(text) {
   const d = {};
   const pm = T.match(/신고기간\s*(\d{4})\s*년\s*제?\s*(\d)\s*기/);
   if (pm) { const conf = /확\s*정/.test(T) ? '확정' : (/예\s*정/.test(T)?'예정':''); d.period = `${pm[1].slice(2)}년 ${pm[2]}기${conf?' '+conf:''}`; }
-  // 상호·대표자: 같은 줄에 뒤 라벨이 이어질 수 있으므로(성명/대표자명/사업자등록번호 등) 그 앞까지만 캡처
-  d.companyName = strAfter(/\(법인명\)\s*([^\n]+?)(?=\s*성\s*명|\s*\(대표|\s*사업자등록|\s{2,}|\n|$)/)
-    || strAfter(/상\s*호\s*([^\n]+?)(?=\s*성\s*명|\s*\(대표|\s*사업자등록|\s{2,}|\n|$)/); // 간이과세 서식은 '(법인명)' 없이 '상 호'만
-  d.representative = strAfter(/\(대표자명\)\s*([^\n]+?)(?=\s*사업자등록|\s*생\s*년|\s*전화|\s{2,}|\n|$)/);
+  // 상호·대표자: 뒤 라벨(성명/대표자명/사업자등록번호/생년월일/전화/사업장 등) 앞까지 '전부' 캡처.
+  //  (상호에 공백·번지·'호'가 들어가는 경우 예: '비스타에비뉴상가 301동 127호' — 이전엔 2칸 공백에서 잘려 '호'가 빠졌음)
+  const _nameStop = '(?=\\s*성\\s*명|\\s*\\(대표|\\s*사업자등록|\\s*생\\s*년|\\s*전화|\\s*사업장|\\s*전자우편|\\n|$)';
+  d.companyName = strAfter(new RegExp('\\(법인명\\)\\s*([^\\n]+?)'+_nameStop))
+    || strAfter(new RegExp('상\\s*호\\s*([^\\n]+?)'+_nameStop)); // 간이과세 서식은 '(법인명)' 없이 '상 호'만
+  d.representative = strAfter(/\(대표자명\)\s*([^\n]+?)(?=\s*사업자등록|\s*생\s*년|\s*전화|\s*사업장|\s*휴대|\n|$)/);
   const bnm = T.match(/사업자등록번호\s*([\d\s\-]{10,})/);
   if (bnm) { const dd = dig(bnm[1]).slice(0,10); if (dd.length===10) d.bizNo = dd.slice(0,3)+'-'+dd.slice(3,5)+'-'+dd.slice(5); }
   const _head = T.split(/신\s*고\s*내\s*용/)[0] || T; // 세무대리인 전화 오추출 방지(납세자 헤더만)
