@@ -11383,6 +11383,17 @@ function _matchClientByInfo(bizNo, name, rep) {
   if (tn && tn.length>=2) { const cand=active.filter(c=>{const n=nn(c.name); return n && (n.includes(tn)||tn.includes(n));}); if(cand.length===1) return cand[0]; }
   return null;
 }
+// 검토 방식(모드) 선택 — 추출(스크랩/AI) × 검토(없음/AI) 4조합
+function _trrModeSelectHTML(id) {
+  const cur = G.trrMode || 'scrape_review';
+  const o = (v,l)=>`<option value="${v}" ${cur===v?'selected':''}>${l}</option>`;
+  return `<select id="${id}" onchange="G.trrMode=this.value" class="fsel" style="font-size:12px;padding:8px 9px;font-weight:600;width:100%">
+    ${o('scrape','① 스크랩만 — AI·API키 미사용 (빠름·무료)')}
+    ${o('scrape_review','② 스크랩 + AI 검토 — 금액은 텍스트 추출, 검토의견만 AI')}
+    ${o('ai_extract','③ AI 추출만 — 검토 생략 (스캔본·이미지)')}
+    ${o('ai_full','④ AI 추출 + AI 검토 — 전체 (스캔본)')}
+  </select>`;
+}
 // 신고서 검토 상태 초기화 (데이터 교체·새 검토 시 stale 방지)
 function _resetTRRState() {
   _batchFiles = []; _batchResults = [];
@@ -11459,15 +11470,11 @@ function openTaxReturnReviewer(type) {
       </div>
     </div>
 
-    <div style="display:flex;gap:8px;margin-top:14px">
-      <button id="trr-run-btn" class="btn-primary" style="flex:2" onclick="runTaxReturnReview('${type}')">
-        ✦ AI 검토 시작
-      </button>
-      <button id="trr-extract-btn" style="flex:1;padding:11px;background:#eef4ff;color:#1565c0;border:1.5px solid #a9c9f5;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit" onclick="runTaxReturnReview('${type}', true)" title="AI 검토 의견 없이 신고서 내용(숫자)만 추출해 리스트에 기록">
-        📥 내용만 불러오기
-      </button>
+    <div style="margin-top:14px">
+      <label class="flabel">검토 방식</label>
+      ${_trrModeSelectHTML('trr-mode')}
+      <button id="trr-run-btn" class="btn-primary" style="width:100%;margin-top:8px" onclick="runTaxReturnReview('${type}')">▶ 실행</button>
     </div>
-    ${['vat','income','seongsi'].includes(type)?`<button onclick="runVatScrapeNoKey('${type}')" style="width:100%;margin-top:8px;padding:9px;background:#f5f5f5;color:#555;border:1.5px solid #e0e0e0;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit" title="API 키 없이 텍스트 PDF에서 항목만 추출">🔑 API 키 없이 스크랩 (텍스트 PDF·${type==='vat'?'부가세':type==='seongsi'?'성실신고':'소득세'})</button>`:''}
     <div id="trr-status" style="margin-top:8px;font-size:12px;color:#888;text-align:center"></div>
     <div id="trr-result" style="margin-top:14px"></div>
     </div><!-- /trr-pane-single -->
@@ -11510,11 +11517,9 @@ function openTaxReturnReviewer(type) {
       </div>
       <div id="trr-batch-list" style="margin-top:10px"></div>
       <div id="trr-batch-controls" style="display:none;margin-top:12px">
-        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#555;margin-bottom:8px;cursor:pointer">
-          <input type="checkbox" id="trr-batch-extractonly" style="width:15px;height:15px;cursor:pointer">
-          ⚡ 내용만 불러오기 (AI 검토 생략 · 더 빠름)
-        </label>
-        <button onclick="startBatchReview('${type}')" id="trr-batch-run-btn" class="btn-primary" style="width:100%">✦ 일괄 AI 검토 시작</button>
+        <label class="flabel">검토 방식</label>
+        ${_trrModeSelectHTML('trr-batch-mode')}
+        <button onclick="startBatchReview('${type}')" id="trr-batch-run-btn" class="btn-primary" style="width:100%;margin-top:8px">▶ 일괄 실행</button>
       </div>
       <div style="display:flex;justify-content:flex-end;margin-top:10px"><button onclick="_resetTRRBatch()" style="font-size:11px;padding:4px 10px;border:1px solid #ef9a9a;background:#fdecea;color:#c62828;border-radius:6px;cursor:pointer;font-family:inherit" title="일괄 검토 결과를 모두 지웁니다">🗑 일괄결과 초기화</button></div>
       <div id="trr-batch-results" style="margin-top:8px"></div>
@@ -11744,7 +11749,10 @@ function _resetTRRBatch() {
 }
 async function startBatchReview(type) {
   if (!_batchFiles.length) { toast('파일을 먼저 선택해주세요','warning'); return; }
-  const extractOnly = !!document.getElementById('trr-batch-extractonly')?.checked;
+  const mode = document.getElementById('trr-batch-mode')?.value || G.trrMode || 'scrape_review';
+  const scrapeOnly = (mode === 'scrape');                                  // 스크랩만(AI 없음)
+  const useImages = (mode === 'ai_extract' || mode === 'ai_full');          // AI가 이미지에서 추출
+  const includeReview = (mode === 'scrape_review' || mode === 'ai_full');   // AI 검토 의견
   const pKey = document.getElementById('trr-batch-period')?.value || '';
   const btn = document.getElementById('trr-batch-run-btn');
   const resultsEl = document.getElementById('trr-batch-results');
@@ -11763,7 +11771,7 @@ async function startBatchReview(type) {
     try {
       text = await parsePDFToText(f);
       // 이미지 렌더링은 AI 비전용 — 내용만 불러오기(스크랩 전용)에서는 건너뜀
-      if (!extractOnly) { try { const r = await parsePDFToImages(f, { scale: 1.9, quality: 0.78 }); pdfImages = r.images; } catch(_){ pdfImages = []; } }
+      if (useImages) { try { const r = await parsePDFToImages(f, { scale: 1.9, quality: 0.78 }); pdfImages = r.images; } catch(_){ pdfImages = []; } }
     } catch(e) {
       if(statusEl){ statusEl.textContent='PDF 오류'; statusEl.style.color='#c62828'; }
       _batchResults.push({file:f.name, error:'PDF 추출 실패: '+e.message, data:null});
@@ -11859,8 +11867,8 @@ ${text.slice(0, 12000)}
     let reviewData = null;
     let reviewText = '';
     const _canScrape = ['vat','income','seongsi'].includes(type);
-    if (extractOnly && _canScrape) {
-      // 내용만 불러오기(일괄) = AI 없이 텍스트 스크랩만 (API키·토큰 미사용). 못 읽으면 해당 파일만 실패 표시.
+    if (scrapeOnly && _canScrape) {
+      // 스크랩만(일괄) = AI 없이 텍스트 스크랩만 (API키·토큰 미사용). 못 읽으면 해당 파일만 실패 표시.
       try {
         reviewData = (type==='vat') ? _scrapeVatReturn(text) : _scrapeIncomeReturn(text);
         if (reviewData) reviewData._scrapedAmounts = true;
@@ -11872,11 +11880,11 @@ ${text.slice(0, 12000)}
     } else {
       if(statusEl){ statusEl.textContent='AI 분석 중...'; statusEl.style.color='#1565c0'; }
       try {
-        const _bp = extractOnly ? extractPrompt + `\n\n【빠른 추출 모드】 위 2단계 검토 의견은 작성하지 말고, 1단계 JSON 데이터만 정확히 출력하십시오.` : extractPrompt;
-        const result = await aiCallStream(null, buildReviewContent(_bp, pdfImages), extractOnly?3000:3500, null, 'claude-opus-4-8');
+        const _bp = !includeReview ? extractPrompt + `\n\n【빠른 추출 모드】 위 2단계 검토 의견은 작성하지 말고, 1단계 JSON 데이터만 정확히 출력하십시오.` : extractPrompt;
+        const result = await aiCallStream(null, buildReviewContent(_bp, pdfImages), !includeReview?3000:3500, null, 'claude-opus-4-8');
         if (result) {
           reviewData = parseAIJson(result);
-          reviewText = extractOnly ? '' : result.replace(/```json[\s\S]*?```/g,'').replace(/```json[\s\S]*$/,'').trim();
+          reviewText = !includeReview ? '' : result.replace(/```json[\s\S]*?```/g,'').replace(/```json[\s\S]*$/,'').trim();
           // AI 오독 방지: 텍스트 레이어가 있으면 결정적 스크랩 값으로 핵심 금액 보정
           if (reviewData && _canScrape && text && text.length > 300) {
             try {
@@ -12430,35 +12438,36 @@ function _recordScrape() {
   doRecordTRRWith(cid, pk, () => { if (typeof _trrAfterRecord==='function') _trrAfterRecord(cid, pk); });
 }
 
-async function runTaxReturnReview(type, extractOnly) {
+async function runTaxReturnReview(type, modeArg) {
   const text = (document.getElementById('trr-text-input')||{}).value?.trim();
   if (!text) { toast('신고서 내용을 입력하거나 PDF를 업로드해주세요', 'warning'); return; }
-  // 내용만 불러오기 = AI 없이 텍스트에서 직접 추출(무키). 부가세·종소세·성실 지원.
-  //  못 읽어도 카드에서 값을 직접 입력할 수 있으므로 AI로 폴백하지 않는다(토큰·API키 불필요).
-  if (extractOnly && ['vat','income','seongsi'].includes(type)) {
-    runVatScrapeNoKey(type);
+  // 모드: scrape(스크랩만·AI없음) / scrape_review(스크랩추출+AI검토) / ai_extract(AI추출·검토생략) / ai_full(AI추출+검토)
+  const mode = modeArg || document.getElementById('trr-mode')?.value || G.trrMode || 'scrape_review';
+  if (mode === 'scrape') {
+    if (['vat','income','seongsi'].includes(type)) { runVatScrapeNoKey(type); return; }
+    toast('스크랩만 모드는 부가세·종소세·성실만 지원합니다. 다른 모드를 선택하세요.', 'warning', 4000);
     return;
   }
-  if (extractOnly && type==='corp') {
-    toast('법인세는 텍스트 자동추출을 지원하지 않습니다. AI 검토(✦)를 사용하거나 부가세·종소세 검토를 이용하세요.', 'warning', 4500);
-    return;
-  }
+  const useImages = (mode === 'ai_extract' || mode === 'ai_full');      // AI가 이미지에서 추출(스캔본 대응)
+  const includeReview = (mode === 'scrape_review' || mode === 'ai_full'); // AI 검토 의견 작성
   const resultDiv = document.getElementById('trr-result');
   const btn = document.getElementById('trr-run-btn');
   if (btn) btn.disabled = true;
-  resultDiv.innerHTML = `<div style="text-align:center;padding:24px;color:#888">${spinnerHTML} 페이지 이미지 렌더링 중... <span id="trr-progress" style="font-size:11px;color:#bbb"></span></div>`;
 
-  // 업로드된 PDF를 페이지 이미지로 렌더링 (텍스트 레이어 없는 신고서 대응)
+  // 이미지 렌더링은 AI 추출 모드에서만(스크랩 추출 모드는 텍스트만 사용 → 토큰 절약)
   let _trrImages = [];
-  try {
-    const _files = window._trrFiles || [];
-    for (const _f of _files) {
-      const r = await parsePDFToImages(_f, { scale: 2.0, quality: 0.8 }); // 고해상도 — 숫자 판독 정확도
-      _trrImages.push(...r.images);
-      if (_trrImages.length >= 14) break; // 과도한 토큰 방지
-    }
-  } catch(_) { _trrImages = []; }
-  if (resultDiv) resultDiv.innerHTML = `<div style="text-align:center;padding:24px;color:#888">${spinnerHTML} AI 분석 중... <span id="trr-progress" style="font-size:11px;color:#bbb"></span></div>`;
+  if (useImages) {
+    resultDiv.innerHTML = `<div style="text-align:center;padding:24px;color:#888">${spinnerHTML} 페이지 이미지 렌더링 중... <span id="trr-progress" style="font-size:11px;color:#bbb"></span></div>`;
+    try {
+      const _files = window._trrFiles || [];
+      for (const _f of _files) {
+        const r = await parsePDFToImages(_f, { scale: 2.0, quality: 0.8 });
+        _trrImages.push(...r.images);
+        if (_trrImages.length >= 14) break;
+      }
+    } catch(_) { _trrImages = []; }
+  }
+  if (resultDiv) resultDiv.innerHTML = `<div style="text-align:center;padding:24px;color:#888">${spinnerHTML} AI ${includeReview?'검토':'추출'} 중... <span id="trr-progress" style="font-size:11px;color:#bbb"></span></div>`;
 
   const typeLabel = { vat:'부가가치세', corp:'법인세', income:'종합소득세' }[type] || type;
 
@@ -12582,13 +12591,13 @@ ${text.slice(0, 14000)}
 - ★기장세액공제는 간편장부대상자가 복식부기로 기장한 경우에만 해당. 복식부기의무자(소득세 직전 수입금액 업종별 기준 초과)에게는 기장세액공제를 tip으로 넣지 말 것.
 ※ totalTax(결정세액)=산출세액-세액감면·공제+가산세 / payTax(납부할총세액)=결정세액-기납부세액`;
 
-  const _prompt = extractOnly
+  const _prompt = !includeReview
     ? extractPrompt + `\n\n【빠른 추출 모드】 검토 의견(findings)은 작성하지 말고 빈 배열([])로 두십시오. 위 JSON의 데이터 값(상호·대표자·사업자번호·수입·소득·과세표준·세액·수수료 등)만 정확히 추출하는 데 집중하십시오.`
     : extractPrompt;
 
   try {
     let charCount = 0;
-    const result = await aiCallStream(null, buildReviewContent(_prompt, _trrImages), extractOnly?3500:5000, (chunk, full) => {
+    const result = await aiCallStream(null, buildReviewContent(_prompt, _trrImages), !includeReview?3500:5000, (chunk, full) => {
       charCount += chunk.length;
       const prog = document.getElementById('trr-progress');
       if (prog) prog.textContent = `(${charCount.toLocaleString()}자 분석 중...)`;
@@ -13345,8 +13354,8 @@ function _commitTRRRecord(clientId, pKey, data, selectedKeys) {
       if (!sel.has(sp.key)) (_TRR_FIELD_JKEYS[sp.key]||[sp.key]).forEach(jk => { updated[jk] = cur[jk]; });
     });
   }
-  // 신고서를 검토·반영했으므로 진행상태(자료수령·기장·상담·결재) 자동 완료 처리
-  updated.d = true; updated.b = true; updated.c = true; updated.a = true;
+  // 신고서를 검토·반영했으므로 자료수령·기장·상담은 자동 완료. 결재(a)는 사용자가 직접 체크(자동 완료 제외).
+  updated.d = true; updated.b = true; updated.c = true;
   updated._reviewed = true;
   // (청구 0원 자동 수금체크 제거 — 0원 업체는 필터링해 직접 수금 체크)
   G.julgae[pKey][clientId] = updated;
