@@ -8784,6 +8784,20 @@ function renderFees() {
   bookArrList.sort((a,b)=> (b.unpaid||0)-(a.unpaid||0) || a.client.name.localeCompare(b.client.name,'ko')); // 미수금 많은 순
   const bookArrUnpaid = bookArrList.reduce((s,x)=>s+x.unpaid,0);
 
+  // 신고수수료 미수 + 기장료 미수를 거래처별로 통합(기장료를 부가세수수료 왼쪽 컬럼으로 표시)
+  const _arrMap = {};
+  filingAggList.forEach(a => { _arrMap[a.client.id] = { client:a.client, vat:a.vat, adj:a.adj, ss:a.ss, book:0 }; });
+  bookArrList.forEach(x => {
+    if (x.unpaid <= 0) return; // 완료된 기장료 미수는 목록에서 제외
+    if (G.filingSearch && !(x.client.name||'').replace(/\s+/g,'').includes(G.filingSearch.replace(/\s+/g,''))) return;
+    if (G.filingRepSearch && !(x.client.rep||'').includes(G.filingRepSearch)) return;
+    if ((G.filingManagerFilter||[]).length>0) { const ms=getManagers(x.client); if(!G.filingManagerFilter.some(m=>m==='(없음)'?ms.length===0:ms.includes(m))) return; }
+    if (!_arrMap[x.cid]) _arrMap[x.cid] = { client:x.client, vat:0, adj:0, ss:0, book:0 };
+    _arrMap[x.cid].book = x.unpaid;
+  });
+  let arrearsList = Object.values(_arrMap).filter(m => (m.vat||m.adj||m.ss||m.book));
+  arrearsList.sort((a,b)=> ((b.vat+b.adj+b.ss+b.book)||0)-((a.vat+a.adj+a.ss+a.book)||0) || a.client.name.localeCompare(b.client.name,'ko'));
+
   const grandTotal     = mFeeTotal + fTotal + adhocTotal;
   const grandCollected = mFeeCollected + fCollected + adhocCollected;
   const grandUnpaid    = grandTotal - grandCollected;
@@ -8965,62 +8979,36 @@ function renderFees() {
     </div>
     <div style="font-size:13px;color:#555;margin-bottom:12px">신고수수료 청구 ${fTotal.toLocaleString()} · 수금 <b style="color:#2e7d32">${fCollected.toLocaleString()}</b> · 미수금 <b style="color:#e53935">${fUnpaid.toLocaleString()}</b></div>
     <div style="${(G.sectionCollapsed||{})['fees-filing']?'display:none':''}">
-    <div style="font-size:12px;font-weight:700;color:#1565c0;margin-bottom:6px">📋 신고수수료 미수금 <span style="font-size:11px;font-weight:400;color:#888">(각 신고리스트에서 불러온 부가세·조정료·성실 미수금)</span></div>
-    <div style="font-size:11px;color:#888;margin-bottom:8px">미수금이 있는 거래처만 표시 · 부가세·법인세·소득세·성실은 동일 유형 미수금을 합산</div>
-    ${filingAggList.length > 0 ? `
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px">
+      <div style="font-size:12px;font-weight:700;color:#1565c0">📋 미수금 <span style="font-size:11px;font-weight:400;color:#888">(신고리스트 부가세·조정료·성실 미수 + 직접 입력한 기장료 미수)</span></div>
+      <button onclick="openBookArrearsModal(null)" style="padding:5px 12px;border-radius:7px;border:1.5px solid #2e7d32;background:#e8f5e9;color:#2e7d32;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit" title="업체를 검색해 기장료 미수를 입력합니다">+ 기장료 미수 입력</button>
+    </div>
+    <div style="font-size:11px;color:#888;margin-bottom:8px">미수금이 있는 거래처만 표시 · 부가세·법인세·소득세·성실은 동일 유형 미수금을 합산 · 기장료 금액을 클릭하면 수정·수금</div>
+    ${arrearsList.length > 0 ? `
     <div class="tbl-wrap">
     <table>
       <thead><tr>
         <th style="padding:4px 6px"><button onclick="openFilingNameSearch(this)" style="width:100%;padding:3px 5px;border-radius:6px;font-size:10px;cursor:pointer;font-family:inherit;${filingSearchActive?'border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7':'border:1.5px solid #ddd;background:#fff;color:#555'};text-align:left">상호 🔍</button></th>
         <th style="width:80px;padding:4px 6px"><button onclick="openFilingRepSearch(this)" style="width:100%;padding:3px 5px;border-radius:6px;font-size:10px;cursor:pointer;font-family:inherit;${filingRepSearchActive?'border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7':'border:1.5px solid #ddd;background:#fff;color:#555'};text-align:left">대표자 🔍</button></th>
         <th style="padding:4px 6px"><div style="display:flex;align-items:center">${filterPopupBtn('filingManagerFilter','담당자')}</div></th>
+        <th style="text-align:right;padding:4px 6px;font-size:11px;color:#1b5e20">기장료</th>
         <th style="text-align:right;padding:4px 6px;font-size:11px">부가세<br>수수료</th>
         <th style="text-align:right;padding:4px 6px;font-size:11px">조정료<br>(법인·개인)</th>
         <th style="text-align:right;padding:4px 6px;font-size:11px">성실<br>수수료</th>
         <th style="width:60px;text-align:center;padding:3px;font-size:11px">수금</th>
       </tr></thead>
-      <tbody>${filingAggList.map(a=>`<tr>
+      <tbody>${arrearsList.map(a=>`<tr>
         <td style="padding:5px 6px;font-weight:600;font-size:13px">${esc(a.client.name)}</td>
         <td style="padding:5px 6px;font-size:12px;color:#444">${esc(a.client.rep||'-')}</td>
         <td style="padding:5px 6px;font-size:12px;color:#555">${esc(getManagers(a.client).join(', ')||'-')}</td>
+        <td style="text-align:right;padding:5px 6px"><button onclick="openBookArrearsModal(${a.client.id})" title="기장료 미수 입력·수금" style="border:1px solid ${a.book?'#a5d6a7':'#e0e0e0'};background:${a.book?'#e8f5e9':'#fafafa'};border-radius:6px;font-size:12px;padding:3px 8px;cursor:pointer;color:${a.book?'#e53935':'#aaa'};font-weight:${a.book?'700':'400'};font-family:inherit">${a.book?a.book.toLocaleString():'+'}</button></td>
         <td style="text-align:right;padding:5px 6px;font-weight:600;color:${a.vat?'#e53935':'#ccc'}">${a.vat?a.vat.toLocaleString():'-'}</td>
         <td style="text-align:right;padding:5px 6px;font-weight:600;color:${a.adj?'#e53935':'#ccc'}">${a.adj?a.adj.toLocaleString():'-'}</td>
         <td style="text-align:right;padding:5px 6px;font-weight:600;color:${a.ss?'#e53935':'#ccc'}">${a.ss?a.ss.toLocaleString():'-'}</td>
-        <td style="text-align:center;padding:3px"><button onclick="openFilingCollectModal(${a.client.id})" style="border:1px solid #a5d6a7;background:#e8f5e9;border-radius:6px;font-size:12px;padding:4px 8px;cursor:pointer;color:#2e7d32;font-family:inherit">💵</button></td>
+        <td style="text-align:center;padding:3px">${(a.vat||a.adj||a.ss)?`<button onclick="openFilingCollectModal(${a.client.id})" style="border:1px solid #a5d6a7;background:#e8f5e9;border-radius:6px;font-size:12px;padding:4px 8px;cursor:pointer;color:#2e7d32;font-family:inherit" title="신고수수료 수금">💵</button>`:'<span style="color:#ccc;font-size:11px">-</span>'}</td>
       </tr>`).join('')}</tbody>
     </table></div>
-    ` : '<div style="color:#2e7d32;text-align:center;padding:20px">미수금이 있는 신고 수수료가 없습니다 ✓</div>'}
-
-    <!-- 기장료 미수 (직접 입력) -->
-    <div style="border-top:1px dashed #e0e0e0;margin-top:16px;padding-top:12px">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-        <div style="font-size:12px;font-weight:700;color:#1b5e20">📒 기장료 미수 <span style="font-size:11px;font-weight:400;color:#888">(업체 검색 후 미수 금액 직접 입력)</span></div>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <span style="font-size:12px;color:#555">미수 합계 <b style="color:#e53935">${bookArrUnpaid.toLocaleString()}</b>원</span>
-          <button onclick="openBookArrearsModal(null)" style="padding:5px 12px;border-radius:7px;border:1.5px solid #2e7d32;background:#e8f5e9;color:#2e7d32;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">+ 미수기장료 입력</button>
-        </div>
-      </div>
-      ${bookArrList.length > 0 ? `
-      <div class="tbl-wrap"><table>
-        <thead><tr>
-          <th style="padding:4px 8px;text-align:left;font-size:11px;color:#888">거래처</th>
-          <th style="text-align:right;padding:4px 6px;font-size:11px;color:#888">미수 청구액</th>
-          <th style="text-align:right;padding:4px 6px;font-size:11px;color:#2e7d32">기입금</th>
-          <th style="text-align:right;padding:4px 6px;font-size:11px;color:#e53935">미수</th>
-          <th style="padding:4px 6px;font-size:11px;color:#888">실수금 입력</th>
-          <th style="width:40px;text-align:center"></th>
-        </tr></thead>
-        <tbody>${bookArrList.map(x=>`<tr style="background:${x.unpaid<=0?'#f6fff6':'#fff'}">
-          <td style="padding:5px 8px"><div style="font-weight:600;font-size:13px">${esc(x.client.name)}</div><div style="font-size:11px;color:#888">${esc(x.client.rep||'')}${x.note?' · '+esc(x.note):''}</div></td>
-          <td style="text-align:right;padding:5px 6px;font-weight:600">${x.billed.toLocaleString()}</td>
-          <td style="text-align:right;padding:5px 6px;color:#2e7d32;font-weight:600">${x.paid.toLocaleString()}</td>
-          <td style="text-align:right;padding:5px 6px;color:${x.unpaid>0?'#e53935':'#2e7d32'};font-weight:700">${x.unpaid>0?x.unpaid.toLocaleString():'완료 ✓'}</td>
-          <td style="padding:5px 6px"><div style="display:flex;gap:4px;align-items:center"><input id="ba-amt-${x.cid}" type="number" inputmode="numeric" value="${x.paid||x.billed}" style="width:90px;padding:5px 6px;border:1px solid #a5d6a7;border-radius:6px;font-size:12px;text-align:right;font-family:inherit"><button onclick="applyBookArrearsCollect(${x.cid})" class="btn-primary" style="padding:5px 9px;font-size:12px">반영</button></div></td>
-          <td style="text-align:center"><button onclick="deleteBookArrears(${x.cid})" style="padding:2px 6px;border-radius:5px;border:1px solid #ef9a9a;background:#fdecea;color:#c62828;font-size:11px;cursor:pointer;font-family:inherit" title="삭제">✕</button></td>
-        </tr>`).join('')}</tbody>
-      </table></div>
-      ` : '<div style="color:#aaa;text-align:center;padding:14px;font-size:12px">등록된 미수기장료가 없습니다. \'+ 미수기장료 입력\'으로 추가하세요.</div>'}
-    </div>
+    ` : '<div style="color:#2e7d32;text-align:center;padding:20px">미수금이 있는 거래처가 없습니다 ✓</div>'}
     </div>
   </div>
 
