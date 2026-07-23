@@ -12394,10 +12394,7 @@ function runVatScrapeNoKey(type) {
 function _recordScrape() {
   const cid = Number(document.getElementById('trr-client-sel')?.value)||0;
   const pk = document.getElementById('trr-period-sel')?.value||'';
-  if (!cid) { toast('거래처를 연결해주세요 (상단 거래처 연결)','warning'); return; }
-  if (!pk) { toast('신고기간을 선택해주세요 (상단 신고기간 연결)','warning'); return; }
   const fee = Number(String(document.getElementById('scrape-fee')?.value||'0').replace(/[,\s]/g,''))||0;
-  _promptManagerChange(cid, document.getElementById('trr-manager-sel')?.value || '');
   const rd = { ...(window._trrReviewData||{}), feeRecommendation: fee };
   // 부가세: 직접 수정한 금액칸이 있으면 그 값으로 덮어씀(과세+면세 합산, (과+면) 반영)
   const _numEl = id => { const e=document.getElementById(id); if(!e) return null; const s=(e.value||'').replace(/,/g,'').trim(); return s===''?0:(Number(s)||0); };
@@ -12406,6 +12403,10 @@ function _recordScrape() {
   if (pTax!==null){ rd.purchaseExempt=pEx||0; rd.purchaseAmount=(pTax||0)+(pEx||0); }
   if (vat!==null){ rd.vatAmount=vat; rd.payTax=vat; }
   window._trrReviewData = rd;
+  // 거래처를 연결하지 않았으면 매칭 모달(기존 연결 · 신규 거래처 등록 · 미등록 반영)을 연다
+  if (!cid) { openTRRUnmatchedModal(); return; }
+  if (!pk) { toast('신고기간을 선택해주세요 (상단 신고기간 연결)','warning'); return; }
+  _promptManagerChange(cid, document.getElementById('trr-manager-sel')?.value || '');
   doRecordTRRWith(cid, pk, () => { if (typeof _trrAfterRecord==='function') _trrAfterRecord(cid, pk); });
 }
 
