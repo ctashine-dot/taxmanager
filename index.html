@@ -15748,7 +15748,17 @@ function showModal(html) {
   if (!window._navStepping) window._modalStack = [];
   window._navStepping = false;
   const mc = document.getElementById('modal-container');
-  mc.innerHTML = `<div class="overlay" onclick="if(event.target===this)navBack()">${html}</div>`;
+  mc.innerHTML = `<div class="overlay" onclick="_overlayBackdropClick(event,this)">${html}</div>`;
+}
+// 오버레이(팝업 바깥) 클릭 — 닫기/취소/확인 버튼이 아닌 배경을 잘못 누른 경우.
+// 입력 중인 내용이 있으면(입력/선택 요소가 있는 모달) 닫을지 확인해 실수로 사라지는 것을 방지.
+function _overlayBackdropClick(event, overlayEl) {
+  if (event.target !== overlayEl) return; // 팝업 내부 클릭은 무시
+  // 폼(변경 감지) 모달은 navBack의 _canCloseModal이 확인하므로 여기선 중복 확인 안 함
+  if (window._formDataSnapshot !== undefined) { navBack(); return; }
+  const hasInput = overlayEl.querySelector('input, textarea, select');
+  if (hasInput && !confirm('창을 닫으시겠습니까?\n작성 중인 내용은 저장되지 않습니다.')) return;
+  navBack();
 }
 function _canCloseModal() {
   if (window._formDataSnapshot !== undefined) {
