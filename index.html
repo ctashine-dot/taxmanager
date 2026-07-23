@@ -8995,6 +8995,7 @@ function renderFees() {
         <th style="text-align:right;padding:4px 6px;font-size:11px">부가세<br>수수료</th>
         <th style="text-align:right;padding:4px 6px;font-size:11px">조정료<br>(법인·개인)</th>
         <th style="text-align:right;padding:4px 6px;font-size:11px">성실<br>수수료</th>
+        <th style="text-align:right;padding:4px 6px;font-size:11px;color:#c62828">총미수금</th>
         <th style="width:60px;text-align:center;padding:3px;font-size:11px">수금</th>
       </tr></thead>
       <tbody>${arrearsList.map(a=>`<tr>
@@ -9005,6 +9006,7 @@ function renderFees() {
         <td style="text-align:right;padding:5px 6px;font-weight:600;color:${a.vat?'#e53935':'#ccc'}">${a.vat?a.vat.toLocaleString():'-'}</td>
         <td style="text-align:right;padding:5px 6px;font-weight:600;color:${a.adj?'#e53935':'#ccc'}">${a.adj?a.adj.toLocaleString():'-'}</td>
         <td style="text-align:right;padding:5px 6px;font-weight:600;color:${a.ss?'#e53935':'#ccc'}">${a.ss?a.ss.toLocaleString():'-'}</td>
+        <td style="text-align:right;padding:5px 6px;font-weight:800;color:#c62828">${((a.book||0)+(a.vat||0)+(a.adj||0)+(a.ss||0)).toLocaleString()}</td>
         <td style="text-align:center;padding:3px">${(a.vat||a.adj||a.ss)?`<button onclick="openFilingCollectModal(${a.client.id})" style="border:1px solid #a5d6a7;background:#e8f5e9;border-radius:6px;font-size:12px;padding:4px 8px;cursor:pointer;color:#2e7d32;font-family:inherit" title="신고수수료 수금">💵</button>`:'<span style="color:#ccc;font-size:11px">-</span>'}</td>
       </tr>`).join('')}</tbody>
     </table></div>
