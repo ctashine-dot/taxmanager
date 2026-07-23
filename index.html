@@ -8735,13 +8735,13 @@ function consultingFeeCardsHTML() {
 
   // ── 그룹: 컨설팅 업체 수수료 관리 (기본 접힘) — 지급 → 기장료 → CMS 순 ──
   const groupCollapsed = !!(G.sectionCollapsed && G.sectionCollapsed['fees-consulting']);
-  return `<div style="margin-bottom:16px;border:1.5px solid #e6dcf7;border-radius:12px;overflow:hidden">
-    <div style="display:flex;align-items:center;gap:8px;padding:12px 14px;background:#f4eefe">
+  return `<div class="card" style="margin-bottom:16px;border-left:4px solid #6a1b9a">
+    <div style="display:flex;align-items:center;gap:8px;${groupCollapsed?'':'margin-bottom:12px'}">
       ${sectionToggleBtn('fees-consulting')}
-      <div style="font-weight:800;font-size:15px;color:#6a1b9a">🤝 컨설팅 업체 수수료 관리</div>
+      <div class="card-title" style="margin-bottom:0;color:#6a1b9a">🤝 컨설팅 업체 수수료 관리</div>
       <span style="font-size:12px;color:#888;margin-left:auto">지급 ${payList.length} · 기장료 ${feeList.length} · CMS ${cmsList.length}</span>
     </div>
-    ${groupCollapsed?'':`<div style="padding:12px 12px 2px">${card1}${card2}${card3}</div>`}
+    ${groupCollapsed?'':`<div>${card1}${card2}${card3}</div>`}
   </div>`;
 }
 
@@ -8967,7 +8967,7 @@ function renderFees() {
   ${consultingFeeCardsHTML()}
 
   <!-- 월정 수수료 -->
-  <div class="card" style="margin-bottom:16px">
+  <div class="card" style="margin-bottom:16px;border-left:4px solid #1565c0">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         ${sectionToggleBtn('fees-monthly')}
@@ -9022,7 +9022,7 @@ function renderFees() {
   </div>
 
   <!-- 미수금 관리 (신고수수료 · 기장료) -->
-  <div class="card">
+  <div class="card" style="border-left:4px solid #2e7d32">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
       ${sectionToggleBtn('fees-filing')}
       <div class="card-title" style="margin-bottom:0">💳 미수금 관리 (신고수수료 · 기장료)</div>
@@ -9063,7 +9063,7 @@ function renderFees() {
   </div>
 
   <!-- 추가 청구 (신고대리·조정료·성실신고) -->
-  <div class="card" style="margin-top:16px;margin-bottom:16px">
+  <div class="card" style="margin-top:16px;margin-bottom:16px;border-left:4px solid #e65100">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
       <div style="display:flex;align-items:center;gap:8px">
         ${sectionToggleBtn('fees-adhoc')}
