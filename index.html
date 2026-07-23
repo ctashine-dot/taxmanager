@@ -9007,7 +9007,7 @@ function renderFees() {
         <td style="text-align:right;padding:5px 6px;font-weight:600;color:${a.adj?'#e53935':'#ccc'}">${a.adj?a.adj.toLocaleString():'-'}</td>
         <td style="text-align:right;padding:5px 6px;font-weight:600;color:${a.ss?'#e53935':'#ccc'}">${a.ss?a.ss.toLocaleString():'-'}</td>
         <td style="text-align:right;padding:5px 6px;font-weight:800;color:#c62828">${((a.book||0)+(a.vat||0)+(a.adj||0)+(a.ss||0)).toLocaleString()}</td>
-        <td style="text-align:center;padding:3px">${(a.vat||a.adj||a.ss)?`<button onclick="openFilingCollectModal(${a.client.id})" style="border:1px solid #a5d6a7;background:#e8f5e9;border-radius:6px;font-size:12px;padding:4px 8px;cursor:pointer;color:#2e7d32;font-family:inherit" title="신고수수료 수금">💵</button>`:'<span style="color:#ccc;font-size:11px">-</span>'}</td>
+        <td style="text-align:center;padding:3px">${(a.vat||a.adj||a.ss)?`<button onclick="openFilingCollectModal(${a.client.id})" style="border:1px solid #a5d6a7;background:#e8f5e9;border-radius:6px;font-size:12px;padding:4px 8px;cursor:pointer;color:#2e7d32;font-family:inherit" title="신고수수료 수금">💵</button>`:(a.book?`<button onclick="openBookArrearsModal(${a.client.id})" style="border:1px solid #a5d6a7;background:#e8f5e9;border-radius:6px;font-size:12px;padding:4px 8px;cursor:pointer;color:#2e7d32;font-family:inherit" title="기장료 수금">💵</button>`:'<span style="color:#ccc;font-size:11px">-</span>')}</td>
       </tr>`).join('')}</tbody>
     </table></div>
     ` : '<div style="color:#2e7d32;text-align:center;padding:20px">미수금이 있는 거래처가 없습니다 ✓</div>'}
