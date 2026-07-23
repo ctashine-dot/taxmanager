@@ -8242,38 +8242,60 @@ function _filterBookClients(q) {
   const box = document.getElementById('ba-client-results'); if (!box) return;
   const nq = String(q||'').replace(/\s+/g,'').toLowerCase();
   const digits = String(q||'').replace(/\D/g,'');
-  let list = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업');
+  // 폐업·해지된 예전 거래처도 검색 대상에 포함(미수금은 폐업 후에도 관리해야 하므로)
+  let list = G.clients.slice();
   if (nq) list = list.filter(c => {
     const nm=(c.name||'').replace(/\s+/g,'').toLowerCase(), rp=(c.rep||'').replace(/\s+/g,'').toLowerCase();
     const bn=(c.bizNo||'').replace(/\D/g,'');
     return nm.includes(nq) || rp.includes(nq) || (digits.length>=3 && bn.includes(digits));
   });
+  // 활성 거래처 우선, 그다음 폐업·해지
+  list.sort((a,b)=>{ const ax=(a.status==='해지'||a.status==='폐업')?1:0, bx=(b.status==='해지'||b.status==='폐업')?1:0; return ax-bx || (a.name||'').localeCompare(b.name||'','ko'); });
   list = list.slice(0, 30);
   box.style.display='block';
-  box.innerHTML = list.length ? list.map(c=>`<div onclick="_pickBookClient(${c.id})" style="padding:7px 10px;font-size:13px;cursor:pointer;border-bottom:1px solid #f2f2f2;display:flex;justify-content:space-between;gap:8px" onmouseover="this.style.background='#f5f8ff'" onmouseout="this.style.background=''">
-    <span style="font-weight:600">${esc(c.name)}</span><span style="color:#999;font-size:11px">${esc(c.rep||'')}${c.fee?' · 월 '+Number(c.fee).toLocaleString():''}</span></div>`).join('') : '<div style="padding:8px 10px;color:#aaa;font-size:12px">검색 결과 없음</div>';
+  box.innerHTML = list.length ? list.map(c=>{
+    const closed=(c.status==='해지'||c.status==='폐업');
+    return `<div onclick="_pickBookClient(${c.id})" style="padding:7px 10px;font-size:13px;cursor:pointer;border-bottom:1px solid #f2f2f2;display:flex;justify-content:space-between;gap:8px" onmouseover="this.style.background='#f5f8ff'" onmouseout="this.style.background=''">
+    <span style="font-weight:600">${esc(c.name)}${closed?` <span style="font-size:10px;color:#c62828;background:#ffebee;border-radius:4px;padding:1px 4px">${esc(c.status)}</span>`:''}</span><span style="color:#999;font-size:11px">${esc(c.rep||'')}${c.fee?' · 월 '+Number(c.fee).toLocaleString():''}</span></div>`;
+  }).join('') : '<div style="padding:8px 10px;color:#aaa;font-size:12px">검색 결과 없음 · 아래 상호·대표자를 직접 입력하면 예전 사업자로 등록됩니다</div>';
 }
 function _pickBookClient(id) {
   const c = G.clients.find(x=>x.id===id); if (!c) return;
   const h=document.getElementById('ba-client'); if (h) h.value=id;
   const s=document.getElementById('ba-client-search'); if (s) s.value=c.name;
+  const nm=document.getElementById('ba-name'); if (nm) nm.value=c.name||'';
+  const rp=document.getElementById('ba-rep'); if (rp) rp.value=c.rep||'';
   const box=document.getElementById('ba-client-results'); if (box) box.style.display='none';
   // 월 기장료가 있으면 미수 청구액 기본값 제안(비어있을 때만)
   const b=document.getElementById('ba-billed'); if (b && (!b.value||b.value==='0') && c.fee) b.value=c.fee;
 }
 function openBookArrearsModal(cid) {
-  const preC = cid ? G.clients.find(c=>c.id===cid) : null;
-  const ex = cid ? (G.bookArrears||{})[cid] : null;
+  // cid: 신규=null, 기존 거래처=숫자 id, 예전(직접입력) 항목=문자열 키(m_...)
+  const ex = (cid!=null) ? (G.bookArrears||{})[cid] : null;
+  const isManual = ex ? !!ex.manual : false;
+  const preC = (cid!=null && !isManual) ? G.clients.find(c=>c.id===Number(cid)) : null;
+  const preName = preC ? (preC.name||'') : (ex && ex.name ? ex.name : '');
+  const preRep  = preC ? (preC.rep||'')  : (ex && ex.rep  ? ex.rep  : '');
   showModal(`<div style="max-width:420px;width:min(420px,95vw)">
     <div class="modal-header"><h3>📒 미수기장료 입력</h3><button class="close-btn" onclick="navBack()">✕</button></div>
     <div class="modal-body">
       <div style="margin-bottom:12px">
-        <label style="font-size:12px;color:#888;display:block;margin-bottom:4px">거래처 (검색)</label>
-        <input type="hidden" id="ba-client" value="${cid||''}">
-        <input id="ba-client-search" autocomplete="off" placeholder="상호·대표자·사업자번호로 검색" value="${preC?esc(preC.name):''}"
+        <label style="font-size:12px;color:#888;display:block;margin-bottom:4px">거래처 검색 (기존 리스트에서 선택)</label>
+        <input type="hidden" id="ba-client" value="${preC?preC.id:''}">
+        <input type="hidden" id="ba-editkey" value="${cid!=null?esc(String(cid)):''}">
+        <input id="ba-client-search" autocomplete="off" placeholder="상호·대표자·사업자번호로 검색 (폐업·해지 포함)" value=""
           oninput="_filterBookClients(this.value)" onfocus="_filterBookClients(this.value)"
           style="width:100%;padding:8px 10px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box">
         <div id="ba-client-results" style="max-height:180px;overflow:auto;border:1px solid #eee;border-radius:8px;margin-top:4px;display:none"></div>
+      </div>
+      <div style="margin-bottom:12px;padding:8px 10px;background:#fafafa;border:1px solid #eee;border-radius:8px">
+        <div style="font-size:11px;color:#ef6c00;margin-bottom:6px">📌 신고리스트에 없는 예전 사업자는 아래 상호·대표자를 직접 입력하세요</div>
+        <label style="font-size:12px;color:#888;display:block;margin-bottom:4px">상호 <span style="color:#e53935">*</span></label>
+        <input id="ba-name" type="text" value="${esc(preName)}" placeholder="예: (주)한성상사" oninput="document.getElementById('ba-client').value=''"
+          style="width:100%;padding:8px 10px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:8px">
+        <label style="font-size:12px;color:#888;display:block;margin-bottom:4px">대표자 (선택)</label>
+        <input id="ba-rep" type="text" value="${esc(preRep)}" placeholder="예: 홍길동"
+          style="width:100%;padding:8px 10px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box">
       </div>
       <div style="margin-bottom:12px">
         <label style="font-size:12px;color:#888;display:block;margin-bottom:4px">미수 기장료 (청구액, 원)</label>
@@ -8296,14 +8318,29 @@ function openBookArrearsModal(cid) {
 }
 function saveBookArrears() {
   if (!requireWrite()) return;
-  const cid = Number(document.getElementById('ba-client')?.value);
+  const clientId = document.getElementById('ba-client')?.value || '';
+  const editkey  = document.getElementById('ba-editkey')?.value || '';
+  const name = document.getElementById('ba-name')?.value?.trim() || '';
+  const rep  = document.getElementById('ba-rep')?.value?.trim() || '';
   const billed = Math.max(0, Math.round(Number(document.getElementById('ba-billed')?.value)||0));
   const paid = Math.max(0, Math.round(Number(document.getElementById('ba-paid')?.value)||0));
   const note = document.getElementById('ba-note')?.value?.trim()||'';
-  if (!cid) { toast('거래처를 검색·선택하세요','warning'); return; }
   if (!billed) { toast('미수 기장료 금액을 입력하세요','warning'); return; }
   if (!G.bookArrears) G.bookArrears = {};
-  G.bookArrears[cid] = { billed, paid, note, ts: new Date().toLocaleString('ko-KR') };
+  const ts = new Date().toLocaleString('ko-KR');
+  let key;
+  if (clientId) {
+    // 기존 리스트 거래처와 연결 (숫자 id 키)
+    key = Number(clientId);
+    G.bookArrears[key] = { billed, paid, note, ts };
+  } else {
+    // 직접 입력(예전 사업자) — 상호 필수, 상호/대표자를 항목에 저장
+    if (!name) { toast('거래처를 검색·선택하거나 상호를 직접 입력하세요','warning'); return; }
+    key = (editkey && !/^\d+$/.test(editkey)) ? editkey : ('m_' + Date.now());
+    G.bookArrears[key] = { manual:true, name, rep, billed, paid, note, ts };
+  }
+  // 편집 중 키가 바뀐 경우(예: 예전항목→기존거래처 연결) 기존 항목 정리
+  if (editkey && String(editkey)!==String(key)) delete G.bookArrears[editkey];
   saveToLS();
   closeModal();
   if (G.currentTab==='fees') renderFees();
@@ -8776,8 +8813,21 @@ function renderFees() {
 
   // 기장료 미수(직접 입력) — G.bookArrears[cid] = {billed, paid, note, ts}
   const bookArrList = Object.entries(G.bookArrears||{}).map(([cidStr, r])=>{
-    const cid = Number(cidStr); const client = G.clients.find(c=>c.id===cid);
-    if (!client || !r) return null;
+    if (!r) return null;
+    let cid, client;
+    if (r.manual) {
+      // 직접 입력한 예전 사업자 — 저장된 상호/대표자로 표시
+      cid = cidStr;
+      client = { id: cidStr, name: r.name || '(예전 거래처)', rep: r.rep || '', __manual:true };
+    } else {
+      cid = Number(cidStr);
+      client = G.clients.find(c=>c.id===cid);
+      if (!client) {
+        // 리스트에서 삭제된 거래처지만 저장된 상호가 있으면 예전 사업자로 표시
+        if (r.name) client = { id: cidStr, name: r.name, rep: r.rep || '', __manual:true };
+        else return null;
+      }
+    }
     const billed = Number(r.billed)||0, paid = Number(r.paid)||0;
     return { cid, client, billed, paid, unpaid: Math.max(0, billed-paid), note: r.note||'' };
   }).filter(x=>x && x.billed>0);
@@ -8981,10 +9031,9 @@ function renderFees() {
     <div style="${(G.sectionCollapsed||{})['fees-filing']?'display:none':''}">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px">
       <div style="font-size:12px;font-weight:700;color:#1565c0">📋 미수금 <span style="font-size:11px;font-weight:400;color:#888">(신고리스트 부가세·조정료·성실 미수 + 직접 입력한 기장료 미수)</span></div>
-      <button onclick="openBookArrearsModal(null)" style="padding:5px 12px;border-radius:7px;border:1.5px solid #2e7d32;background:#e8f5e9;color:#2e7d32;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit" title="업체를 검색해 기장료 미수를 입력합니다">+ 기장료 미수 입력</button>
+      <button onclick="openBookArrearsModal(null)" style="padding:5px 12px;border-radius:7px;border:1.5px solid #2e7d32;background:#e8f5e9;color:#2e7d32;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit" title="기존 거래처를 검색하거나, 신고리스트에 없는 예전 사업자는 상호를 직접 입력해 기장료 미수를 등록합니다">+ 기장료 미수 입력</button>
     </div>
-    <div style="font-size:11px;color:#888;margin-bottom:8px">미수금이 있는 거래처만 표시 · 부가세·법인세·소득세·성실은 동일 유형 미수금을 합산 · 기장료 금액을 클릭하면 수정·수금</div>
-    ${arrearsList.length > 0 ? `
+    <div style="font-size:11px;color:#888;margin-bottom:8px">미수금이 있는 거래처만 표시 · 부가세·법인세·소득세·성실은 동일 유형 미수금을 합산 · 기장료 금액을 클릭하면 수정·수금 · 신고리스트에 없는 <b style="color:#ef6c00">예전 사업자</b>도 상호를 직접 입력해 등록 가능</div>
     <div class="tbl-wrap">
     <table>
       <thead><tr>
@@ -8998,19 +9047,18 @@ function renderFees() {
         <th style="text-align:right;padding:4px 6px;font-size:11px;color:#c62828">총미수금</th>
         <th style="width:60px;text-align:center;padding:3px;font-size:11px">수금</th>
       </tr></thead>
-      <tbody>${arrearsList.map(a=>`<tr>
-        <td style="padding:5px 6px;font-weight:600;font-size:13px">${esc(a.client.name)}</td>
+      <tbody>${arrearsList.length ? arrearsList.map(a=>`<tr>
+        <td style="padding:5px 6px;font-weight:600;font-size:13px">${esc(a.client.name)}${a.client.__manual?' <span style="font-size:10px;color:#ef6c00;background:#fff3e0;border-radius:4px;padding:1px 4px;vertical-align:middle">예전</span>':''}</td>
         <td style="padding:5px 6px;font-size:12px;color:#444">${esc(a.client.rep||'-')}</td>
         <td style="padding:5px 6px;font-size:12px;color:#555">${esc(getManagers(a.client).join(', ')||'-')}</td>
-        <td style="text-align:right;padding:5px 6px"><button onclick="openBookArrearsModal(${a.client.id})" title="기장료 미수 입력·수금" style="border:1px solid ${a.book?'#a5d6a7':'#e0e0e0'};background:${a.book?'#e8f5e9':'#fafafa'};border-radius:6px;font-size:12px;padding:3px 8px;cursor:pointer;color:${a.book?'#e53935':'#aaa'};font-weight:${a.book?'700':'400'};font-family:inherit">${a.book?a.book.toLocaleString():'+'}</button></td>
+        <td style="text-align:right;padding:5px 6px"><button onclick="openBookArrearsModal('${a.client.id}')" title="기장료 미수 입력·수금" style="border:1px solid ${a.book?'#a5d6a7':'#e0e0e0'};background:${a.book?'#e8f5e9':'#fafafa'};border-radius:6px;font-size:12px;padding:3px 8px;cursor:pointer;color:${a.book?'#e53935':'#aaa'};font-weight:${a.book?'700':'400'};font-family:inherit">${a.book?a.book.toLocaleString():'+'}</button></td>
         <td style="text-align:right;padding:5px 6px;font-weight:600;color:${a.vat?'#e53935':'#ccc'}">${a.vat?a.vat.toLocaleString():'-'}</td>
         <td style="text-align:right;padding:5px 6px;font-weight:600;color:${a.adj?'#e53935':'#ccc'}">${a.adj?a.adj.toLocaleString():'-'}</td>
         <td style="text-align:right;padding:5px 6px;font-weight:600;color:${a.ss?'#e53935':'#ccc'}">${a.ss?a.ss.toLocaleString():'-'}</td>
         <td style="text-align:right;padding:5px 6px;font-weight:800;color:#c62828">${((a.book||0)+(a.vat||0)+(a.adj||0)+(a.ss||0)).toLocaleString()}</td>
-        <td style="text-align:center;padding:3px">${(a.vat||a.adj||a.ss)?`<button onclick="openFilingCollectModal(${a.client.id})" style="border:1px solid #a5d6a7;background:#e8f5e9;border-radius:6px;font-size:12px;padding:4px 8px;cursor:pointer;color:#2e7d32;font-family:inherit" title="신고수수료 수금">💵</button>`:(a.book?`<button onclick="openBookArrearsModal(${a.client.id})" style="border:1px solid #a5d6a7;background:#e8f5e9;border-radius:6px;font-size:12px;padding:4px 8px;cursor:pointer;color:#2e7d32;font-family:inherit" title="기장료 수금">💵</button>`:'<span style="color:#ccc;font-size:11px">-</span>')}</td>
-      </tr>`).join('')}</tbody>
+        <td style="text-align:center;padding:3px">${(a.vat||a.adj||a.ss)?`<button onclick="openFilingCollectModal(${a.client.id})" style="border:1px solid #a5d6a7;background:#e8f5e9;border-radius:6px;font-size:12px;padding:4px 8px;cursor:pointer;color:#2e7d32;font-family:inherit" title="신고수수료 수금">💵</button>`:(a.book?`<button onclick="openBookArrearsModal('${a.client.id}')" style="border:1px solid #a5d6a7;background:#e8f5e9;border-radius:6px;font-size:12px;padding:4px 8px;cursor:pointer;color:#2e7d32;font-family:inherit" title="기장료 수금">💵</button>`:'<span style="color:#ccc;font-size:11px">-</span>')}</td>
+      </tr>`).join('') : `<tr><td colspan="9" style="color:#2e7d32;text-align:center;padding:20px">${(G.filingSearch||G.filingRepSearch||(G.filingManagerFilter||[]).length)?'검색 결과가 없습니다':'미수금이 있는 거래처가 없습니다 ✓'}</td></tr>`}</tbody>
     </table></div>
-    ` : '<div style="color:#2e7d32;text-align:center;padding:20px">미수금이 있는 거래처가 없습니다 ✓</div>'}
     </div>
   </div>
 
