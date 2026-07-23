@@ -374,7 +374,6 @@ body.dark-mode .overlay { background: rgba(0,0,0,.65); }
     <button class="hbtn" onclick="openBosuTable()">📋 보수표</button>
     <button class="hbtn" id="settings-btn" onclick="openSettings()" style="position:relative">⚙ 설정<span id="settings-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:#e53935;color:#fff;border-radius:50%;width:14px;height:14px;font-size:9px;font-weight:700;line-height:14px;text-align:center">!</span></button>
     <button class="hbtn" onclick="toggleDarkMode()" title="다크모드">🌙</button>
-    <button class="hbtn" onclick="document.dispatchEvent(new KeyboardEvent('keydown',{key:'?',bubbles:true}))" title="단축키 도움말">⌨</button>
     <button class="hbtn blue" onclick="openExcel()">↓ 엑셀</button>
     <button class="hbtn" id="save-btn" onclick="manualSave()" style="background:rgba(46,125,50,.3);color:#81c784">💾 저장</button>
     <span id="save-toast" style="display:none;font-size:12px;color:#81c784;font-weight:700">✔ 저장됨</span>
@@ -11400,8 +11399,7 @@ function openTaxReturnReviewer(type) {
   };
   const t = typeInfo[type] || typeInfo.vat;
   window._trrCurrentType = type;
-  // 일괄 검토 상태는 열 때마다 새로 시작(이전 파일 누적 방지)
-  _batchFiles = []; _batchResults = [];
+  // (일괄 검토 결과는 사용자가 삭제/초기화하기 전까지 유지 — 아래에서 복원)
   showModal(`<div style="max-width:640px;width:100%;max-height:calc(100vh - 48px);display:flex;flex-direction:column">
   <div class="modal-header">
     <h3>${t.icon} ${t.label} 신고서 AI 검토</h3>
@@ -11518,7 +11516,8 @@ function openTaxReturnReviewer(type) {
         </label>
         <button onclick="startBatchReview('${type}')" id="trr-batch-run-btn" class="btn-primary" style="width:100%">✦ 일괄 AI 검토 시작</button>
       </div>
-      <div id="trr-batch-results" style="margin-top:14px"></div>
+      <div style="display:flex;justify-content:flex-end;margin-top:10px"><button onclick="_resetTRRBatch()" style="font-size:11px;padding:4px 10px;border:1px solid #ef9a9a;background:#fdecea;color:#c62828;border-radius:6px;cursor:pointer;font-family:inherit" title="일괄 검토 결과를 모두 지웁니다">🗑 일괄결과 초기화</button></div>
+      <div id="trr-batch-results" style="margin-top:8px"></div>
     </div><!-- /trr-pane-batch -->
 
   </div></div>`);
@@ -11528,6 +11527,11 @@ function openTaxReturnReviewer(type) {
     const _el = document.getElementById('trr-result');
     if (_el) _el.innerHTML = _saved.html;
     if (_saved.reviewData) window._trrReviewData = _saved.reviewData;
+  }
+  // 이전 일괄 검토 결과 복원 — 삭제/초기화 전까지 유지되어 다시 기록 가능
+  if (_batchResults && _batchResults.length) {
+    switchTRRTab('batch', type);
+    _renderAllBatchCards();
   }
 }
 
@@ -11650,6 +11654,94 @@ function renderBatchFileList(type) {
     </div>`).join('');
 }
 
+// 일괄검토 카드 내용 HTML — 최초 렌더·재열람 복원 공용. _batchResults[bIdx] 기준.
+function _batchCardHTML(bIdx) {
+  const item = _batchResults[bIdx]; if (!item) return '';
+  const type = window._trrCurrentType;
+  const reviewData = item.data, reviewText = item.text || '', matchedClient = item.matchedClient, pKey = item.pKey;
+  const fname = item.file || '';
+  const fmtN = n=>(n||0).toLocaleString()+'원';
+  if (item.error && !reviewData) return `<div style="font-size:13px;font-weight:700;margin-bottom:4px">${esc(fname)}</div><div style="color:#e53935;font-size:12px">${esc(item.error)}</div>`;
+  const _fl = _feeLabelConfig(pKey);
+  const _bcPrevFee = _prevFilingFee(matchedClient?.id, G.periods.find(p=>String(p.id)===String(pKey)));
+  return `
+      <div style="font-size:13px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;flex-wrap:wrap;gap:6px">
+        <span>${reviewData?.companyName ? esc(reviewData.companyName) : esc(fname)}</span>
+        ${reviewData?.representative?`<span style="font-size:11px;color:#666;font-weight:500">${esc(reviewData.representative)}</span>`:''}
+        ${reviewData?.bizNo?`<span style="font-size:11px;color:#888;font-weight:400;font-family:monospace">${esc(reviewData.bizNo)}</span>`:''}
+        <span id="bc-mgr-${bIdx}">${_batchMgrChipHTML(bIdx, matchedClient)}</span>
+        ${matchedClient
+          ? `<span id="bc-match-${bIdx}" style="font-size:11px;color:#2e7d32;background:#e8f5e9;padding:2px 8px;border-radius:10px">✓ ${esc(matchedClient.name)}</span>`
+          : `<span id="bc-match-${bIdx}" style="font-size:11px;color:#e65100;background:#fff3e0;padding:2px 8px;border-radius:10px">⚠ 거래처 미매칭</span>`}
+      </div>
+      ${reviewData ? `<div style="display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:#555;margin-bottom:8px">
+        ${type==='vat' ? `
+          <div>매출: <b style="color:#1565c0">${fmtN(reviewData.salesAmount)}</b>${reviewData.salesExempt?' <span style="color:#7b1fa2">(과+면)</span>':''}</div>
+          <div>매입: <b>${fmtN(reviewData.purchaseAmount)}</b>${reviewData.purchaseExempt?' <span style="color:#7b1fa2">(과+면)</span>':''}</div>
+          <div>납부세액: <b style="color:#c62828">${fmtN(reviewData.vatAmount)}</b>${(reviewData.vatAmount||0)<0?' <span style="color:#2e7d32">(환급)</span>':''}</div>
+        ` : `
+          ${reviewData.revenue?`<div>수입: <b style="color:#1565c0">${fmtN(reviewData.revenue)}</b></div>`:''}
+          ${reviewData.income?`<div>소득: <b>${fmtN(reviewData.income)}</b></div>`:''}
+          ${reviewData.payTax?`<div>납부세액: <b style="color:#c62828">${fmtN(reviewData.payTax)}</b></div>`:''}
+        `}
+        ${reviewData.feeRecommendation?`<div>추천: <b style="color:#2e7d32">${fmtN(reviewData.feeRecommendation)}</b></div>`:''}
+        ${reviewData._scrapedAmounts?`<span style="font-size:10px;color:#2e7d32;background:#e8f5e9;border-radius:8px;padding:0 6px">원문확정</span>`:''}
+      </div>`:''}
+      ${reviewText ? `<div style="font-size:11px;color:#777;line-height:1.6;margin-bottom:8px;padding:8px;background:#fafafa;border-radius:6px;white-space:pre-wrap;word-break:break-word;max-height:260px;overflow-y:auto">${esc(reviewText)}</div>`:''}
+      ${!matchedClient ? `<div style="margin-bottom:8px">
+        <input type="text" placeholder="거래처 검색 (이름/대표자)..." autocomplete="off"
+          style="width:100%;border:1px solid #ffcc80;border-radius:6px;padding:6px 8px;font-size:12px;box-sizing:border-box;font-family:inherit"
+          oninput="filterBatchClientSearch(this.value,${bIdx})">
+        <div id="bc-search-${bIdx}" style="max-height:120px;overflow-y:auto;border:1px solid #e0e0e0;border-radius:6px;background:#fff;display:none;margin-top:2px"></div>
+      </div>`:``}
+      ${reviewData ? `<div id="bc-btn-area-${bIdx}">
+        <div style="display:grid;grid-template-columns:${_fl.showSeongsi?'1fr 1fr':'1fr'};gap:6px;margin-bottom:6px">
+          <div>
+            <label style="font-size:10px;color:#555;display:block;margin-bottom:2px">${_fl.feeLabel} (원)</label>
+            <input id="bc-fee-${bIdx}" type="text" inputmode="numeric"
+              value="${_bcPrevFee ? _bcPrevFee.toLocaleString() : ''}"
+              placeholder="0"
+              style="width:100%;border:1px solid #ffcc80;border-radius:5px;padding:5px 7px;font-size:12px;box-sizing:border-box;text-align:right;font-family:inherit"
+              onfocus="this.value=this.value.replace(/,/g,'')"
+              onblur="const s=this.value.replace(/,/g,'').trim();this.value=(s===''?'':(Number(s)||0).toLocaleString())">
+          </div>
+          ${_fl.showSeongsi?`<div>
+            <label style="font-size:10px;color:#555;display:block;margin-bottom:2px">성실확인비용 (원)</label>
+            <input id="bc-seongsi-${bIdx}" type="text" inputmode="numeric"
+              placeholder="해당없음"
+              style="width:100%;border:1px solid #e0e0e0;border-radius:5px;padding:5px 7px;font-size:12px;box-sizing:border-box;text-align:right;font-family:inherit"
+              onfocus="this.value=this.value.replace(/,/g,'')"
+              onblur="const n=Number(this.value.replace(/,/g,''));if(n)this.value=n.toLocaleString();else this.value=''">
+          </div>`:''}
+        </div>
+        <button onclick="batchRecord(${bIdx})"
+          style="width:100%;padding:7px;background:#4f8ef7;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">
+          📋 신고리스트에 기록
+        </button>
+      </div>` : `<div style="color:#e53935;font-size:12px">검토 데이터 없음</div>`}`;
+}
+// 저장된 _batchResults로 일괄검토 카드 전체를 다시 그림(검토창 재열람 시 유지)
+function _renderAllBatchCards() {
+  const resultsEl = document.getElementById('trr-batch-results');
+  if (!resultsEl) return;
+  resultsEl.innerHTML = '';
+  _batchResults.forEach((item, bIdx) => {
+    const card = document.createElement('div');
+    card.id = `batch-card-${bIdx}`;
+    card.style.cssText='border:1.5px solid #e0e0e0;border-radius:12px;padding:14px;margin-bottom:10px;transition:border-color .2s,background .2s';
+    card.innerHTML = _batchCardHTML(bIdx);
+    resultsEl.appendChild(card);
+    if (item.recorded) _batchMarkRecorded(bIdx); // 기록완료 상태·버튼 복원
+  });
+}
+// 일괄검토 결과만 초기화(사용자가 명시적으로 지울 때)
+function _resetTRRBatch() {
+  if (_batchResults.length && !confirm('일괄 검토 결과를 모두 지울까요?')) return;
+  _batchFiles = []; _batchResults = [];
+  const r=document.getElementById('trr-batch-results'); if(r) r.innerHTML='';
+  const l=document.getElementById('trr-batch-list'); if(l) l.innerHTML='';
+  const bc=document.getElementById('trr-batch-controls'); if(bc) bc.style.display='none';
+}
 async function startBatchReview(type) {
   if (!_batchFiles.length) { toast('파일을 먼저 선택해주세요','warning'); return; }
   const extractOnly = !!document.getElementById('trr-batch-extractonly')?.checked;
@@ -11802,70 +11894,11 @@ ${text.slice(0, 12000)}
     const bIdx = _batchResults.length;
     _batchResults.push({file:f.name, data:reviewData, text:reviewText, matchedClient, pKey, recorded:false});
 
-    // 결과 카드 추가 (카드 ID로 나중에 상태 업데이트)
-    const fmtN = n=>(n||0).toLocaleString()+'원';
+    // 결과 카드 추가 (카드 ID로 나중에 상태 업데이트) — 카드 내용은 _batchCardHTML로 생성(재열람 시 복원 공용)
     const card = document.createElement('div');
     card.id = `batch-card-${bIdx}`;
     card.style.cssText='border:1.5px solid #e0e0e0;border-radius:12px;padding:14px;margin-bottom:10px;transition:border-color .2s,background .2s';
-    const clientParts = G.clients.filter(c=>c.status!=='해지'&&c.status!=='폐업').sort((a,b)=>a.name.localeCompare(b.name,'ko'));
-    const _fl = _feeLabelConfig(pKey);
-    // 수수료 입력 기본값: 추천액이 아니라 '직전 신고리스트 금액'(없으면 0=빈칸). 추천액은 '추천:' 배지로 별도 표시.
-    const _bcPrevFee = _prevFilingFee(matchedClient?.id, G.periods.find(p=>String(p.id)===String(pKey)));
-    card.innerHTML = `
-      <div style="font-size:13px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;flex-wrap:wrap;gap:6px">
-        <span>${reviewData?.companyName ? esc(reviewData.companyName) : esc(f.name)}</span>
-        ${reviewData?.representative?`<span style="font-size:11px;color:#666;font-weight:500">${esc(reviewData.representative)}</span>`:''}
-        ${reviewData?.bizNo?`<span style="font-size:11px;color:#888;font-weight:400;font-family:monospace">${esc(reviewData.bizNo)}</span>`:''}
-        <span id="bc-mgr-${bIdx}">${_batchMgrChipHTML(bIdx, matchedClient)}</span>
-        ${matchedClient
-          ? `<span id="bc-match-${bIdx}" style="font-size:11px;color:#2e7d32;background:#e8f5e9;padding:2px 8px;border-radius:10px">✓ ${esc(matchedClient.name)}</span>`
-          : `<span id="bc-match-${bIdx}" style="font-size:11px;color:#e65100;background:#fff3e0;padding:2px 8px;border-radius:10px">⚠ 거래처 미매칭</span>`}
-      </div>
-      ${reviewData ? `<div style="display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:#555;margin-bottom:8px">
-        ${type==='vat' ? `
-          <div>매출: <b style="color:#1565c0">${fmtN(reviewData.salesAmount)}</b>${reviewData.salesExempt?' <span style="color:#7b1fa2">(과+면)</span>':''}</div>
-          <div>매입: <b>${fmtN(reviewData.purchaseAmount)}</b>${reviewData.purchaseExempt?' <span style="color:#7b1fa2">(과+면)</span>':''}</div>
-          <div>납부세액: <b style="color:#c62828">${fmtN(reviewData.vatAmount)}</b>${(reviewData.vatAmount||0)<0?' <span style="color:#2e7d32">(환급)</span>':''}</div>
-        ` : `
-          ${reviewData.revenue?`<div>수입: <b style="color:#1565c0">${fmtN(reviewData.revenue)}</b></div>`:''}
-          ${reviewData.income?`<div>소득: <b>${fmtN(reviewData.income)}</b></div>`:''}
-          ${reviewData.payTax?`<div>납부세액: <b style="color:#c62828">${fmtN(reviewData.payTax)}</b></div>`:''}
-        `}
-        ${reviewData.feeRecommendation?`<div>추천: <b style="color:#2e7d32">${fmtN(reviewData.feeRecommendation)}</b></div>`:''}
-        ${reviewData._scrapedAmounts?`<span style="font-size:10px;color:#2e7d32;background:#e8f5e9;border-radius:8px;padding:0 6px">원문확정</span>`:''}
-      </div>`:''}
-      ${reviewText ? `<div style="font-size:11px;color:#777;line-height:1.6;margin-bottom:8px;padding:8px;background:#fafafa;border-radius:6px;white-space:pre-wrap;word-break:break-word;max-height:260px;overflow-y:auto">${esc(reviewText)}</div>`:''}
-      ${!matchedClient ? `<div style="margin-bottom:8px">
-        <input type="text" placeholder="거래처 검색 (이름/대표자)..." autocomplete="off"
-          style="width:100%;border:1px solid #ffcc80;border-radius:6px;padding:6px 8px;font-size:12px;box-sizing:border-box;font-family:inherit"
-          oninput="filterBatchClientSearch(this.value,${bIdx})">
-        <div id="bc-search-${bIdx}" style="max-height:120px;overflow-y:auto;border:1px solid #e0e0e0;border-radius:6px;background:#fff;display:none;margin-top:2px"></div>
-      </div>`:``}
-      ${reviewData ? `<div id="bc-btn-area-${bIdx}">
-        <div style="display:grid;grid-template-columns:${_fl.showSeongsi?'1fr 1fr':'1fr'};gap:6px;margin-bottom:6px">
-          <div>
-            <label style="font-size:10px;color:#555;display:block;margin-bottom:2px">${_fl.feeLabel} (원)</label>
-            <input id="bc-fee-${bIdx}" type="text" inputmode="numeric"
-              value="${_bcPrevFee ? _bcPrevFee.toLocaleString() : ''}"
-              placeholder="0"
-              style="width:100%;border:1px solid #ffcc80;border-radius:5px;padding:5px 7px;font-size:12px;box-sizing:border-box;text-align:right;font-family:inherit"
-              onfocus="this.value=this.value.replace(/,/g,'')"
-              onblur="const s=this.value.replace(/,/g,'').trim();this.value=(s===''?'':(Number(s)||0).toLocaleString())">
-          </div>
-          ${_fl.showSeongsi?`<div>
-            <label style="font-size:10px;color:#555;display:block;margin-bottom:2px">성실확인비용 (원)</label>
-            <input id="bc-seongsi-${bIdx}" type="text" inputmode="numeric"
-              placeholder="해당없음"
-              style="width:100%;border:1px solid #e0e0e0;border-radius:5px;padding:5px 7px;font-size:12px;box-sizing:border-box;text-align:right;font-family:inherit"
-              onfocus="this.value=this.value.replace(/,/g,'')"
-              onblur="const n=Number(this.value.replace(/,/g,''));if(n)this.value=n.toLocaleString();else this.value=''">
-          </div>`:''}
-        </div>
-        <button onclick="batchRecord(${bIdx})"
-          style="width:100%;padding:7px;background:#4f8ef7;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">
-          📋 신고리스트에 기록
-        </button>
-      </div>` : `<div style="color:#e53935;font-size:12px">검토 데이터 없음</div>`}`;
+    card.innerHTML = _batchCardHTML(bIdx);
     if(resultsEl) resultsEl.appendChild(card);
   }
 
