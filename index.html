@@ -12345,7 +12345,11 @@ function runVatScrapeNoKey(type) {
   if (!text.trim()) { toast('신고서 텍스트가 없습니다. PDF 업로드/붙여넣기 후 다시 시도하세요 (스캔 이미지 PDF는 불가)','warning'); return; }
   const d = isIncome ? _scrapeIncomeReturn(text) : _scrapeVatReturn(text);
   const _empty = isIncome ? (!d.representative && !d.income && !d.businessSites.length) : (!d.bizNo && !d.companyName && !d.salesAmount);
-  if (_empty) { toast('신고서에서 정보를 추출하지 못했습니다 (텍스트 레이어 없는 PDF일 수 있음)','warning'); return; }
+  if (_empty) {
+    // 소득세 카드는 읽기전용이라 빈 결과면 안내만. 부가세는 카드가 편집 가능하므로 빈 카드라도 띄워 직접 입력.
+    if (isIncome) { toast('신고서에서 정보를 추출하지 못했습니다 (텍스트 레이어 없는 PDF일 수 있음)','warning'); return; }
+    toast('자동 추출 실패 — 아래 카드에서 금액을 직접 입력하세요 (AI 미사용)','info',3500);
+  }
   window._trrReviewData = { ...d, feeRecommendation: 0 };
   window._trrMatchedClientId = null;
   autoMatchTRRClient(text);
@@ -12413,15 +12417,15 @@ function _recordScrape() {
 async function runTaxReturnReview(type, extractOnly) {
   const text = (document.getElementById('trr-text-input')||{}).value?.trim();
   if (!text) { toast('신고서 내용을 입력하거나 PDF를 업로드해주세요', 'warning'); return; }
-  // 내용만 불러오기: 텍스트 레이어가 충분하면 AI 비전(오독 가능) 대신 결정적 텍스트 스크랩 사용
+  // 내용만 불러오기 = AI 없이 텍스트에서 직접 추출(무키). 부가세·종소세·성실 지원.
+  //  못 읽어도 카드에서 값을 직접 입력할 수 있으므로 AI로 폴백하지 않는다(토큰·API키 불필요).
   if (extractOnly && ['vat','income','seongsi'].includes(type)) {
-    try {
-      const _d = (type==='vat') ? _scrapeVatReturn(text) : _scrapeIncomeReturn(text);
-      const _good = (type==='vat')
-        ? ((_d.salesAmount>0 || _d.purchaseAmount>0 || _d.vatAmount>0) && !!_d.bizNo)
-        : ((_d.income>0) || (_d.businessSites && _d.businessSites.length>0) || (!!_d.representative && (_d.totalTax>0||_d.revenue>0)));
-      if (_good) { runVatScrapeNoKey(type); return; } // 정확한 텍스트 스크랩으로 기록(무키)
-    } catch(_) {}
+    runVatScrapeNoKey(type);
+    return;
+  }
+  if (extractOnly && type==='corp') {
+    toast('법인세는 텍스트 자동추출을 지원하지 않습니다. AI 검토(✦)를 사용하거나 부가세·종소세 검토를 이용하세요.', 'warning', 4500);
+    return;
   }
   const resultDiv = document.getElementById('trr-result');
   const btn = document.getElementById('trr-run-btn');
