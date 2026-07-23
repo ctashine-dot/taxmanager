@@ -8955,8 +8955,8 @@ function renderFees() {
     <div class="tbl-wrap">
     <table>
       <thead><tr>
-        <th style="padding:4px 6px"><button onclick="openFeesNameSearch(this)" style="width:100%;padding:3px 5px;border-radius:6px;font-size:10px;cursor:pointer;font-family:inherit;${feesSearchActive?'border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7':'border:1.5px solid #ddd;background:#fff;color:#555'};text-align:left">거래처명${feesSearchActive?' 🔍':' 🔍'}</button></th>
-        <th style="width:80px;padding:4px 6px;${_hcStyle('fm_rep')}"><div style="display:flex;align-items:center"><button onclick="openFeesRepSearch(this)" style="flex:1;padding:3px 5px;border-radius:6px;font-size:10px;cursor:pointer;font-family:inherit;${feesRepSearchActive?'border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7':'border:1.5px solid #ddd;background:#fff;color:#555'};text-align:left">대표자 🔍</button>${_hcBtn('fm_rep')}</div></th>
+        <th style="padding:4px 6px">${_inlineSearchInput({gField:'feesSearch',value:G.feesSearch,placeholder:'거래처명',renderName:'renderFees',inputId:'fmns-inline'})}</th>
+        <th style="width:80px;padding:4px 6px;${_hcStyle('fm_rep')}"><div style="display:flex;align-items:center">${_inlineSearchInput({gField:'feesRepSearch',value:G.feesRepSearch,placeholder:'대표자',renderName:'renderFees',inputId:'fmrs-inline'})}${_hcBtn('fm_rep')}</div></th>
         <th style="padding:4px 6px;${_hcStyle('fm_dealType')}"><div style="display:flex;align-items:center">${filterPopupBtn('feesDealFilter','수임유형')}${_hcBtn('fm_dealType')}</div></th>
         <th style="padding:4px 6px;${_hcStyle('fm_manager')}"><div style="display:flex;align-items:center">${filterPopupBtn('feesManagerFilter','담당자')}${_hcBtn('fm_manager')}</div></th>
         <th style="${_hcStyle('fm_contractDate')}"><div style="display:flex;align-items:center;justify-content:center">수임일${_hcBtn('fm_contractDate')}</div></th>
@@ -8988,8 +8988,8 @@ function renderFees() {
     <div class="tbl-wrap">
     <table>
       <thead><tr>
-        <th style="padding:4px 6px"><button onclick="openFilingNameSearch(this)" style="width:100%;padding:3px 5px;border-radius:6px;font-size:10px;cursor:pointer;font-family:inherit;${filingSearchActive?'border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7':'border:1.5px solid #ddd;background:#fff;color:#555'};text-align:left">상호 🔍</button></th>
-        <th style="width:80px;padding:4px 6px"><button onclick="openFilingRepSearch(this)" style="width:100%;padding:3px 5px;border-radius:6px;font-size:10px;cursor:pointer;font-family:inherit;${filingRepSearchActive?'border:1.5px solid #4f8ef7;background:#e8f0fe;color:#4f8ef7':'border:1.5px solid #ddd;background:#fff;color:#555'};text-align:left">대표자 🔍</button></th>
+        <th style="padding:4px 6px">${_inlineSearchInput({gField:'filingSearch',value:G.filingSearch,placeholder:'상호',renderName:'renderFees',inputId:'flns-inline'})}</th>
+        <th style="width:80px;padding:4px 6px">${_inlineSearchInput({gField:'filingRepSearch',value:G.filingRepSearch,placeholder:'대표자',renderName:'renderFees',inputId:'flrs-inline'})}</th>
         <th style="padding:4px 6px"><div style="display:flex;align-items:center">${filterPopupBtn('filingManagerFilter','담당자')}</div></th>
         <th style="text-align:right;padding:4px 6px;font-size:11px;color:#1b5e20">기장료</th>
         <th style="text-align:right;padding:4px 6px;font-size:11px">부가세<br>수수료</th>
