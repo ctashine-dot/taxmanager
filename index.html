@@ -13158,27 +13158,41 @@ function _showChecklistModal({ title, subtitle, items, applyLabel='선택 적용
       <input type="checkbox" class="_cl-chk" data-key="${esc(it.key)}" ${it.checked!==false?'checked':''} style="width:16px;height:16px;flex:none">
       <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">${esc(it.label)}</div>${it.detail?`<div style="font-size:12px;color:#888">${it.detail}</div>`:''}</div>
     </label>`).join('');
-  showModal(`<div style="max-width:440px;width:100%">
-    <div class="modal-header"><h3>${esc(title)}</h3><button class="close-btn" onclick="navBack()">✕</button></div>
+  // 검토 모달 등 기존 모달을 건드리지 않도록 독립 오버레이(위에 겹침)로 표시 → 닫아도 뒤의 분석/검토 창이 유지됨
+  const ov = document.createElement('div');
+  ov.className = 'overlay';
+  ov.style.zIndex = '400';
+  ov.innerHTML = `<div style="max-width:440px;width:100%;margin:0 auto">
+    <div class="modal-header"><h3>${esc(title)}</h3><button class="close-btn" data-cl="cancel">✕</button></div>
     <div class="modal-body">
       ${subtitle?`<div style="font-size:12px;color:#666;margin-bottom:10px;line-height:1.5">${subtitle}</div>`:''}
       <div style="display:flex;gap:8px;margin-bottom:8px">
-        <button onclick="document.querySelectorAll('._cl-chk').forEach(c=>c.checked=true)" style="font-size:11px;padding:4px 10px;border:1px solid #c5cae9;border-radius:6px;background:#eef2ff;color:#3949ab;cursor:pointer;font-family:inherit">전체 선택</button>
-        <button onclick="document.querySelectorAll('._cl-chk').forEach(c=>c.checked=false)" style="font-size:11px;padding:4px 10px;border:1px solid #e0e0e0;border-radius:6px;background:#f5f5f5;color:#666;cursor:pointer;font-family:inherit">전체 해제</button>
+        <button data-cl="all" style="font-size:11px;padding:4px 10px;border:1px solid #c5cae9;border-radius:6px;background:#eef2ff;color:#3949ab;cursor:pointer;font-family:inherit">전체 선택</button>
+        <button data-cl="none" style="font-size:11px;padding:4px 10px;border:1px solid #e0e0e0;border-radius:6px;background:#f5f5f5;color:#666;cursor:pointer;font-family:inherit">전체 해제</button>
       </div>
       ${rows}
       <div style="display:flex;gap:8px;margin-top:12px">
-        <button class="btn-secondary" onclick="navBack()" style="flex:1">취소</button>
-        <button class="btn-primary" id="_cl-apply" style="flex:2">${esc(applyLabel)}</button>
+        <button class="btn-secondary" data-cl="cancel" style="flex:1">취소</button>
+        <button class="btn-primary" data-cl="apply" style="flex:2">${esc(applyLabel)}</button>
       </div>
     </div>
-  </div>`);
-  const ab = document.getElementById('_cl-apply');
-  if (ab) ab.onclick = () => {
-    const keys = [...document.querySelectorAll('._cl-chk')].filter(c=>c.checked).map(c=>c.dataset.key);
-    navBack();
-    if (onApply) onApply(keys);
-  };
+  </div>`;
+  document.body.appendChild(ov);
+  const chks = () => [...ov.querySelectorAll('._cl-chk')];
+  const close = () => { ov.remove(); };
+  ov.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-cl]');
+    if (btn) {
+      const a = btn.dataset.cl;
+      if (a === 'all') chks().forEach(c => c.checked = true);
+      else if (a === 'none') chks().forEach(c => c.checked = false);
+      else if (a === 'cancel') close();
+      else if (a === 'apply') { const keys = chks().filter(c=>c.checked).map(c=>c.dataset.key); close(); if (onApply) onApply(keys); }
+      return;
+    }
+    // 배경(오버레이) 클릭 → 확인 후 닫기(실수로 사라지는 것 방지). 뒤의 검토 창은 그대로 유지.
+    if (e.target === ov) { if (confirm('창을 닫으시겠습니까?')) close(); }
+  });
 }
 // 신고서 검토 기록의 갱신 대상 표시항목(서식별) — 부가세는 매출/매입/납부, 그 외는 수입/소득/세액
 function _trrFieldSpecs(pKey, data) {
