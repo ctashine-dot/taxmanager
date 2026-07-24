@@ -13530,7 +13530,17 @@ function _promptFillMissingClientInfo(clientId, data) {
   add('name','상호', c.name, data.companyName);
   add('rep','대표자', c.rep, data.representative);
   add('bizNo','사업자번호', c.bizNo, data.bizNo, v=>{ const d=dig(v); return (d.length===10 && !/^0+$/.test(d)) ? (typeof formatBiz==='function'?formatBiz(v):v) : ''; }, dig);
-  add('phone','연락처', c.phone, data.phone, v=>{ const d=dig(v); return d.length>=9 ? norm(v) : ''; }, dig);
+  // 연락처: 비어있으면 채우되, 기존이 휴대폰(010~)인데 신고서 번호가 일반번호면 갱신 제안하지 않음
+  (()=>{
+    const nv = (()=>{ const d=dig(data.phone); return d.length>=9 ? norm(data.phone) : ''; })();
+    if (!nv) return;
+    const curN = norm(c.phone);
+    if (!curN) { fills.push({ field:'phone', label:'연락처', val: nv }); return; }
+    const curDig = dig(curN), nvDig = dig(nv);
+    if (curDig === nvDig) return; // 동일 번호
+    if (/^010/.test(curDig) && !/^010/.test(nvDig)) return; // 휴대폰 → 일반번호 변경은 갱신 대상에서 제외
+    updates.push({ field:'phone', label:'연락처', cur: curN, val: nv });
+  })();
   add('bizCode','업종코드', c.bizCode, data.bizCode, v=>{ const d=dig(v); return d.length>=2 ? d : ''; }, dig);
   add('taxOffice','관할세무서', c.taxOffice, data.taxOffice, v=>_normalizeTaxOffice(v), v=>_normalizeTaxOffice(v));
   if (!fills.length && !updates.length) return;
