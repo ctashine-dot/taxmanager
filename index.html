@@ -2733,7 +2733,8 @@ function renderClients() {
             </div>
             ${incomeCatSection(c)}
             ${withholdingSection(c)}
-            <div><div style="font-size:11px;color:#888;margin-bottom:3px">연락처</div>${em?iInput('phone',c.phone,'placeholder="전화번호" style="width:140px"'):`<div style="font-weight:600">${c.phone?`<a href="tel:${esc(c.phone)}" style="color:#4f8ef7;text-decoration:none;font-weight:600">${esc(c.phone)}</a>`:'-'}</div>`}</div>
+            <div><div style="font-size:11px;color:#888;margin-bottom:3px">연락처(휴대폰)</div>${em?iInput('phone',c.phone,'placeholder="전화번호" style="width:140px"'):`<div style="font-weight:600">${c.phone?`<a href="tel:${esc(c.phone)}" style="color:#4f8ef7;text-decoration:none;font-weight:600">${esc(c.phone)}</a>`:'-'}</div>`}</div>
+            <div><div style="font-size:11px;color:#888;margin-bottom:3px">일반번호</div>${em?iInput('landline',c.landline,'placeholder="일반 전화번호" style="width:140px"'):`<div style="font-weight:600">${c.landline?`<a href="tel:${esc(c.landline)}" style="color:#4f8ef7;text-decoration:none;font-weight:600">${esc(c.landline)}</a>`:'-'}</div>`}</div>
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">관할세무서</div>${em?iInput('taxOffice',c.taxOffice,'list="taxoffice-list" placeholder="세무서 선택·입력" style="width:150px"'):`<div style="font-weight:600">${esc(c.taxOffice||'-')}</div>`}</div>
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">수임일자</div>${em?iInput('contractDate',c.contractDate):`<div style="font-weight:600">${esc(c.contractDate||'-')}</div>`}</div>
             <div><div style="font-size:11px;color:#888;margin-bottom:3px">사업자번호</div>${em?iInput('bizNo',c.bizNo,'placeholder="000-00-00000" style="width:130px"'):`<div style="font-weight:600;font-family:monospace">${esc(c.bizNo||'-')}</div>`}</div>
@@ -4607,7 +4608,8 @@ function openDetail(id) {
     <div class="detail-section">
       <div class="detail-section-title">기본 정보</div>
       <div class="detail-section-body">
-        <div class="detail-row"><span class="lbl">연락처</span><span>${c.phone?`<a href="tel:${esc(c.phone)}" style="color:#4f8ef7;text-decoration:none;font-weight:600">${esc(c.phone)}</a>`:'-'}</span></div>
+        <div class="detail-row"><span class="lbl">연락처(휴대폰)</span><span>${c.phone?`<a href="tel:${esc(c.phone)}" style="color:#4f8ef7;text-decoration:none;font-weight:600">${esc(c.phone)}</a>`:'-'}</span></div>
+        <div class="detail-row"><span class="lbl">일반번호</span><span>${c.landline?`<a href="tel:${esc(c.landline)}" style="color:#4f8ef7;text-decoration:none;font-weight:600">${esc(c.landline)}</a>`:'-'}</span></div>
         <div class="detail-row"><span class="lbl">업종</span><span>${esc(c.bizType||'-')}</span></div>
         <div class="detail-row"><span class="lbl">관할세무서</span><span>${esc(c.taxOffice||'-')}</span></div>
         <div class="detail-row"><span class="lbl">담당자</span><span>${esc(getManagers(c).join(', ')||'-')}</span></div>
@@ -4733,6 +4735,7 @@ function _applyExtractedFields(d) {
   setText('f-bizNo','bizNo', d.bizNo, v=>formatBiz(v), '사업자번호');
   setText('f-jumin','jumin', d.jumin || d.corpNo, v=>formatJumin(v), (d.taxType==='법인'||d.corpNo)?'법인번호':'주민번호');
   setText('f-phone','phone', d.phone, null, '연락처');
+  setText('f-landline','landline', d.landline, null, '일반번호');
   setText('f-bizType','bizType', d.bizType, null, '업종');
   setText('f-openDate','openDate', d.openDate, v=>formatDateInput(v), '개업일');
   // 인격·과세유형 select은 문서 기준으로 설정(의존 UI 갱신 위해 onFormSelect 호출)
@@ -4820,10 +4823,14 @@ function openForm(id) {
       <input class="finput" id="f-rep" value="${esc(c.rep||'')}" oninput="window._formData.rep=this.value">
     </div>
 
-    <div class="c3" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    <div class="c3" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
       <div class="ff">
-        <label class="ffl">연락처</label>
+        <label class="ffl">연락처(휴대폰)</label>
         <input class="finput" id="f-phone" value="${esc(c.phone||'')}" oninput="window._formData.phone=this.value">
+      </div>
+      <div class="ff">
+        <label class="ffl">일반번호</label>
+        <input class="finput" id="f-landline" value="${esc(c.landline||'')}" oninput="window._formData.landline=this.value">
       </div>
       <div class="ff">
         <label class="ffl">이메일</label>
@@ -12359,7 +12366,10 @@ function _scrapeIncomeReturn(text) {
   if (jm) { const jd = String(jm[1]).replace(/[^\d]/g,'').slice(0,13); if (jd.length===13) d.jumin = jd.slice(0,6)+'-'+jd.slice(6); }
   // 연락처: 휴대전화 우선, 없으면 사업장 전화번호
   const ppick = s => { const m = String(s).match(/01[016789][\s\-]*\d{3,4}[\s\-]*\d{4}/) || String(s).match(/0\d{1,2}[\s\-]*\d{3,4}[\s\-]*\d{4}/); return m ? m[0].replace(/\s/g,'') : ''; };
-  d.phone = ppick(strAfterIn(cover,'휴대전화')) || ppick(strAfterIn(cover,'사업장전화번호'));
+  const _mobile = ppick(strAfterIn(cover,'휴대전화'));
+  const _bizTel = ppick(strAfterIn(cover,'사업장전화번호'));
+  d.phone = _mobile || _bizTel;          // 연락처: 휴대전화 우선, 없으면 사업장 전화
+  d.landline = _bizTel;                    // 일반번호(사업장 전화) — 별도 필드
   // 금액: 종합소득금액→소득금액, 과세표준, 납부할총세액→총부담세액, 충당후납부할세액→납부세액
   d.income   = amtAfterIn(cover, lbl('종합소득금액'));
   d.taxBase  = amtAfterIn(cover, lbl('과세표준')+'\\s*\\(');
@@ -13530,16 +13540,26 @@ function _promptFillMissingClientInfo(clientId, data) {
   add('name','상호', c.name, data.companyName);
   add('rep','대표자', c.rep, data.representative);
   add('bizNo','사업자번호', c.bizNo, data.bizNo, v=>{ const d=dig(v); return (d.length===10 && !/^0+$/.test(d)) ? (typeof formatBiz==='function'?formatBiz(v):v) : ''; }, dig);
-  // 연락처: 비어있으면 채우되, 기존이 휴대폰(010~)인데 신고서 번호가 일반번호면 갱신 제안하지 않음
+  // 전화번호: 휴대폰(010~)은 '연락처', 일반번호는 '일반번호' 필드로 분리해 반영
   (()=>{
-    const nv = (()=>{ const d=dig(data.phone); return d.length>=9 ? norm(data.phone) : ''; })();
-    if (!nv) return;
-    const curN = norm(c.phone);
-    if (!curN) { fills.push({ field:'phone', label:'연락처', val: nv }); return; }
-    const curDig = dig(curN), nvDig = dig(nv);
-    if (curDig === nvDig) return; // 동일 번호
-    if (/^010/.test(curDig) && !/^010/.test(nvDig)) return; // 휴대폰 → 일반번호 변경은 갱신 대상에서 제외
-    updates.push({ field:'phone', label:'연락처', cur: curN, val: nv });
+    const validNum = s => { const d=dig(s); return d.length>=9 ? norm(s) : ''; };
+    // 신고서에서 뽑은 후보를 번호 유형으로 분류
+    const mobileCand = /^010/.test(dig(data.phone)) ? validNum(data.phone) : '';
+    let landlineCand = validNum(data.landline);
+    if (!landlineCand && data.phone && !/^010/.test(dig(data.phone))) landlineCand = validNum(data.phone); // 휴대폰이 아니면 일반번호로
+
+    // 휴대폰 → 연락처(c.phone)
+    if (mobileCand) {
+      const curN = norm(c.phone);
+      if (!curN) fills.push({ field:'phone', label:'연락처(휴대폰)', val: mobileCand });
+      else if (dig(curN) !== dig(mobileCand)) updates.push({ field:'phone', label:'연락처(휴대폰)', cur: curN, val: mobileCand });
+    }
+    // 일반번호 → 일반번호(c.landline)
+    if (landlineCand) {
+      const curN = norm(c.landline);
+      if (!curN) fills.push({ field:'landline', label:'일반번호', val: landlineCand });
+      else if (dig(curN) !== dig(landlineCand)) updates.push({ field:'landline', label:'일반번호', cur: curN, val: landlineCand });
+    }
   })();
   add('bizCode','업종코드', c.bizCode, data.bizCode, v=>{ const d=dig(v); return d.length>=2 ? d : ''; }, dig);
   add('taxOffice','관할세무서', c.taxOffice, data.taxOffice, v=>_normalizeTaxOffice(v), v=>_normalizeTaxOffice(v));
