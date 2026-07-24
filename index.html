@@ -5035,8 +5035,11 @@ function openForm(id) {
 
     <div class="c3">
       <div class="ff" style="align-items:flex-start">
-        <label class="ffl" style="margin-top:4px">메모</label>
-        <textarea class="ftarea" rows="2" style="flex:1;min-width:0;width:auto;padding:4px 6px;font-size:11px" oninput="window._formData.memo=this.value">${esc(c.memo||'')}</textarea>
+        <label class="ffl" style="margin-top:4px">메모<br><span style="font-size:10px;color:#aaa;font-weight:400">(고정 메모)</span></label>
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+          <textarea class="ftarea" rows="2" style="width:100%;box-sizing:border-box;padding:4px 6px;font-size:11px" oninput="window._formData.memo=this.value">${esc(c.memo||'')}</textarea>
+          ${id?`<button type="button" onclick="saveForm(${id});setTimeout(()=>openClientNotes(${id}),60)" style="align-self:flex-start;padding:3px 10px;border-radius:6px;border:1px solid #cdb4ef;background:#f3e8fd;color:#6a3ab2;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit" title="메모 이력·알림 관리(저장 후 열기)">📝 메모/이력 열기</button>`:''}
+        </div>
       </div>
     </div>
 
@@ -8911,7 +8914,7 @@ function renderFees() {
   const _genFeeRow = c => {
     // 월정 수수료: 원 청구액만 표시(수금관리는 제외 — 컨설팅 지급/미수금 관리에서 처리)
     return `<tr style="background:#fff">
-      <td><div style="font-weight:600;font-size:13px;display:flex;align-items:center;flex-wrap:wrap;gap:2px">${esc(c.name)}<button onclick="event.stopPropagation();printFeeInvoice(${c.id})" style="margin-left:6px;padding:1px 7px;border-radius:5px;border:1px solid #c5cae9;background:#f0f4ff;font-size:10px;color:#4f8ef7;cursor:pointer;font-family:inherit" title="청구서 인쇄">🖨 청구서</button></div></td>
+      <td><div style="font-weight:600;font-size:13px;display:flex;align-items:center;flex-wrap:wrap;gap:2px">${esc(c.name)}<button onclick="event.stopPropagation();openClientNotes(${c.id})" style="margin-left:6px;padding:1px 5px;border-radius:5px;border:1px solid #e0e0e0;background:#f8f9ff;font-size:11px;cursor:pointer;font-family:inherit" title="메모/이력">📝${(G.clientNotes||{})[c.id]?.length?` ${G.clientNotes[c.id].length}`:''}</button><button onclick="event.stopPropagation();printFeeInvoice(${c.id})" style="margin-left:2px;padding:1px 7px;border-radius:5px;border:1px solid #c5cae9;background:#f0f4ff;font-size:10px;color:#4f8ef7;cursor:pointer;font-family:inherit" title="청구서 인쇄">🖨 청구서</button></div></td>
       <td style="font-size:12px;color:#444;${hc['fm_rep']?'display:none':''}">${esc(c.rep)||'-'}</td>
       <td style="${hc['fm_dealType']?'display:none':''}">${getDealTypes(c).map(d=>dealBadge(d)).join('')}${routeBadge(c)}</td>
       <td style="color:#555;font-size:12px;${hc['fm_manager']?'display:none':''}">${esc(getManagers(c).join(', ')||'-')}</td>
@@ -9057,7 +9060,7 @@ function renderFees() {
         <th style="width:60px;text-align:center;padding:3px;font-size:11px">수금</th>
       </tr></thead>
       <tbody>${arrearsList.length ? arrearsList.map(a=>`<tr>
-        <td style="padding:5px 6px;font-weight:600;font-size:13px">${esc(a.client.name)}${a.client.__manual?' <span style="font-size:10px;color:#ef6c00;background:#fff3e0;border-radius:4px;padding:1px 4px;vertical-align:middle">예전</span>':''}</td>
+        <td style="padding:5px 6px;font-weight:600;font-size:13px">${esc(a.client.name)}${a.client.__manual?' <span style="font-size:10px;color:#ef6c00;background:#fff3e0;border-radius:4px;padding:1px 4px;vertical-align:middle">예전</span>':`<button onclick="openClientNotes(${a.client.id})" style="margin-left:5px;padding:1px 5px;border-radius:5px;border:1px solid #e0e0e0;background:#f8f9ff;font-size:11px;cursor:pointer;font-family:inherit;vertical-align:middle" title="메모/이력">📝${(G.clientNotes||{})[a.client.id]?.length?` ${G.clientNotes[a.client.id].length}`:''}</button>`}</td>
         <td style="padding:5px 6px;font-size:12px;color:#444">${esc(a.client.rep||'-')}</td>
         <td style="padding:5px 6px;font-size:12px;color:#555">${esc(getManagers(a.client).join(', ')||'-')}</td>
         <td style="text-align:right;padding:5px 6px"><button onclick="openBookArrearsModal('${a.client.id}')" title="기장료 미수 입력·수금" style="border:1px solid ${a.book?'#a5d6a7':'#e0e0e0'};background:${a.book?'#e8f5e9':'#fafafa'};border-radius:6px;font-size:12px;padding:3px 8px;cursor:pointer;color:${a.book?'#e53935':'#aaa'};font-weight:${a.book?'700':'400'};font-family:inherit">${a.book?a.book.toLocaleString():'+'}</button></td>
@@ -13747,6 +13750,12 @@ function openClientNotes(id) {
   showModal(`<div style="max-width:520px">
   <div class="modal-header"><h3>📝 ${esc(c.name)} — 메모/이력</h3><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end"><button onclick="navReplace(()=>openClientFilingHistory(${id}))" style="padding:4px 12px;background:#e8f0fe;color:#1565c0;border:1px solid #c5cae9;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">📋 신고이력</button><button onclick="navReplace(()=>openForm(${id}))" style="padding:4px 12px;background:#f0f4ff;color:#4f8ef7;border:1px solid #c5cae9;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">✏ 거래처 수정</button>${G.currentTab==='julgae'?`<button onclick="closeModal();openJulgaeListAdd(${id})" style="padding:4px 12px;background:#f3e5f5;color:#6a1b9a;border:1px solid #ce93d8;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">➕ 리스트 추가</button><button onclick="removeClientFromJulgaeList(${id})" style="padding:4px 12px;background:#fdecea;color:#c62828;border:1px solid #ef9a9a;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">🗑 리스트 제외</button>`:''}<button class="close-btn" onclick="navBack()">✕</button></div></div>
   <div class="modal-body">
+    <div style="margin-bottom:12px;background:#fbf7ff;border:1px solid #e6dcf7;border-radius:10px;padding:10px 12px">
+      <div style="font-size:12px;font-weight:700;color:#6a3ab2;margin-bottom:6px">📌 고정 메모 <span style="font-weight:400;color:#aaa;font-size:11px">(상시 표시 · 거래처 수정의 메모와 동일)</span></div>
+      <textarea id="pinned-memo" placeholder="상시 표시되는 거래처 기본 메모..." style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;min-height:52px">${esc(c.memo||'')}</textarea>
+      <div style="text-align:right;margin-top:4px"><button onclick="saveClientPinnedMemo(${id})" style="padding:4px 12px;background:#f3e8fd;color:#6a3ab2;border:1.5px solid #cdb4ef;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">고정 메모 저장</button></div>
+    </div>
+    <div style="font-size:12px;font-weight:700;color:#4f8ef7;margin-bottom:6px">🕘 메모 이력 <span style="font-weight:400;color:#aaa;font-size:11px">(날짜별 기록 · 알림)</span></div>
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <div style="display:flex;flex-direction:column;gap:6px;flex:1">
         <textarea id="note-input" placeholder="메모 입력..." style="flex:1;padding:8px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;font-family:inherit;resize:vertical;min-height:64px"></textarea>
@@ -13818,6 +13827,16 @@ function openClientFilingHistory(clientId) {
       </div>
     </div>
   </div>`);
+}
+function saveClientPinnedMemo(id) {
+  if (typeof requireWrite==='function' && !requireWrite()) return;
+  const c = G.clients.find(x=>x.id===id); if (!c) return;
+  const el = document.getElementById('pinned-memo'); if (!el) return;
+  c.memo = el.value.trim();
+  saveToLS();
+  if (typeof renderClients==='function' && G.currentTab==='clients') renderClients();
+  if (typeof renderFees==='function' && G.currentTab==='fees') renderFees();
+  toast('고정 메모가 저장되었습니다','success',1500);
 }
 function addClientNote(id) {
   const txt = (document.getElementById('note-input')||{}).value?.trim();
