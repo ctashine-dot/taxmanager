@@ -529,6 +529,7 @@ let G = {
   hiddenCols: {},
   feeHistory: {},  // {clientId: {ym: {date, amount}}}
   adHocFees: {},  // {clientId: [{id, type, ym, amount, desc, date, collected, collectedDate}]}
+  bookArrears: {},  // 미수 기장료(직접 입력) — {clientId 또는 m_키: {billed, paid, note, ts, manual?, name?, rep?}}
   managerHistory: {},  // {clientId: [{date, from, to}]}
   feeChangeHistory: {},  // {clientId: [{date, from, to}]}
   clientTags: {},  // {clientId: ['VIP', '위험', ...]}
@@ -886,6 +887,7 @@ function saveToLS() {
     localStorage.setItem('tm_filterPresets', JSON.stringify(G.filterPresets||[]));
     localStorage.setItem('tm_contactLogs', JSON.stringify(G.contactLogs||{}));
     localStorage.setItem('tm_adHocFees', JSON.stringify(G.adHocFees||{}));
+    localStorage.setItem('tm_bookArrears', JSON.stringify(G.bookArrears||{}));
     localStorage.setItem('tm_julgaeAdhoc', JSON.stringify(G.julgaeAdhoc||{}));
     localStorage.setItem('tm_income26Unmatched', JSON.stringify(G.income26Unmatched||[]));
     localStorage.setItem('tm_employees', JSON.stringify(G.employees||[]));
@@ -926,6 +928,7 @@ function saveToLS() {
       filterPresets: JSON.stringify(G.filterPresets||[]),
       contactLogs: JSON.stringify(G.contactLogs||{}),
       adHocFees: JSON.stringify(G.adHocFees||{}),
+      bookArrears: JSON.stringify(G.bookArrears||{}),
       julgaeAdhoc: JSON.stringify(G.julgaeAdhoc||{}),
       julgaeSelectedPeriods: JSON.stringify(G.julgaeSelectedPeriods||[]),
       julgaeSelectedYears: JSON.stringify(G.julgaeSelectedYears||[]),
@@ -16837,6 +16840,7 @@ function applyCloudSnapshot(data) {
   G.filterPresets = P(data.filterPresets, []);
   G.contactLogs = P(data.contactLogs, {});
   G.adHocFees = P(data.adHocFees, {});
+  G.bookArrears = P(data.bookArrears, {});
   G.julgaeAdhoc = P(data.julgaeAdhoc, {});
   G.income26Unmatched = data.income26Unmatched ? P(data.income26Unmatched, []) : P(localStorage.getItem('tm_income26Unmatched'), []);
   G.employees = P(data.employees, []);
@@ -16911,6 +16915,7 @@ async function loadFromFirebase() {
         G.filterPresets = JSON.parse(localStorage.getItem('tm_filterPresets')||'[]');
         G.contactLogs = JSON.parse(localStorage.getItem('tm_contactLogs')||'{}');
         G.adHocFees = JSON.parse(localStorage.getItem('tm_adHocFees')||'{}');
+        G.bookArrears = JSON.parse(localStorage.getItem('tm_bookArrears')||'{}');
         G.julgaeAdhoc = JSON.parse(localStorage.getItem('tm_julgaeAdhoc')||'{}');
         G.income26Unmatched = JSON.parse(localStorage.getItem('tm_income26Unmatched')||'[]');
         G.employees = JSON.parse(localStorage.getItem('tm_employees')||'[]');
@@ -16959,6 +16964,7 @@ async function loadFromFirebase() {
     G.filterPresets = JSON.parse(localStorage.getItem('tm_filterPresets')||'[]');
     G.contactLogs = JSON.parse(localStorage.getItem('tm_contactLogs')||'{}');
     G.adHocFees = JSON.parse(localStorage.getItem('tm_adHocFees')||'{}');
+    G.bookArrears = JSON.parse(localStorage.getItem('tm_bookArrears')||'{}');
     G.julgaeAdhoc = JSON.parse(localStorage.getItem('tm_julgaeAdhoc')||'{}');
     G.income26Unmatched = JSON.parse(localStorage.getItem('tm_income26Unmatched')||'[]');
     const _sjsp = localStorage.getItem('tm_julgaeSelectedPeriods'); if(_sjsp) G.julgaeSelectedPeriods = JSON.parse(_sjsp);
